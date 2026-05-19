@@ -6,74 +6,61 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- CUSTOMIZAÇÃO ESTÉTICA CIRÚRGICA (BLINDAGEM DE SELETORES) ---
+# --- BLINDAGEM VISUAL TOTAL (VERSÃO FORÇA BRUTA) ---
 st.markdown("""
     <style>
         /* =================================================================
-           1. PAINEL LATERAL (SIDEBAR): TEXTOS BRANCOS E SELECTBOX COM FUNDO BRANCO
+           1. BARRA LATERAL (SIDEBAR): ACENDER AS LABELS APAGADAS
            ================================================================= */
+        /* Força QUALQUER texto de descrição/rótulo dentro da Sidebar a ficar Branco puro */
+        section[data-testid="stSidebar"] label,
         section[data-testid="stSidebar"] label p,
         section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
-        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
+        section[data-testid="stSidebar"] p {
             color: #ffffff !important;
             font-weight: 600 !important;
         }
 
-        /* Fundo do Selectbox da barra lateral */
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div {
+        /* =================================================================
+           2. UNIVERSAL SELECTBOX (BARRA LATERAL E CENTRAL): FIM DO VERDE ESCURO
+           ================================================================= */
+        /* Força a caixinha principal de TODOS os selectboxes do app a ter fundo branco e borda clara */
+        div[data-testid="stSelectbox"] > div,
+        div[data-baseweb="select"] > div {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
         }
 
-        /* Texto de dentro do Selectbox da barra lateral (ID) */
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] [aria-selected="true"],
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] span,
-        section[data-testid="stSidebar"] .stSelectbox p {
+        /* Alveja as divs e spans mais profundas onde o texto real ("Nacional", "Não Iniciada", ID) é renderizado */
+        div[data-testid="stSelectbox"] * {
+            color: #03170a !important; /* Força o texto interno a ficar no verde escuro legível */
+        }
+
+        /* Garante que o texto selecionado dentro da árvore do BaseWeb fique visível e escuro */
+        div[data-baseweb="select"] [aria-selected="true"],
+        div[data-baseweb="select"] span,
+        div[data-baseweb="select"] value {
             color: #03170a !important;
-            font-weight: bold !important;
+            background-color: transparent !important;
         }
 
-        /* Setinha do Selectbox da barra lateral */
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg {
+        /* Força o ícone da setinha para baixo a ficar escuro e visível em todos os seletores */
+        div[data-testid="stSelectbox"] svg,
+        div[data-baseweb="select"] svg {
             fill: #03170a !important;
+            color: #03170a !important;
         }
-
 
         /* =================================================================
-           2. ÁREA CENTRAL (FORMULÁRIO): FORÇAR FUNDO BRANCO EM TODOS OS SELECTBOX
+           3. TEXTOS, ABAS E ENTRADAS DE DADOS (ÁREA CENTRAL)
            ================================================================= */
-        /* Alveja as caixas de seleção (Selectbox) APENAS da área central */
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div {
-            background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
-        }
-
-        /* Força o texto interno do selectbox central ("Nacional", "Não Iniciada") a ficar escuro */
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] [aria-selected="true"],
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] span,
-        div[data-testid="stAppViewContainer"] .stSelectbox p {
-            color: #03170a !important;
-            font-weight: normal !important;
-        }
-
-        /* Ajusta a setinha do selectbox central para acompanhar a cor do texto */
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg {
-            fill: #03170a !important;
-        }
-
-
-        /* =================================================================
-           3. DEMAIS INPUTS E ELEMENTOS DA ÁREA CENTRAL (TEXTO, NÚMERO, LABELS)
-           ================================================================= */
-        /* Títulos das telas */
+        /* Títulos principais */
         h2, h3, [data-testid="stHeader"] {
             color: #03170a !important;
             font-weight: 700 !important;
         }
 
-        /* Abas (Tabs) */
+        /* Navegação por Abas (Tabs) */
         button[data-baseweb="tab"] p {
             color: #4a5568 !important;
             font-weight: 500;
@@ -86,17 +73,16 @@ st.markdown("""
             background-color: #4d6b53 !important;
         }
 
-        /* Inputs normais da área central (Text, Number, TextArea) */
+        /* Caixas de entrada normais (Texto, Números, Áreas de texto) */
         div[data-testid="stAppViewContainer"] div[data-testid="stTextInput"] input, 
         div[data-testid="stAppViewContainer"] div[data-testid="stNumberInput"] input, 
-        div[data-testid="stAppViewContainer"] div[data-testid="stTextArea"] textarea,
-        div[data-testid="stAppViewContainer"] div[role="combobox"] {
+        div[data-testid="stAppViewContainer"] div[data-testid="stTextArea"] textarea {
             border: 1px solid #cbd5e1 !important;
             background-color: #ffffff !important;
             color: #03170a !important;
         }
         
-        /* Labels/Rótulos dos campos centrais */
+        /* Rótulos de campos da área central */
         div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p {
             color: #03170a !important;
             font-weight: 500;
