@@ -276,14 +276,14 @@ if modo == "📊 Visualizar Base":
                 (df_exibicao["Data_Datetime"] <= fim_busca)
             ]
         
-        # --- CORREÇÃO COMPORTAMENTAL: RECONVERSÃO PARA TEXTO BR ---
-        # Usamos a coluna auxiliar datetime (que está perfeita) para recriar o texto legível na coluna original
+        # --- CORREÇÃO: FORMATAR A DATA ENQUANTO AINDA É DATAFRAME ---
+        # Recria o texto legível na coluna original usando a coluna auxiliar datetime
         df_exibicao["Data de Início"] = df_exibicao["Data_Datetime"].dt.strftime('%d/%m/%Y')
         
-        # Se algum registro original não tinha data e ficou nulo, limpamos para não mostrar "NaT"
+        # Substitui valores nulos por texto vazio
         df_exibicao["Data de Início"] = df_exibicao["Data de Início"].fillna("")
         
-        # Agora sim podemos apagar a coluna auxiliar de cálculo com segurança
+        # Remove a coluna auxiliar com segurança antes da estilização
         df_exibicao = df_exibicao.drop(columns=["Data_Datetime"])
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -293,8 +293,12 @@ if modo == "📊 Visualizar Base":
             cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
             return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
 
-        # Reseta o índice para o cálculo do zebrado funcionar sem misturar com IDs descontinuados
-        df_estilizado = df_exibicao.reset_index(drop=True).style.apply(estilar_linhas_zebradas, axis=1)
+        # Resetamos o índice para o cálculo do par/ímpar funcionar corretamente
+        df_para_visualizar = df_exibicao.reset_index(drop=True)
+        
+        # Aplicamos o estilo zebrado como o ÚLTIMO passo antes do st.dataframe
+        df_estilizado = df_para_visualizar.style.apply(estilar_linhas_zebradas, axis=1)
+        
         st.dataframe(df_estilizado, use_container_width=True)
 
 # --- TELA 2 E 3: FORMULÁRIO (INSERIR OU EDITAR) ---
