@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import time
 from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
@@ -183,10 +184,21 @@ if submetido:
             resposta = requests.post(URL_GRAVAR, json=payload)
             if resposta.status_code in [200, 202]:
                 st.success(f"🎉 Sucesso! Registro {id_final} processado no SharePoint.")
-                # Limpa o cache para recarregar a tabela atualizada
+                
+                # 1. Aguarda 2 segundos para o Power Automate terminar de gravar no Excel
+                time.sleep(2)
+                
+                # 2. Limpa o cache da função que lê a planilha (ajuste o nome para a sua função de leitura)
+                # Exemplo: se sua função se chama carregar_dados(), use: carregar_dados.clear()
+                st.cache_data.clear()
+                
+                # 3. Limpa também o estado da sessão se você guardou o dataframe lá
                 if "df" in st.session_state:
                     del st.session_state.df
+                
+                # 4. Força o Streamlit a rodar o script do zero, lendo a URL_LER atualizada
                 st.rerun()
+                
             else:
                 st.error(f"Erro no Power Automate: Status {resposta.status_code}")
         except Exception as e:
