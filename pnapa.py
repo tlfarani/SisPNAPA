@@ -6,65 +6,75 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- BLINDAGEM COMPLETA DA BARRA LATERAL (FOCO NO ST.RADIO) ---
+# --- BLINDAGEM VISUAL CORPORATIVA INTERMEDIÁRIA (SIDEBAR + PLANILHA ZEBRADA) ---
 st.markdown("""
     <style>
         /* =================================================================
-           1. BARRA LATERAL (SIDEBAR): DESARMANDO AS CORES DO ST.RADIO
+           1. BARRA LATERAL (SIDEBAR): XEQUE-MATE NAS FONTES ESCURAS
            ================================================================= */
-        /* Força a escrita "Painel de Controle" a ficar Branca */
-        section[data-testid="stSidebar"] h2 {
+        /* Força absolutamente QUALQUER texto ou classe dinâmica do Streamlit na lateral a ficar branco */
+        section[data-testid="stSidebar"] *, 
+        section[data-testid="stSidebar"] [class*="st-"] {
             color: #ffffff !important;
-            font-weight: 700 !important;
         }
 
-        /* Alvo direto na label principal ("Operação:") e textos explicativos */
-        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        /* Mantém o peso elegante dos títulos e rótulos na lateral */
+        section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] label p,
-        section[data-testid="stSidebar"] p {
-            color: #ffffff !important;
-            font-weight: 600 !important;
-        }
-
-        /* ATAQUE DIRETO AO COMPONENTE DE RÁDIO: Força os textos das opções a ficarem brancos */
-        div[data-testid="stRadio"] label,
-        div[data-testid="stRadio"] label span,
-        div[data-testid="stRadio"] [data-testid="stMarkdownContainer"] p,
-        div[data-testid="stRadio"] * {
+        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+            font-weight: 700 !important;
             color: #ffffff !important;
         }
 
-        /* Mantém as bolinhas de seleção (Radio Buttons) visíveis */
-        div[data-testid="stRadio"] input[type="radio"] {
-            accent-color: #4d6b53 !important; /* Deixa o miolo da bolinha ativa no Verde Musgo */
-        }
-
-        /* =================================================================
-           RE-ISOLAMENTO CRÍTICO DO SELECTBOX DA LATERAL 
-           (Garante que a força bruta do rádio não pinte o ID de branco)
-           ================================================================= */
+        /* RE-ISOLAMENTO SELETIVO DO SELECTBOX DA LATERAL (Para manter o ID legível) */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
         }
 
-        /* Força o número de dentro da caixinha (o ID "1") a continuar escuro no verde principal */
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] [aria-selected="true"],
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] span,
-        section[data-testid="stSidebar"] .stSelectbox p,
-        section[data-testid="stSidebar"] .stSelectbox span {
+        /* Obriga o número interno do ID selecionado (ex: "1") a continuar escuro */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] * {
             color: #03170a !important;
-            font-weight: bold !important;
         }
-        
-        /* Setinha do Selectbox na lateral */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg {
             fill: #03170a !important;
         }
 
+
         /* =================================================================
-           2. SELETORES DE DROP-DOWN / SELECTBOX (ÁREA CENTRAL)
+           2. ESTILIZAÇÃO COMPLETA DA PLANILHA DE DADOS (TABELA / DATAFRAME)
+           ================================================================= */
+        /* Cabeçalho da Planilha: Fundo Verde Musgo (#4d6b53) e Texto Branco */
+        div[data-testid="stDataFrame"] table thead th,
+        div[data-testid="stTable"] table thead th,
+        .stDataFrame table thead tr th {
+            background-color: #4d6b53 !important;
+            color: #ffffff !important;
+            font-weight: bold !important;
+            text-align: center !important;
+        }
+
+        /* Linhas Ímpares: Fundo Branco Puro */
+        div[data-testid="stDataFrame"] table tbody tr:nth-child(odd),
+        div[data-testid="stTable"] table tbody tr:nth-child(odd) {
+            background-color: #ffffff !important;
+        }
+
+        /* Linhas Pares: Fundo Verde Claro Alternado (#f0f5df) */
+        div[data-testid="stDataFrame"] table tbody tr:nth-child(even),
+        div[data-testid="stTable"] table tbody tr:nth-child(even) {
+            background-color: #f0f5df !important;
+        }
+
+        /* Força a cor do texto de dentro das células da tabela para garantir leitura */
+        div[data-testid="stDataFrame"] table tbody td,
+        div[data-testid="stTable"] table tbody td {
+            color: #03170a !important;
+        }
+
+
+        /* =================================================================
+           3. SELETORES DE DROP-DOWN / SELECTBOX (ÁREA CENTRAL)
            ================================================================= */
         div[data-testid="stSelectbox"] > div,
         div[data-baseweb="select"] > div {
@@ -83,8 +93,9 @@ st.markdown("""
             fill: #03170a !important;
         }
 
+
         /* =================================================================
-           3. CORREÇÃO COMPLETA DOS CAMPOS NUMÉRICOS (+/- NUMBER_INPUT) E DATAS
+           4. CAMPOS NUMÉRICOS (+/- NUMBER_INPUT) E DATAS
            ================================================================= */
         div[data-testid="stNumberInput"] input {
             background-color: #ffffff !important;
@@ -110,8 +121,9 @@ st.markdown("""
             fill: #03170a !important;
         }
 
+
         /* =================================================================
-           4. ENTRADAS DE TEXTO, ABAS E CONFIGURAÇÃO GERAL (ÁREA CENTRAL)
+           5. ENTRADAS DE TEXTO, ABAS E CONFIGURAÇÃO GERAL (ÁREA CENTRAL)
            ================================================================= */
         h2, h3, [data-testid="stHeader"] {
             color: #03170a !important;
