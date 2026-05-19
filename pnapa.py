@@ -6,33 +6,38 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- BLINDAGEM VISUAL CORPORATIVA INTERMEDIÁRIA (SIDEBAR + PLANILHA ZEBRADA) ---
+# --- CUSTOMIZAÇÃO ESTÉTICA DEFINITIVA (REVISÃO COMPLETA) ---
 st.markdown("""
     <style>
         /* =================================================================
-           1. BARRA LATERAL (SIDEBAR): XEQUE-MATE NAS FONTES ESCURAS
+           1. BARRA LATERAL (SIDEBAR): XEQUE-MATE NO ST.RADIO
            ================================================================= */
-        /* Força absolutamente QUALQUER texto ou classe dinâmica do Streamlit na lateral a ficar branco */
-        section[data-testid="stSidebar"] *, 
-        section[data-testid="stSidebar"] [class*="st-"] {
+        /* Título Principal */
+        section[data-testid="stSidebar"] h2 {
             color: #ffffff !important;
-        }
-
-        /* Mantém o peso elegante dos títulos e rótulos na lateral */
-        section[data-testid="stSidebar"] h2,
-        section[data-testid="stSidebar"] label p,
-        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
             font-weight: 700 !important;
-            color: #ffffff !important;
         }
 
-        /* RE-ISOLAMENTO SELETIVO DO SELECTBOX DA LATERAL (Para manter o ID legível) */
+        /* Alveja as labels superiores e os textos explicativos do rádio na lateral */
+        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        section[data-testid="stSidebar"] p {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+        }
+
+        /* ATAQUE TOTAL AO ST.RADIO: Alveja as opções ("Visualizar Base", etc.) */
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label p {
+            color: #ffffff !important;
+            font-weight: 500 !important;
+        }
+
+        /* Fundo do Selectbox da barra lateral */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
         }
 
-        /* Obriga o número interno do ID selecionado (ex: "1") a continuar escuro */
+        /* Texto de dentro do Selectbox da barra lateral (ID) */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] * {
             color: #03170a !important;
         }
@@ -40,43 +45,11 @@ st.markdown("""
             fill: #03170a !important;
         }
 
-
         /* =================================================================
-           2. ESTILIZAÇÃO COMPLETA DA PLANILHA DE DADOS (TABELA / DATAFRAME)
+           2. FORMULÁRIOS DA ÁREA CENTRAL (SELECTBOX, INPUTS, ABAS)
            ================================================================= */
-        /* Cabeçalho da Planilha: Fundo Verde Musgo (#4d6b53) e Texto Branco */
-        div[data-testid="stDataFrame"] table thead th,
-        div[data-testid="stTable"] table thead th,
-        .stDataFrame table thead tr th {
-            background-color: #4d6b53 !important;
-            color: #ffffff !important;
-            font-weight: bold !important;
-            text-align: center !important;
-        }
-
-        /* Linhas Ímpares: Fundo Branco Puro */
-        div[data-testid="stDataFrame"] table tbody tr:nth-child(odd),
-        div[data-testid="stTable"] table tbody tr:nth-child(odd) {
-            background-color: #ffffff !important;
-        }
-
-        /* Linhas Pares: Fundo Verde Claro Alternado (#f0f5df) */
-        div[data-testid="stDataFrame"] table tbody tr:nth-child(even),
-        div[data-testid="stTable"] table tbody tr:nth-child(even) {
-            background-color: #f0f5df !important;
-        }
-
-        /* Força a cor do texto de dentro das células da tabela para garantir leitura */
-        div[data-testid="stDataFrame"] table tbody td,
-        div[data-testid="stTable"] table tbody td {
-            color: #03170a !important;
-        }
-
-
-        /* =================================================================
-           3. SELETORES DE DROP-DOWN / SELECTBOX (ÁREA CENTRAL)
-           ================================================================= */
-        div[data-testid="stSelectbox"] > div,
+        /* Força fundo branco nos Selectboxes centrais (Nível, Andamento, etc.) */
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
         div[data-baseweb="select"] > div {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
@@ -93,63 +66,27 @@ st.markdown("""
             fill: #03170a !important;
         }
 
+        /* Inputs Numéricos (+ / -) e de Texto */
+        div[data-testid="stNumberInput"] input { background-color: #ffffff !important; color: #03170a !important; }
+        div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
+        div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
+        
+        /* Datas */
+        div[data-testid="stDateInput"] > div, div[data-testid="stDateInput"] div[role="button"], div[data-testid="stDateInput"] input {
+            background-color: #ffffff !important; color: #03170a !important; border: 1px solid #cbd5e1 !important;
+        }
+        div[data-testid="stDateInput"] svg { fill: #03170a !important; }
 
-        /* =================================================================
-           4. CAMPOS NUMÉRICOS (+/- NUMBER_INPUT) E DATAS
-           ================================================================= */
-        div[data-testid="stNumberInput"] input {
-            background-color: #ffffff !important;
-            color: #03170a !important;
-        }
-        div[data-testid="stNumberInput"] > div {
-            border: 1px solid #cbd5e1 !important;
-            background-color: #ffffff !important;
-        }
-        div[data-testid="stNumberInput"] button {
-            background-color: #f1f5f9 !important;
-            color: #03170a !important;
-            border: 1px solid #cbd5e1 !important;
-        }
-        div[data-testid="stDateInput"] > div,
-        div[data-testid="stDateInput"] div[role="button"],
-        div[data-testid="stDateInput"] input {
-            background-color: #ffffff !important;
-            color: #03170a !important;
-            border: 1px solid #cbd5e1 !important;
-        }
-        div[data-testid="stDateInput"] svg {
-            fill: #03170a !important;
-        }
+        /* Abas (Tabs) */
+        button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
+        button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
+        div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
 
-
-        /* =================================================================
-           5. ENTRADAS DE TEXTO, ABAS E CONFIGURAÇÃO GERAL (ÁREA CENTRAL)
-           ================================================================= */
-        h2, h3, [data-testid="stHeader"] {
-            color: #03170a !important;
-            font-weight: 700 !important;
+        /* Caixas normais de texto */
+        div[data-testid="stTextInput"] input, div[data-testid="stTextArea"] textarea {
+            border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; color: #03170a !important;
         }
-        button[data-baseweb="tab"] p {
-            color: #4a5568 !important;
-            font-weight: 500;
-        }
-        button[aria-selected="true"] p {
-            color: #03170a !important;
-            font-weight: 700 !important;
-        }
-        div[data-baseweb="tab-highlight"] {
-            background-color: #4d6b53 !important;
-        }
-        div[data-testid="stTextInput"] input, 
-        div[data-testid="stTextArea"] textarea {
-            border: 1px solid #cbd5e1 !important;
-            background-color: #ffffff !important;
-            color: #03170a !important;
-        }
-        div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p {
-            color: #03170a !important;
-            font-weight: 500;
-        }
+        div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p { color: #03170a !important; font-weight: 500; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -226,10 +163,35 @@ elif modo == "🗑️ Deletar Linha (ID)":
 
 # --- FLUXO DE TELAS CENTRAL ---
 
-# --- TELA 1: VISUALIZAÇÃO ---
+# --- TELA 1: VISUALIZAÇÃO COM ESTILIZAÇÃO VIA PANDAS STYLER ---
 if modo == "📊 Visualizar Base":
-    st.markdown("<h3 style='color: #f1f3f5;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
-    st.dataframe(df_atual, use_container_width=True)
+    st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
+    
+    # Criamos uma função para aplicar o efeito zebrado nas linhas (alternando com #f0f5df)
+    def estilar_linhas_zebradas(linha):
+        cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
+        return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
+
+    # Aplicamos a estilização nativa do Pandas no DataFrame
+    df_estilizado = (df_atual.style
+        # 1. Configura os cabeçalhos das colunas (Verde Musgo e Fonte Branca)
+        .set_table_styles([
+            {
+                'selector': 'th',
+                'props': [
+                    ('background-color', '#4d6b53'),
+                    ('color', '#ffffff'),
+                    ('font-weight', 'bold'),
+                    ('text-align', 'center')
+                ]
+            }
+        ])
+        # 2. Aplica o efeito zebrado nas linhas do corpo da tabela
+        .apply(estilar_linhas_zebradas, axis=1)
+    )
+    
+    # Exibimos o dataframe estilizado na tela
+    st.dataframe(df_estilizado, use_container_width=True)
 
 # --- TELA 2 E 3: FORMULÁRIO (INSERIR OU EDITAR) ---
 elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
