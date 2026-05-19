@@ -177,25 +177,30 @@ elif modo == "🗑️ Deletar Linha (ID)":
 
 # --- FLUXO DE TELAS CENTRAL ---
 
-# --- TELA 1: VISUALIZAÇÃO COM FILTROS DINÂMICOS INTERDEPENDENTES & INTERVALO DE DATAS ---
+# --- TELA 1: VISUALIZAÇÃO COM FILTROS DINÂMICOS E BLINDAGEM DE DATAS ---
 if modo == "📊 Visualizar Base":
     st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     
     if df_atual.empty:
         st.info("A base de dados está vazia.")
     else:
-        # --- PREPARAÇÃO ROBUSTA DE DATAS ---
-        # Criamos uma cópia para tratar as datas sem corromper o dataframe original
+        # --- PREPARAÇÃO ROBUSTA DE DATAS (BLINDAGEM CONTRA SCRIPT BREAK) ---
         df_trabalho = df_atual.copy()
-        df_trabalho["Data de Início"] = pd.to_datetime(df_trabalho["Data de Início"], errors='coerce')
         
-        # Define limites de segurança caso haja alguma data corrompida ou vazia
+        # Tentativa 1: Força o padrão brasileiro dia/mês/ano. Se falhar, tenta o formato padrão ISO.
+        df_trabalho["Data de Início"] = pd.to_datetime(df_trabalho["Data de Início"], format='%d/%m/%Y', errors='coerce')
+        # Preenche os registros que falharam na primeira conversão (caso venham do Sharepoint em ISO YYYY-MM-DD)
+        linhas_nulas = df_trabalho["Data de Início"].isna()
+        if linhas_nulas.any():
+            df_trabalho.loc[linhas_nulas, "Data de Início"] = pd.to_datetime(df_atual.loc[linhas_nulas, "Data de Início"], errors='coerce')
+
+        # Cria limites padronizados caso a base inteira esteja corrompida ou vazia
         data_min_base = df_trabalho["Data de Início"].min()
         data_max_base = df_trabalho["Data de Início"].max()
         
         if pd.isna(data_min_base) or pd.isna(data_max_base):
-            data_min_base = pd.Timestamp(date(2026, 1, 1))
-            data_max_base = pd.Timestamp(date(2026, 12, 31))
+            data_min_base = pd.Timestamp("2026-01-01")
+            data_max_base = pd.Timestamp("2026-12-31")
             
         # --- LÓGICA DE FILTROS CASCATA (INTERDEPENDENTES) ---
         df_filtros = df_trabalho.copy()
@@ -217,15 +222,14 @@ if modo == "📊 Visualizar Base":
         if uf_selecionada != "Todas":
             df_filtros = df_filtros[df_filtros["UF_Acao_PNAPA"].astype(str) == uf_selecionada]
             
-        # 3. FILTRO: Nível (Nacional, Regional, Local)
+        # 3. FILTRO: Nível
         niveis_disponiveis = ["Todos"] + sorted(df_filtros["Nível"].dropna().astype(str).unique().tolist())
         with col_nivel:
             nivel_selecionado = st.selectbox("🎚️ Filtrar por Nível:", niveis_disponiveis)
         if nivel_selecionado != "Todos":
             df_filtros = df_filtros[df_filtros["Nível"].astype(str) == nivel_selecionado]
 
-
-        # LINHA 2 DE FILTROS (2 Colunas Desiguais para dar espaço ao Slider)
+        # LINHA 2 DE FILTROS (2 Colunas)
         col_servidor, col_data = st.columns([1, 2])
         
         # 4. FILTRO: Servidor
@@ -235,11 +239,11 @@ if modo == "📊 Visualizar Base":
         if servidor_selecionado != "Todos":
             df_filtros = df_filtros[df_filtros["Servidor"].astype(str) == servidor_selecionado]
             
-        # 5. FILTRO: Faixa Rolável de Data de Início (Slider de Intervalo)
-        # Recalcula as datas disponíveis baseado nos filtros acima para restringir o slider
+        # 5. FILTRO: Faixa de Datas Dinâmica e Segura
         min_slider = df_filtros["Data de Início"].min()
         max_slider = df_filtros["Data de Início"].max()
         
+        # Se após os filtros acima sobrar apenas 1 linha ou nenhuma data válida, travamos nos limites da base
         if pd.isna(min_slider) or pd.isna(max_slider) or min_slider == max_slider:
             min_slider = data_min_base
             max_slider = data_max_base
@@ -247,13 +251,13 @@ if modo == "📊 Visualizar Base":
         with col_data:
             intervalo_datas = st.slider(
                 "⏳ Período (Data de Início):",
-                min_value=min_slider.to_pydatetime(),
-                max_value=max_slider.to_pydatetime(),
-                value=(min_slider.to_pydatetime(), max_slider.to_pydatetime()),
+                min_value=min_slider.to_pydatetime().date(),
+                max_value=max_slider.to_pydatetime().date(),
+                value=(min_slider.to_pydatetime().date(), max_slider.to_pydatetime().date()),
                 format="DD/MM/YYYY"
             )
 
-        # --- APLICAÇÃO FINAL DE TODA A CASCATA NO DATAFRAME DE EXIBIÇÃO ---
+        # --- APLICAÇÃO DA FILTRAGEM FINAL DE COMBINAÇÃO ---
         df_exibicao = df_trabalho.copy()
         
         if ano_selecionado != "Todos":
@@ -265,19 +269,24 @@ if modo == "📊 Visualizar Base":
         if servidor_selecionado != "Todos":
             df_exibicao = df_exibicao[df_exibicao["Servidor"].astype(str) == servidor_selecionado]
             
-        # Filtra o intervalo selecionado no Slider (Data Início >= Início do Slider e <= Fim do Slider)
+        # Conversão explícita para evitar o bug de cruzamento 'Timestamp vs Date'
+        inicio_busca = pd.Timestamp(intervalo_datas[0])
+        fim_busca = pd.Timestamp(intervalo_datas[1])
+        
+        # Aplica a máscara booleana de segurança
         df_exibicao = df_exibicao[
-            (df_exibicao["Data de Início"] >= intervalo_datas[0]) & 
-            (df_exibicao["Data de Início"] <= intervalo_datas[1])
+            (df_exibicao["Data de Início"] >= inicio_busca) & 
+            (df_exibicao["Data de Início"] <= fim_busca)
         ]
         
-        # Devolve o formato original de String para a data não perder a formatação limpa no grid
+        # Restaura a visualização da coluna de data de volta para String limpa (padrão BR) para exibição do usuário
         df_exibicao["Data de Início"] = df_exibicao["Data de Início"].dt.strftime('%d/%m/%Y')
+        # Garante que valores nulos gerados pela reversão de string fiquem em branco legível
+        df_exibicao["Data de Início"] = df_exibicao["Data de Início"].fillna("")
 
-        # Espaçador visual
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- RENDERIZAÇÃO DA TABELA ZEBRADA INTERATIVA ---
+        # --- MONTAGEM DA TABELA INTERATIVA ---
         def estilar_linhas_zebradas(linha):
             cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
             return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
