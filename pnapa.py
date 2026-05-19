@@ -177,31 +177,45 @@ elif modo == "🗑️ Deletar Linha (ID)":
 
 # --- FLUXO DE TELAS CENTRAL ---
 
-# --- TELA 1: VISUALIZAÇÃO COM PARSER ADAPTATIVO DE DATA ---
+# --- TELA 1: VISUALIZAÇÃO COM CONVERSOR DE DATA SERIAL DO EXCEL ---
 if modo == "📊 Visualizar Base":
     st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     
     if df_atual.empty:
         st.info("A base de dados está vazia.")
     else:
-        # --- 1. TRATAMENTO INTELIGENTE E ULTRA-PROTEGIDO DE DATAS ---
+        # --- 1. FUNÇÃO DE TRATAMENTO E CONVERSÃO DE DATAS MISTAS (EXCEL SERIAL VS ISO) ---
+        def limpar_e_converter_data(valor):
+            if pd.isna(valor):
+                return pd.NaT
+            
+            # Limpa espaços e transforma em string
+            val_str = str(valor).strip()
+            if val_str == "" or val_str.lower() in ["none", "nat", "nan"]:
+                return pd.NaT
+            
+            # Se for um número serial do Excel (ex: 45818 ou 45818.0)
+            if val_str.replace('.', '', 1).isdigit():
+                try:
+                    num_serial = int(float(val_str))
+                    # O Excel conta a partir de 30/12/1899 devido a um bug histórico com o ano de 1900
+                    return pd.to_datetime(num_serial, unit='D', origin='1899-12-30')
+                except:
+                    pass
+            
+            # Se já for uma string de data (ex: 2026-05-19 ou 19/05/2026)
+            return pd.to_datetime(val_str, errors='coerce', format='mixed')
+
+        # Criamos uma cópia de trabalho e aplicamos a conversão robusta nas duas colunas de data
         df_trabalho = df_atual.copy()
+        df_trabalho["Data_Inicio_Datetime"] = df_trabalho["Data de Início"].apply(limpar_e_converter_data)
+        df_trabalho["Data_Termino_Datetime"] = df_trabalho["Data de Término"].apply(limpar_e_converter_data)
         
-        # Remove espaços em branco e garante que tudo seja tratado como string limpa
-        df_trabalho["Data de Início"] = df_trabalho["Data de Início"].astype(str).str.strip()
+        # Define os limites ABSOLUTOS reais baseados no que existe nos dados para o Slider
+        data_min_absoluta = df_trabalho["Data_Inicio_Datetime"].min()
+        data_max_absoluta = df_trabalho["Data_Inicio_Datetime"].max()
         
-        # Converte permitindo formatos mistos (detecta automaticamente DD/MM/YYYY, ISO, com ou sem hora)
-        df_trabalho["Data_Datetime"] = pd.to_datetime(
-            df_trabalho["Data de Início"], 
-            errors='coerce', 
-            format='mixed'
-        )
-        
-        # Descobre os limites REAIS baseados no que realmente existe nos dados (ex: vai achar 2025)
-        data_min_absoluta = df_trabalho["Data_Datetime"].min()
-        data_max_absoluta = df_trabalho["Data_Datetime"].max()
-        
-        # Se mesmo assim a coluna inteira falhar, pegamos o ano corrente como última opção
+        # Fallback de segurança se a coluna inteira estiver nula
         if pd.isna(data_min_absoluta) or pd.isna(data_max_absoluta):
             data_min_absoluta = pd.Timestamp("2025-01-01")
             data_max_absoluta = pd.Timestamp("2026-12-31")
@@ -241,7 +255,7 @@ if modo == "📊 Visualizar Base":
         with col_servidor:
             servidor_selecionado = st.selectbox("👤 Filtrar por Servidor:", servidores_disponiveis)
 
-        # Filtro 5: Slider de Datas (Lê os limites reais e estáveis da base)
+        # Filtro 5: Slider de Datas (Baseado nas datas tratadas)
         with col_data:
             intervalo_datas = st.slider(
                 "⏳ Período (Data de Início):",
@@ -268,23 +282,19 @@ if modo == "📊 Visualizar Base":
         fim_busca = pd.Timestamp(intervalo_datas[1])
         
         if intervalo_datas[0] == data_min_absoluta.to_pydatetime().date() and intervalo_datas[1] == data_max_absoluta.to_pydatetime().date():
-            # Se o slider não foi mexido, mantém tudo
             pass
         else:
             df_exibicao = df_exibicao[
-                (df_exibicao["Data_Datetime"] >= inicio_busca) & 
-                (df_exibicao["Data_Datetime"] <= fim_busca)
+                (df_exibicao["Data_Inicio_Datetime"] >= inicio_busca) & 
+                (df_exibicao["Data_Inicio_Datetime"] <= fim_busca)
             ]
         
-        # --- CORREÇÃO: FORMATAR A DATA ENQUANTO AINDA É DATAFRAME ---
-        # Recria o texto legível na coluna original usando a coluna auxiliar datetime
-        df_exibicao["Data de Início"] = df_exibicao["Data_Datetime"].dt.strftime('%d/%m/%Y')
+        # --- REFORMATAR AS COLUNAS ORIGINAIS PARA TEXTO BR EM DATAFRAME PURO ---
+        df_exibicao["Data de Início"] = df_exibicao["Data_Inicio_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
+        df_exibicao["Data de Término"] = df_exibicao["Data_Termino_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
         
-        # Substitui valores nulos por texto vazio
-        df_exibicao["Data de Início"] = df_exibicao["Data de Início"].fillna("")
-        
-        # Remove a coluna auxiliar com segurança antes da estilização
-        df_exibicao = df_exibicao.drop(columns=["Data_Datetime"])
+        # Remove as colunas auxiliares com segurança para manter o Grid limpo
+        df_exibicao = df_exibicao.drop(columns=["Data_Inicio_Datetime", "Data_Termino_Datetime"])
 
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -293,10 +303,7 @@ if modo == "📊 Visualizar Base":
             cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
             return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
 
-        # Resetamos o índice para o cálculo do par/ímpar funcionar corretamente
         df_para_visualizar = df_exibicao.reset_index(drop=True)
-        
-        # Aplicamos o estilo zebrado como o ÚLTIMO passo antes do st.dataframe
         df_estilizado = df_para_visualizar.style.apply(estilar_linhas_zebradas, axis=1)
         
         st.dataframe(df_estilizado, use_container_width=True)
