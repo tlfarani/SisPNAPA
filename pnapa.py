@@ -177,87 +177,79 @@ elif modo == "🗑️ Deletar Linha (ID)":
 
 # --- FLUXO DE TELAS CENTRAL ---
 
-# --- TELA 1: VISUALIZAÇÃO COM FILTROS DINÂMICOS E BLINDAGEM DE DATAS ---
+# --- TELA 1: VISUALIZAÇÃO COM FILTROS FIXADOS E DATAS INDEPENDENTES ---
 if modo == "📊 Visualizar Base":
     st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     
     if df_atual.empty:
         st.info("A base de dados está vazia.")
     else:
-        # --- PREPARAÇÃO ROBUSTA DE DATAS (BLINDAGEM CONTRA SCRIPT BREAK) ---
+        # --- 1. TRATAMENTO ISOLADO DE DATAS ---
         df_trabalho = df_atual.copy()
         
-        # Tentativa 1: Força o padrão brasileiro dia/mês/ano. Se falhar, tenta o formato padrão ISO.
-        df_trabalho["Data de Início"] = pd.to_datetime(df_trabalho["Data de Início"], format='%d/%m/%Y', errors='coerce')
-        # Preenche os registros que falharam na primeira conversão (caso venham do Sharepoint em ISO YYYY-MM-DD)
-        linhas_nulas = df_trabalho["Data de Início"].isna()
-        if linhas_nulas.any():
-            df_trabalho.loc[linhas_nulas, "Data de Início"] = pd.to_datetime(df_atual.loc[linhas_nulas, "Data de Início"], errors='coerce')
-
-        # Cria limites padronizados caso a base inteira esteja corrompida ou vazia
-        data_min_base = df_trabalho["Data de Início"].min()
-        data_max_base = df_trabalho["Data de Início"].max()
+        # Converte para datetime forçando o formato brasileiro dia/mês/ano
+        df_trabalho["Data_Datetime"] = pd.to_datetime(df_trabalho["Data de Início"], format='%d/%m/%Y', errors='coerce')
         
-        if pd.isna(data_min_base) or pd.isna(data_max_base):
-            data_min_base = pd.Timestamp("2026-01-01")
-            data_max_base = pd.Timestamp("2026-12-31")
-            
-        # --- LÓGICA DE FILTROS CASCATA (INTERDEPENDENTES) ---
+        # Se alguma falhou (formato ISO YYYY-MM-DD), tenta converter de forma genérica
+        linhas_nulas = df_trabalho["Data_Datetime"].isna() & df_trabalho["Data de Início"].notna()
+        if linhas_nulas.any():
+            df_trabalho.loc[linhas_nulas, "Data_Datetime"] = pd.to_datetime(df_trabalho.loc[linhas_nulas, "Data de Início"], errors='coerce')
+        
+        # Define os limites ABSOLUTOS da base para o Slider nunca encolher ou quebrar
+        data_min_absoluta = df_trabalho["Data_Datetime"].min()
+        data_max_absoluta = df_trabalho["Data_Datetime"].max()
+        
+        # Fallback de segurança se a coluna inteira estiver com problemas
+        if pd.isna(data_min_absoluta) or pd.isna(data_max_absoluta):
+            data_min_absoluta = pd.Timestamp("2026-01-01")
+            data_max_absoluta = pd.Timestamp("2026-12-31")
+
+        # --- 2. LÓGICA DOS FILTROS DE SELEÇÃO (CASCATA SEQUENCIAL) ---
         df_filtros = df_trabalho.copy()
         
-        # LINHA 1 DE FILTROS (3 Colunas)
+        # LINHA 1 DE FILTROS
         col_ano, col_uf, col_nivel = st.columns(3)
         
-        # 1. FILTRO: Ano da Ação
+        # Filtro 1: Ano da Ação (Tratado estritamente como texto/classe)
         anos_disponiveis = ["Todos"] + sorted(df_filtros["Ano da Ação"].dropna().astype(str).unique().tolist())
         with col_ano:
             ano_selecionado = st.selectbox("📅 Filtrar por Ano:", anos_disponiveis)
         if ano_selecionado != "Todos":
             df_filtros = df_filtros[df_filtros["Ano da Ação"].astype(str) == ano_selecionado]
         
-        # 2. FILTRO: UF_Acao_PNAPA
+        # Filtro 2: UF_Acao_PNAPA
         ufs_disponiveis = ["Todas"] + sorted(df_filtros["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
         with col_uf:
             uf_selecionada = st.selectbox("📍 Filtrar por UF:", ufs_disponiveis)
         if uf_selecionada != "Todas":
             df_filtros = df_filtros[df_filtros["UF_Acao_PNAPA"].astype(str) == uf_selecionada]
             
-        # 3. FILTRO: Nível
+        # Filtro 3: Nível
         niveis_disponiveis = ["Todos"] + sorted(df_filtros["Nível"].dropna().astype(str).unique().tolist())
         with col_nivel:
             nivel_selecionado = st.selectbox("🎚️ Filtrar por Nível:", niveis_disponiveis)
         if nivel_selecionado != "Todos":
             df_filtros = df_filtros[df_filtros["Nível"].astype(str) == nivel_selecionado]
 
-        # LINHA 2 DE FILTROS (2 Colunas)
+        # LINHA 2 DE FILTROS
         col_servidor, col_data = st.columns([1, 2])
         
-        # 4. FILTRO: Servidor
+        # Filtro 4: Servidor
         servidores_disponiveis = ["Todos"] + sorted(df_filtros["Servidor"].dropna().astype(str).unique().tolist())
         with col_servidor:
             servidor_selecionado = st.selectbox("👤 Filtrar por Servidor:", servidores_disponiveis)
-        if servidor_selecionado != "Todos":
-            df_filtros = df_filtros[df_filtros["Servidor"].astype(str) == servidor_selecionado]
-            
-        # 5. FILTRO: Faixa de Datas Dinâmica e Segura
-        min_slider = df_filtros["Data de Início"].min()
-        max_slider = df_filtros["Data de Início"].max()
-        
-        # Se após os filtros acima sobrar apenas 1 linha ou nenhuma data válida, travamos nos limites da base
-        if pd.isna(min_slider) or pd.isna(max_slider) or min_slider == max_slider:
-            min_slider = data_min_base
-            max_slider = data_max_base
 
+        # Filtro 5: Slider de Datas (Lê sempre os limites absolutos estáveis)
         with col_data:
             intervalo_datas = st.slider(
                 "⏳ Período (Data de Início):",
-                min_value=min_slider.to_pydatetime().date(),
-                max_value=max_slider.to_pydatetime().date(),
-                value=(min_slider.to_pydatetime().date(), max_slider.to_pydatetime().date()),
+                min_value=data_min_absoluta.to_pydatetime().date(),
+                max_value=data_max_absoluta.to_pydatetime().date(),
+                value=(data_min_absoluta.to_pydatetime().date(), data_max_absoluta.to_pydatetime().date()),
                 format="DD/MM/YYYY"
             )
 
-        # --- APLICAÇÃO DA FILTRAGEM FINAL DE COMBINAÇÃO ---
+        # --- 3. APLICAÇÃO VISUAL DOS FILTROS COMBINADOS ---
         df_exibicao = df_trabalho.copy()
         
         if ano_selecionado != "Todos":
@@ -269,24 +261,20 @@ if modo == "📊 Visualizar Base":
         if servidor_selecionado != "Todos":
             df_exibicao = df_exibicao[df_exibicao["Servidor"].astype(str) == servidor_selecionado]
             
-        # Conversão explícita para evitar o bug de cruzamento 'Timestamp vs Date'
+        # Filtro do intervalo do Slider
         inicio_busca = pd.Timestamp(intervalo_datas[0])
         fim_busca = pd.Timestamp(intervalo_datas[1])
-        
-        # Aplica a máscara booleana de segurança
         df_exibicao = df_exibicao[
-            (df_exibicao["Data de Início"] >= inicio_busca) & 
-            (df_exibicao["Data de Início"] <= fim_busca)
+            (df_exibicao["Data_Datetime"] >= inicio_busca) & 
+            (df_exibicao["Data_Datetime"] <= fim_busca)
         ]
         
-        # Restaura a visualização da coluna de data de volta para String limpa (padrão BR) para exibição do usuário
-        df_exibicao["Data de Início"] = df_exibicao["Data de Início"].dt.strftime('%d/%m/%Y')
-        # Garante que valores nulos gerados pela reversão de string fiquem em branco legível
-        df_exibicao["Data de Início"] = df_exibicao["Data de Início"].fillna("")
+        # Remove a coluna auxiliar para não poluir o dataframe final do usuário
+        df_exibicao = df_exibicao.drop(columns=["Data_Datetime"])
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- MONTAGEM DA TABELA INTERATIVA ---
+        # --- 4. EXIBIÇÃO DA PLANILHA INTERATIVA ZEBRADA ---
         def estilar_linhas_zebradas(linha):
             cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
             return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
