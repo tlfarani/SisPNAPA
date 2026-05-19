@@ -181,13 +181,14 @@ if submetido:
     with st.spinner("Sincronizando com a nuvem do IBAMA..."):
         try:
             resposta = requests.post(URL_GRAVAR, json=payload)
-            if response.status_code in [200, 202]:
+            if resposta.status_code in [200, 202]:
                 st.success(f"🎉 Sucesso! Registro {id_final} processado no SharePoint.")
-                # Força a limpeza do cache para recarregar a tabela atualizada do Excel na próxima rodada
-                del st.session_state.df
+                # Limpa o cache para recarregar a tabela atualizada
+                if "df" in st.session_state:
+                    del st.session_state.df
                 st.rerun()
             else:
-                 st.error(f"Erro no Power Automate: Status {response.status_code}")
+                st.error(f"Erro no Power Automate: Status {resposta.status_code}")
         except Exception as e:
             st.error(f"Falha na comunicação com o fluxo: {e}")
 
