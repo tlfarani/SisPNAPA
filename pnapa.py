@@ -6,57 +6,87 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- CUSTOMIZAÇÃO ESTÉTICA DE ALTA LEGIBILIDADE (REVISADA) ---
+# --- CUSTOMIZAÇÃO ESTÉTICA CIRÚRGICA (BLINDAGEM DE SELETORES) ---
 st.markdown("""
     <style>
-        /* 1. Força TODOS os textos, labels e spans da barra lateral a ficarem em Branco */
-        section[data-testid="stSidebar"] *, 
-        section[data-testid="stSidebar"] p, 
-        section[data-testid="stSidebar"] label,
-        section[data-testid="stSidebar"] span {
-            color: #ffffff !important;
-        }
-        
-        /* Garante que o rótulo específico do selectbox ("Selecione o ID...") fique branco */
-        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+        /* =================================================================
+           1. PAINEL LATERAL (SIDEBAR): TEXTOS BRANCOS E SELECTBOX COM FUNDO BRANCO
+           ================================================================= */
+        section[data-testid="stSidebar"] label p,
+        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
             color: #ffffff !important;
             font-weight: 600 !important;
         }
 
-        /* 2. Corrige a caixinha do Selectbox e inputs dentro da Sidebar */
-        /* Altera o texto de dentro do seletor (o ID "1") para Verde Escuro (#03170a) para dar leitura */
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div,
-        section[data-testid="stSidebar"] div[role="combobox"] span,
-        section[data-testid="stSidebar"] div[role="combobox"] div {
-            color: #03170a !important;
-        }
-        
-        /* Garante que o fundo da caixinha do selectbox fique branco puro na lateral */
-        section[data-testid="stSidebar"] div[role="combobox"] {
+        /* Fundo do Selectbox da barra lateral */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
         }
 
-        /* 3. Customização dos Cabeçalhos das Telas Principais (Fundo Claro) em #03170a */
+        /* Texto de dentro do Selectbox da barra lateral (ID) */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] [aria-selected="true"],
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] span,
+        section[data-testid="stSidebar"] .stSelectbox p {
+            color: #03170a !important;
+            font-weight: bold !important;
+        }
+
+        /* Setinha do Selectbox da barra lateral */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg {
+            fill: #03170a !important;
+        }
+
+
+        /* =================================================================
+           2. ÁREA CENTRAL (FORMULÁRIO): FORÇAR FUNDO BRANCO EM TODOS OS SELECTBOX
+           ================================================================= */
+        /* Alveja as caixas de seleção (Selectbox) APENAS da área central */
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div {
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+
+        /* Força o texto interno do selectbox central ("Nacional", "Não Iniciada") a ficar escuro */
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] [aria-selected="true"],
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] span,
+        div[data-testid="stAppViewContainer"] .stSelectbox p {
+            color: #03170a !important;
+            font-weight: normal !important;
+        }
+
+        /* Ajusta a setinha do selectbox central para acompanhar a cor do texto */
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg {
+            fill: #03170a !important;
+        }
+
+
+        /* =================================================================
+           3. DEMAIS INPUTS E ELEMENTOS DA ÁREA CENTRAL (TEXTO, NÚMERO, LABELS)
+           ================================================================= */
+        /* Títulos das telas */
         h2, h3, [data-testid="stHeader"] {
             color: #03170a !important;
             font-weight: 700 !important;
         }
 
-        /* 4. Estilização das Abas (Tabs) do Formulário Principal */
+        /* Abas (Tabs) */
         button[data-baseweb="tab"] p {
-            color: #4a5568 !important; /* Abas inativas em cinza escuro */
+            color: #4a5568 !important;
             font-weight: 500;
         }
         button[aria-selected="true"] p {
-            color: #03170a !important; /* Aba ativa no verde escuro */
+            color: #03170a !important;
             font-weight: 700 !important;
         }
         div[data-baseweb="tab-highlight"] {
-            background-color: #4d6b53 !important; /* Linha indicadora no verde primário */
+            background-color: #4d6b53 !important;
         }
 
-        /* 5. Contorno e preenchimento dos Inputs na Área Central (Fundo Claro) */
+        /* Inputs normais da área central (Text, Number, TextArea) */
         div[data-testid="stAppViewContainer"] div[data-testid="stTextInput"] input, 
         div[data-testid="stAppViewContainer"] div[data-testid="stNumberInput"] input, 
         div[data-testid="stAppViewContainer"] div[data-testid="stTextArea"] textarea,
@@ -66,7 +96,7 @@ st.markdown("""
             color: #03170a !important;
         }
         
-        /* Labels dos campos centrais em destaque escuro */
+        /* Labels/Rótulos dos campos centrais */
         div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p {
             color: #03170a !important;
             font-weight: 500;
