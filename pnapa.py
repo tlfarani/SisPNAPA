@@ -279,6 +279,23 @@ elif modo == "🗑️ Deletar Linha (ID)":
 # --- TELA 5: GERENCIAR UNIDADES ---
 elif modo == "🏢 Gerenciar Unidades":
     st.markdown(f"<h3>🏢 Gerenciamento de Unidades / Lotações (Tabela Auxiliar)</h3>", unsafe_allow_html=True)
+    
+    # --- NOVO: VISUALIZAÇÃO PRÉVIA DAS UNIDADES CADASTRADAS ---
+    df_visualizacao_uni = df_lotacoes if perfil_usuario == "Administrador" else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
+    
+    st.write("#### 📋 Unidades Ativas sob sua Gestão")
+    if df_visualizacao_uni.empty:
+        st.info(f"Nenhuma unidade cadastrada para a UF {uf_usuario}.")
+    else:
+        # Aplica o zebrado dinâmico na tabelinha de consulta
+        def estilar_uni(linha):
+            return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
+        
+        st.dataframe(df_visualizacao_uni.reset_index(drop=True).style.apply(estilar_uni, axis=1), use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Segue o fluxo normal de abas para alteração dos dados
     t_add, t_edit, t_del = st.tabs(["➕ Adicionar Unidade", "📝 Editar Unidade", "🗑️ Excluir Unidade"])
     
     with t_add:
@@ -288,46 +305,13 @@ elif modo == "🏢 Gerenciar Unidades":
         if st.button("Salvar Unidade"): st.success(f"Unidade '{nova_uni}' adicionada para {uf_uni}!")
         
     with t_edit:
-        df_f = df_lotacoes if perfil_usuario == "Administrador" else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
-        if not df_f.empty:
-            sel_uni = st.selectbox("Selecione a Unidade para alterar:", df_f["Unidade"].tolist())
+        if not df_visualizacao_uni.empty:
+            sel_uni = st.selectbox("Selecione a Unidade para alterar:", df_visualizacao_uni["Unidade"].tolist())
             m_uni = st.text_input("Novo nome da Unidade:", value=sel_uni)
             if st.button("Modificar Unidade"): st.success("Lotação atualizada!")
             
     with t_del:
-        df_f = df_lotacoes if perfil_usuario == "Administrador" else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
-        if not df_f.empty:
-            del_uni = st.selectbox("Selecione a Unidade para REMOVER:", df_f["Unidade"].tolist())
+        if not df_visualizacao_uni.empty:
+            del_uni = st.selectbox("Selecione a Unidade para REMOVER:", df_visualizacao_uni["Unidade"].tolist())
             chk = st.checkbox(f"Confirmo a exclusão da unidade {del_uni}")
             if st.button("❌ Excluir", disabled=not chk): st.success("Unidade removida.")
-
-# --- TELA 6: GERENCIAR EQUIPES ---
-elif modo == "👥 Gerenciar Equipes":
-    st.markdown(f"<h3>👥 Gerenciamento de Equipe e Permissões (Tabela Auxiliar)</h3>", unsafe_allow_html=True)
-    ts_add, ts_edit, ts_del = st.tabs(["➕ Cadastrar Servidor", "📝 Alterar Cadastro", "🗑️ Remover Acesso"])
-    
-    with ts_add:
-        n_srv = st.text_input("Nome Completo:")
-        e_srv = st.text_input("E-mail Institucional (@ibama.gov.br):")
-        f_srv = st.text_input("Função / Cargo (Ex: Substituto Nupaem):")
-        if perfil_usuario == "Administrador":
-            uf_srv = st.selectbox("UF de Lotação:", sorted(df_lotacoes["UF"].unique().tolist()), key="srv_add_uf")
-            perf_srv = st.selectbox("Perfil do Servidor (Nível de Acesso):", ["Visualização", "Editor Regional", "Administrador"])
-        else:
-            uf_srv = st.text_input("UF de Lotação:", value=uf_usuario, disabled=True, key="srv_add_uf_rep")
-            perf_srv = st.selectbox("Perfil do Servidor (Nível de Acesso):", ["Visualização", "Editor Regional"])
-        if st.button("Habilitar Servidor"): st.success(f"{n_srv} cadastrado com sucesso!")
-
-    with ts_edit:
-        df_f = df_servidores if perfil_usuario == "Administrador" else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
-        if not df_f.empty:
-            sel_srv = st.selectbox("Selecione o Servidor para alterar:", df_f["Servidor"].tolist())
-            st.text_input("Função Atual:", value=df_f[df_f["Servidor"] == sel_srv]["Funcao"].iloc[0])
-            if st.button("Salvar Modificações"): st.success("Cadastro atualizado!")
-
-    with ts_del:
-        df_f = df_servidores if perfil_usuario == "Administrador" else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
-        if not df_f.empty:
-            del_srv = st.selectbox("Selecione quem perderá o acesso:", df_f["Servidor"].tolist())
-            chk_srv = st.checkbox(f"Confirmo o desligamento do servidor {del_srv}")
-            if st.button("❌ Revogar Acesso", disabled=not chk_srv): st.success("Acesso revogado do sistema.")
