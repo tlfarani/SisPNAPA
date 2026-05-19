@@ -510,20 +510,71 @@ elif modo == "👥 Gerenciar Equipes":
             dados_atuais_srv = df_visualizacao_srv[df_visualizacao_srv["Servidor"] == sel_srv].iloc[0]
             id_srv_edit = int(float(dados_atuais_srv["ID_SERV"]))
             
-            novo_email = st.text_input("Alterar E-mail:", value=str(dados_atuais_srv["E_mail"]))
-            nova_funcao = st.text_input("Alterar Função Interna / Cargo:", value=str(dados_atuais_srv["Funcao"]))
+            # --- EXPANSÃO DOS CAMPOS DE EDIÇÃO ---
+            col_ed1, col_ed2 = st.columns(2)
+            with col_ed1:
+                novo_email = st.text_input("Alterar E-mail:", value=str(dados_atuais_srv.get("E_mail", "")))
+                nova_funcao = st.text_input("Alterar Função Interna / Cargo:", value=str(dados_atuais_srv.get("Funcao", "")))
             
-            try: index_padrao = LISTA_PERFIS.index(str(dados_atuais_srv["Perfil"]).strip())
-            except: index_padrao = 0
+            with col_ed2:
+                # Descobre a UF do servidor selecionado para filtrar as lotações disponíveis
+                uf_atual_srv = dados_atuais_srv.get("UF_Servidor", uf_usuario)
+                unidades_disponiveis_edit = df_lotacoes[df_lotacoes["UF"] == uf_atual_srv]["Unidade"].tolist()
+                if not unidades_disponiveis_edit:
+                    unidades_disponiveis_edit = ["Sede Superintendência"]
+                
+                # Define o índice padrão da lotação atual
+                lotacao_atual_str = str(dados_atuais_srv.get("Lotacao", "")).strip()
+                try: idx_lot = unidades_disponiveis_edit.index(lotacao_atual_str)
+                except ValueError: idx_lot = 0
+                
+                nova_lot_srv = st.selectbox("Alterar Unidade de Lotação Relacionada:", unidades_disponiveis_edit, index=idx_lot)
+                novo_token = st.text_input("Alterar Token/Senha de Acesso:", value=str(dados_atuais_srv.get("Token", "")), type="password")
+
+            # Colunas para os Checkboxes/Dropdowns de Atributos Técnicos
+            col_eq_ed1, col_eq_ed2, col_eq_ed3 = st.columns(3)
+            
+            def obter_index_sim_nao(valores_df, chave):
+                val = str(valores_df.get(chave, "Não")).strip().capitalize()
+                return 0 if val == "Sim" else 1
+
+            with col_eq_ed1:
+                n_eq_emerg = st.selectbox("Equipe de Emergências?", ["Sim", "Não"], index=obter_index_sim_nao(dados_atuais_srv, "Equipe_Emergencias"), key="srv_edit_emerg")
+            with col_eq_ed2:
+                n_eq_fiscal = st.selectbox("Fiscal de Campo?", ["Sim", "Não"], index=obter_index_sim_nao(dados_atuais_srv, "Fiscal"), key="srv_edit_fiscal")
+            with col_eq_ed3:
+                n_eq_aeac = st.selectbox("Possui AEAC?", ["Sim", "Não"], index=obter_index_sim_nao(dados_atuais_srv, "AEAC"), key="srv_edit_aeac")
+            
+            # Ajuste de Perfil de Acesso baseado nas regras de privilégio
+            perfil_atual_string = str(dados_atuais_srv.get("Perfil", "Visualização")).strip()
+            try: index_padrao = LISTA_PERFIS.index(perfil_atual_string)
+            except ValueError: index_padrao = 0
             
             n_perf = st.selectbox("Alterar Perfil de Acesso:", LISTA_PERFIS, index=index_padrao) if perfil_usuario == "Administrador" else st.selectbox("Alterar Perfil de Acesso:", ["Visualização", "Editor Regional"], index=1 if index_padrao == 1 else 0)
             
+            # --- DISPARO DE ATUALIZAÇÃO ---
             if st.button("Salvar Modificações"):
-                with st.spinner("Atualizando cadastro da equipe..."):
-                    executar_api_equipes({"Acao": "Editar", "ID_SERV": id_srv_edit, "Servidor": sel_srv, "E_mail": novo_email, "Funcao": nova_funcao, "Perfil": n_perf})
+                # O payload agora reconstrói a linha completa para o Power Automate atualizar todas as células correspondentes
+                payload_editar_srv = {
+                    "Acao": "Editar", 
+                    "ID_SERV": id_srv_edit, 
+                    "Servidor": sel_srv, 
+                    "UF_Servidor": uf_atual_srv,
+                    "Lotacao": nova_lot_srv,
+                    "Equipe_Emergencias": n_eq_emerg,
+                    "Fiscal": n_eq_fiscal,
+                    "AEAC": n_eq_aeac,
+                    "E_mail": novo_email, 
+                    "Funcao": nova_funcao, 
+                    "Perfil": n_perf,
+                    "Token": novo_token
+                }
+                
+                with st.spinner("Atualizando cadastro completo da equipe no SharePoint..."):
+                    executar_api_equipes(payload_editar_srv)
                     time.sleep(2)
                     st.cache_data.clear()
-                st.success("Cadastro atualizado com sucesso!")
+                st.success("Cadastro completo atualizado com sucesso no Excel!")
                 st.rerun()
 
     with ts_del:
