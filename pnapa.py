@@ -177,65 +177,112 @@ elif modo == "🗑️ Deletar Linha (ID)":
 
 # --- FLUXO DE TELAS CENTRAL ---
 
-# --- TELA 1: VISUALIZAÇÃO COM FILTROS DINÂMICOS INTERDEPENDENTES ---
+# --- TELA 1: VISUALIZAÇÃO COM FILTROS DINÂMICOS INTERDEPENDENTES & INTERVALO DE DATAS ---
 if modo == "📊 Visualizar Base":
     st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     
     if df_atual.empty:
         st.info("A base de dados está vazia.")
     else:
-        # --- LÓGICA DE FILTROS CASCATA (INTERDEPENDENTES) ---
-        # Criamos uma cópia para não afetar o DataFrame principal durante a extração das listas
-        df_filtros = df_atual.copy()
+        # --- PREPARAÇÃO ROBUSTA DE DATAS ---
+        # Criamos uma cópia para tratar as datas sem corromper o dataframe original
+        df_trabalho = df_atual.copy()
+        df_trabalho["Data de Início"] = pd.to_datetime(df_trabalho["Data de Início"], errors='coerce')
         
-        # Criamos 3 colunas na área central para colocar os filtros lado a lado
-        col_ano, col_uf, col_servidor = st.columns(3)
+        # Define limites de segurança caso haja alguma data corrompida ou vazia
+        data_min_base = df_trabalho["Data de Início"].min()
+        data_max_base = df_trabalho["Data de Início"].max()
+        
+        if pd.isna(data_min_base) or pd.isna(data_max_base):
+            data_min_base = pd.Timestamp(date(2026, 1, 1))
+            data_max_base = pd.Timestamp(date(2026, 12, 31))
+            
+        # --- LÓGICA DE FILTROS CASCATA (INTERDEPENDENTES) ---
+        df_filtros = df_trabalho.copy()
+        
+        # LINHA 1 DE FILTROS (3 Colunas)
+        col_ano, col_uf, col_nivel = st.columns(3)
         
         # 1. FILTRO: Ano da Ação
         anos_disponiveis = ["Todos"] + sorted(df_filtros["Ano da Ação"].dropna().astype(str).unique().tolist())
         with col_ano:
             ano_selecionado = st.selectbox("📅 Filtrar por Ano:", anos_disponiveis)
-        
-        # Aplica o filtro de Ano antes de gerar a lista de UFs
         if ano_selecionado != "Todos":
             df_filtros = df_filtros[df_filtros["Ano da Ação"].astype(str) == ano_selecionado]
-            
-        # 2. FILTRO: UF_Acao_PNAPA (Baseado no que sobrou após o filtro de Ano)
+        
+        # 2. FILTRO: UF_Acao_PNAPA
         ufs_disponiveis = ["Todas"] + sorted(df_filtros["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
         with col_uf:
             uf_selecionada = st.selectbox("📍 Filtrar por UF:", ufs_disponiveis)
-            
-        # Aplica o filtro de UF antes de gerar a lista de Servidores
         if uf_selecionada != "Todas":
             df_filtros = df_filtros[df_filtros["UF_Acao_PNAPA"].astype(str) == uf_selecionada]
             
-        # 3. FILTRO: Servidor (Baseado no que sobrou após Ano e UF)
+        # 3. FILTRO: Nível (Nacional, Regional, Local)
+        niveis_disponiveis = ["Todos"] + sorted(df_filtros["Nível"].dropna().astype(str).unique().tolist())
+        with col_nivel:
+            nivel_selecionado = st.selectbox("🎚️ Filtrar por Nível:", niveis_disponiveis)
+        if nivel_selecionado != "Todos":
+            df_filtros = df_filtros[df_filtros["Nível"].astype(str) == nivel_selecionado]
+
+
+        # LINHA 2 DE FILTROS (2 Colunas Desiguais para dar espaço ao Slider)
+        col_servidor, col_data = st.columns([1, 2])
+        
+        # 4. FILTRO: Servidor
         servidores_disponiveis = ["Todos"] + sorted(df_filtros["Servidor"].dropna().astype(str).unique().tolist())
         with col_servidor:
             servidor_selecionado = st.selectbox("👤 Filtrar por Servidor:", servidores_disponiveis)
+        if servidor_selecionado != "Todos":
+            df_filtros = df_filtros[df_filtros["Servidor"].astype(str) == servidor_selecionado]
             
-        # --- APLICAÇÃO FINAL DOS FILTROS NO DATAFRAME EXIBIDO ---
-        df_exibicao = df_atual.copy()
+        # 5. FILTRO: Faixa Rolável de Data de Início (Slider de Intervalo)
+        # Recalcula as datas disponíveis baseado nos filtros acima para restringir o slider
+        min_slider = df_filtros["Data de Início"].min()
+        max_slider = df_filtros["Data de Início"].max()
+        
+        if pd.isna(min_slider) or pd.isna(max_slider) or min_slider == max_slider:
+            min_slider = data_min_base
+            max_slider = data_max_base
+
+        with col_data:
+            intervalo_datas = st.slider(
+                "⏳ Período (Data de Início):",
+                min_value=min_slider.to_pydatetime(),
+                max_value=max_slider.to_pydatetime(),
+                value=(min_slider.to_pydatetime(), max_slider.to_pydatetime()),
+                format="DD/MM/YYYY"
+            )
+
+        # --- APLICAÇÃO FINAL DE TODA A CASCATA NO DATAFRAME DE EXIBIÇÃO ---
+        df_exibicao = df_trabalho.copy()
+        
         if ano_selecionado != "Todos":
             df_exibicao = df_exibicao[df_exibicao["Ano da Ação"].astype(str) == ano_selecionado]
         if uf_selecionada != "Todas":
             df_exibicao = df_exibicao[df_exibicao["UF_Acao_PNAPA"].astype(str) == uf_selecionada]
+        if nivel_selecionado != "Todos":
+            df_exibicao = df_exibicao[df_exibicao["Nível"].astype(str) == nivel_selecionado]
         if servidor_selecionado != "Todos":
             df_exibicao = df_exibicao[df_exibicao["Servidor"].astype(str) == servidor_selecionado]
             
-        # Espaçador visual antes da tabela
+        # Filtra o intervalo selecionado no Slider (Data Início >= Início do Slider e <= Fim do Slider)
+        df_exibicao = df_exibicao[
+            (df_exibicao["Data de Início"] >= intervalo_datas[0]) & 
+            (df_exibicao["Data de Início"] <= intervalo_datas[1])
+        ]
+        
+        # Devolve o formato original de String para a data não perder a formatação limpa no grid
+        df_exibicao["Data de Início"] = df_exibicao["Data de Início"].dt.strftime('%d/%m/%Y')
+
+        # Espaçador visual
         st.markdown("<br>", unsafe_allow_html=True)
         
         # --- RENDERIZAÇÃO DA TABELA ZEBRADA INTERATIVA ---
         def estilar_linhas_zebradas(linha):
-            # Garante o efeito zebrado resetando o índice na visualização
             cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
             return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
 
-        # Resetamos o índice temporariamente apenas no Style para o cálculo do par/ímpar funcionar certinho
         df_estilizado = df_exibicao.reset_index(drop=True).style.apply(estilar_linhas_zebradas, axis=1)
-        
-        # Exibe o dataframe final com filtros aplicados e mantendo rolagem e busca nativas
         st.dataframe(df_estilizado, use_container_width=True)
 
 # --- TELA 2 E 3: FORMULÁRIO (INSERIR OU EDITAR) ---
