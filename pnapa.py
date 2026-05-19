@@ -267,9 +267,8 @@ if modo == "📊 Visualizar Base":
         inicio_busca = pd.Timestamp(intervalo_datas[0])
         fim_busca = pd.Timestamp(intervalo_datas[1])
         
-        # Registros sem data válida (NaT) não somem se o slider estiver no máximo
         if intervalo_datas[0] == data_min_absoluta.to_pydatetime().date() and intervalo_datas[1] == data_max_absoluta.to_pydatetime().date():
-            # Se o slider não foi mexido, mantém inclusive quem deu erro de conversão para não sumir nada por padrão
+            # Se o slider não foi mexido, mantém tudo
             pass
         else:
             df_exibicao = df_exibicao[
@@ -277,7 +276,14 @@ if modo == "📊 Visualizar Base":
                 (df_exibicao["Data_Datetime"] <= fim_busca)
             ]
         
-        # Remove a coluna temporária de cálculo antes de exibir
+        # --- CORREÇÃO COMPORTAMENTAL: RECONVERSÃO PARA TEXTO BR ---
+        # Usamos a coluna auxiliar datetime (que está perfeita) para recriar o texto legível na coluna original
+        df_exibicao["Data de Início"] = df_exibicao["Data_Datetime"].dt.strftime('%d/%m/%Y')
+        
+        # Se algum registro original não tinha data e ficou nulo, limpamos para não mostrar "NaT"
+        df_exibicao["Data de Início"] = df_exibicao["Data de Início"].fillna("")
+        
+        # Agora sim podemos apagar a coluna auxiliar de cálculo com segurança
         df_exibicao = df_exibicao.drop(columns=["Data_Datetime"])
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -287,6 +293,7 @@ if modo == "📊 Visualizar Base":
             cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
             return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
 
+        # Reseta o índice para o cálculo do zebrado funcionar sem misturar com IDs descontinuados
         df_estilizado = df_exibicao.reset_index(drop=True).style.apply(estilar_linhas_zebradas, axis=1)
         st.dataframe(df_estilizado, use_container_width=True)
 
