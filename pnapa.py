@@ -10,8 +10,8 @@ st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 # 1. ENDPOINTS DO POWER AUTOMATE & CREDENCIAIS (SHAREPOINT)
 # =================================================================
 # URLs das tabelas auxiliares (Gerenciamento de Infraestrutura)
-URL_FLOW_UNIDADES = "COLE_AQUI_A_URL_DO_FLUXO_DE_UNIDADES" 
-URL_FLOW_EQUIPES = "COLE_AQUI_A_URL_DO_FLUXO_DE_SERVIDORES"
+URL_FLOW_UNIDADES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c2207ed01bf64853a477e7b6b165c3e8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=GR6JhJzrEZTapCOAKwlY9VGzT_g-6xQGBG7YLraG6Z4" 
+URL_FLOW_EQUIPES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3d124cc6783845e1b8618cfb3302eca0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ubTQ-LAIsToMOX0CGytlI2YM_WKmC_mRT64ybRLBRSY"
 
 # URLs da Planilha Macro Principal do PNAPA (Vindas do st.secrets)
 URL_LER = st.secrets["power_automate"]["URL_LER"]
