@@ -35,8 +35,8 @@ def carregar_dados_da_nuvem():
                 return df[COLUNAS_PNAPA]
         return pd.DataFrame(columns=COLUNAS_PNAPA)
     except Exception as e:
-        st.error(f"Erro ao conectar ao Power Automate para leitura: {e}")
-        return pd.DataFrame(columns=COLUNAL_PNAPA)
+        st.markdown(f"<div style='padding:10px; border-radius:5px; background-color:#2a1a1a; color:#f87171; border:1px solid #7f1d1d;'>❌ Erro ao conectar ao Power Automate para leitura: {e}</div>", unsafe_allow_html=True)
+        return pd.DataFrame(columns=COLUNAS_PNAPA)
 
 # Inicialização do estado da sessão (Cache Local)
 if "df" not in st.session_state:
@@ -46,7 +46,7 @@ if "df" not in st.session_state:
 df_atual = st.session_state.df
 
 # --- INTERFACE LATERAL (PAINEL DE CONTROLE) ---
-st.sidebar.header("🕹️ Painel de Controle")
+st.sidebar.markdown("<h2 style='color: #f1f3f5; font-weight: 600;'>🕹️ Painel de Controle</h2>", unsafe_allow_html=True)
 modo = st.sidebar.radio(
     "Operação:", 
     ["📊 Visualizar Base", "➕ Inserir Nova Linha", "📝 Editar Linha Existente", "🗑️ Deletar Linha (ID)"]
@@ -57,9 +57,9 @@ registro_selecionado = None
 id_atual = ""
 
 # Regras de transição e seletores na barra lateral
-if modo == "📝 Editar Line Existente":
+if modo == "📝 Editar Linha Existente":
     if df_atual.empty:
-        st.sidebar.warning("Base de dados vazia para edição.")
+        st.sidebar.markdown("<div style='padding:8px; border-radius:5px; background-color:#2a2415; color:#fbbf24;'>⚠️ Base de dados vazia para edição.</div>", unsafe_allow_html=True)
         modo = "📊 Visualizar Base"
     else:
         ids_disponiveis = df_atual["Id"].dropna().astype(str).unique().tolist()
@@ -69,7 +69,7 @@ if modo == "📝 Editar Line Existente":
 
 elif modo == "🗑️ Deletar Linha (ID)":
     if df_atual.empty:
-        st.sidebar.warning("Base de dados vazia para exclusão.")
+        st.sidebar.markdown("<div style='padding:8px; border-radius:5px; background-color:#2a2415; color:#fbbf24;'>⚠️ Base de dados vazia para exclusão.</div>", unsafe_allow_html=True)
         modo = "📊 Visualizar Base"
     else:
         ids_disponiveis = df_atual["Id"].dropna().astype(str).unique().tolist()
@@ -81,12 +81,12 @@ elif modo == "🗑️ Deletar Linha (ID)":
 
 # --- TELA 1: VISUALIZAÇÃO ---
 if modo == "📊 Visualizar Base":
-    st.subheader("📊 Visualização Atual dos Dados (Espelho SharePoint)")
+    st.markdown("<h3 style='color: #f1f3f5;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     st.dataframe(df_atual, use_container_width=True)
 
 # --- TELA 2 E 3: FORMULÁRIO (INSERIR OU EDITAR) ---
 elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
-    st.subheader(f"Formulário de Dados PNAPA — Modo: {modo}")
+    st.markdown(f"<h3 style='color: #f1f3f5;'>Formulário de Dados PNAPA — Modo: {modo}</h3>", unsafe_allow_html=True)
     
     with st.form(key="form_power_automate", clear_on_submit=True):
         st.text_input("ID do Registro", value=id_atual if id_atual else "Definido no envio", disabled=True)
@@ -146,7 +146,7 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
             dias_exec = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"))
             origem_recurso = st.text_input("Origem do Recurso", value=str(registro_selecionado["Origem do Recurso"]) if registro_selecionado is not None else "")
             
-            st.markdown("**Valores Orçamentários**")
+            st.markdown("<p style='font-weight: bold; margin-top:15px; color:#f1f3f5;'>Valores Orçamentários</p>", unsafe_allow_html=True)
             
             rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f")
             rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f")
@@ -200,28 +200,28 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
             try:
                 resposta = requests.post(URL_GRAVAR, json=payload)
                 if resposta.status_code in [200, 202]:
-                    st.success(f"🎉 Sucesso! Registro {id_final} enviado ao SharePoint.")
+                    st.markdown(f"<div style='padding:12px; border-radius:5px; background-color:#1c2d20; color:#a3e635; border:1px solid #3f6212; margin-bottom:15px;'>🎉 Sucesso! Registro {id_final} enviado ao SharePoint.</div>", unsafe_allow_html=True)
                     time.sleep(2)
                     st.cache_data.clear()
                     if "df" in st.session_state:
                         del st.session_state.df
                     st.rerun()
                 else:
-                    st.error(f"Erro no Power Automate: Status {resposta.status_code}")
+                    st.markdown(f"<div style='padding:12px; border-radius:5px; background-color:#2a1a1a; color:#f87171; border:1px solid #7f1d1d; margin-bottom:15px;'>❌ Erro no Power Automate: Status {resposta.status_code}</div>", unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"Falha na comunicação com o fluxo: {e}")
+                st.markdown(f"<div style='padding:12px; border-radius:5px; background-color:#2a1a1a; color:#f87171; border:1px solid #7f1d1d; margin-bottom:15px;'>❌ Falha na comunicação com o fluxo: {e}</div>", unsafe_allow_html=True)
 
 # --- TELA 4: EXCLUSÃO DE LINHA ---
 elif modo == "🗑️ Deletar Linha (ID)":
-    st.subheader("🗑️ Excluir Registro Existente")
-    st.warning("⚠️ Atenção: A remoção de registros da base do PNAPA é uma operação definitiva dentro do SharePoint.")
+    st.markdown("<h3 style='color: #f1f3f5;'>🗑️ Excluir Registro Existente</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='padding:12px; border-radius:5px; background-color:#2a1b15; color:#fdba74; border:1px solid #c2410c; margin-bottom:20px;'>⚠️ Atenção: A remoção de registros da base do PNAPA é uma operação definitiva dentro do SharePoint.</div>", unsafe_allow_html=True)
     
     # Campo informativo mostrando qual ID veio selecionado na Sidebar
     st.text_input("ID Marcado para Exclusão", value=id_atual, disabled=True)
     
     # Caixa Popover de segurança (Atua como modal de confirmação)
     with st.popover("🚨 Confirmar Exclusão Permanente", use_container_width=True):
-        st.write(f"Tem certeza absoluta de que deseja destruir permanentemente o registro de **ID {id_atual}**?")
+        st.markdown(f"<p style='color:#f1f3f5;'>Tem certeza absoluta de que deseja destruir permanentemente o registro de <b>ID {id_atual}</b>?</p>", unsafe_allow_html=True)
         confirmou_exclusao = st.button("Sim, deletar agora!", type="primary", use_container_width=True)
         
         if confirmou_exclusao:
@@ -231,13 +231,13 @@ elif modo == "🗑️ Deletar Linha (ID)":
                 try:
                     resposta_del = requests.post(URL_DELETAR, json=payload_deletar)
                     if resposta_del.status_code in [200, 202]:
-                        st.success(f"💥 Sucesso! O Registro {id_atual} foi excluído da base.")
+                        st.markdown(f"<div style='padding:12px; border-radius:5px; background-color:#1c2d20; color:#a3e635; border:1px solid #3f6212; margin-bottom:15px;'>💥 Sucesso! O Registro {id_atual} foi excluído da base.</div>", unsafe_allow_html=True)
                         time.sleep(2)
                         st.cache_data.clear()
                         if "df" in st.session_state:
                             del st.session_state.df
                         st.rerun()
                     else:
-                        st.error(f"Erro no Power Automate ao deletar: Status {resposta_del.status_code}")
+                        st.markdown(f"<div style='padding:12px; border-radius:5px; background-color:#2a1a1a; color:#f87171; border:1px solid #7f1d1d;'>❌ Erro no Power Automate ao deletar: Status {resposta_del.status_code}</div>", unsafe_allow_html=True)
                 except Exception as e:
-                    st.error(f"Falha na comunicação com o fluxo de exclusão: {e}")
+                    st.markdown(f"<div style='padding:12px; border-radius:5px; background-color:#2a1a1a; color:#f87171; border:1px solid #7f1d1d;'>❌ Falha na comunicação com o fluxo de exclusão: {e}</div>", unsafe_allow_html=True)
