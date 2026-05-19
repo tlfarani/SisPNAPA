@@ -298,12 +298,18 @@ if modo == "📊 Visualizar Base":
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- 4. EXIBIÇÃO DA PLANILHA INTERATIVA ZEBRADA ---
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # --- 4. EXIBIÇÃO DA PLANILHA INTERATIVA ZEBRADA DINÂMICA ---
         def estilar_linhas_zebradas(linha):
+            # Agora que o índice foi resetado, a contagem par/ímpar será sempre contínua (0, 1, 2, 3...)
             cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
             return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
 
+        # O TRUQUE: .reset_index(drop=True) reconstrói a numeração sequencial das linhas que sobraram
         df_para_visualizar = df_exibicao.reset_index(drop=True)
+        
+        # O estilo agora é aplicado sobre uma sequência limpa e recalcula o zebrado perfeitamente
         df_estilizado = df_para_visualizar.style.apply(estilar_linhas_zebradas, axis=1)
         
         st.dataframe(df_estilizado, use_container_width=True)
