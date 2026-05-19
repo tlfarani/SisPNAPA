@@ -240,8 +240,12 @@ elif modo == "🏢 Gerenciar Unidades":
     if df_visualizacao_uni.empty:
         st.info(f"Nenhuma unidade cadastrada para a UF {uf_usuario}.")
     else:
+        # --- FILTRO SEGURO PARA ESCONDER COLUNAS INTERNAS DA MICROSOFT ---
+        colunas_validas = [col for col in ["ID_UF", "UF", "Unidade"] if col in df_visualizacao_uni.columns]
+        df_limpo_uni = df_visualizacao_uni[colunas_validas]
+        
         def estilar_uni(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
-        st.dataframe(df_visualizacao_uni.reset_index(drop=True).style.apply(estilar_uni, axis=1), use_container_width=True)
+        st.dataframe(df_limpo_uni.reset_index(drop=True).style.apply(estilar_uni, axis=1), use_container_width=True)
     
     st.markdown("---")
     t_add, t_edit, t_del = st.tabs(["➕ Adicionar Unidade", "📝 Editar Unidade", "🗑️ Excluir Unidade"])
@@ -297,12 +301,16 @@ elif modo == "🏢 Gerenciar Unidades":
 elif modo == "👥 Gerenciar Equipes":
     st.markdown(f"<h3>👥 Gerenciamento de Equipe e Permissões (Tabela Auxiliar via SharePoint)</h3>", unsafe_allow_html=True)
     
-    df_visualizacao_srv = df_servidores if perfil_usuario == "Administrador" else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
     st.write("#### 📋 Integrantes da Equipe Cadastrados no Excel")
     if df_visualizacao_srv.empty:
         st.info(f"Nenhum servidor cadastrado para a UF {uf_usuario}.")
     else:
-        df_exibir_srv = df_visualizacao_srv.drop(columns=["Token"], errors="ignore")
+        # Mantém apenas as colunas oficiais do sistema, dropando tokens e ids internos
+        colunas_oficiais_srv = ["ID_SERV", "Servidor", "UF_Servidor", "Lotacao", "Equipe_Emergencias", "Fiscal", "AEAC", "Funcao", "E_mail", "Perfil"]
+        colunas_validas_srv = [col for col in colunas_oficiais_srv if col in df_visualizacao_srv.columns]
+        
+        df_exibir_srv = df_visualizacao_srv[colunas_validas_srv]
+        
         def estilar_srv(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
         st.dataframe(df_exibir_srv.reset_index(drop=True).style.apply(estilar_srv, axis=1), use_container_width=True)
         
