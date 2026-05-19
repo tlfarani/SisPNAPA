@@ -157,21 +157,31 @@ id_atual = ""
 # Regras de transição e seletores na barra lateral
 if modo == "📝 Editar Linha Existente":
     if df_atual.empty:
-        st.sidebar.markdown("<div style='padding:8px; border-radius:5px; background-color:#2a2415; color:#fbbf24;'>⚠️ Base de dados vazia para edição.</div>", unsafe_allow_html=True)
+        st.sidebar.warning("Base de dados vazia para edição.")
         modo = "📊 Visualizar Base"
     else:
         ids_disponiveis = df_atual["Id"].dropna().astype(str).unique().tolist()
-        id_para_editar = st.sidebar.selectbox("Selecione o ID para Editar:", ids_disponiveis)
+        
+        # Criamos o texto explicativo em branco puro usando Markdown
+        st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: -15px;'>Selecione o ID para Editar:</p>", unsafe_allow_html=True)
+        # Deixamos o label do selectbox vazio (label_visibility="collapsed") para sumir com o texto escuro nativo
+        id_para_editar = st.sidebar.selectbox("", ids_disponiveis, label_visibility="collapsed")
+        
         registro_selecionado = df_atual[df_atual["Id"].astype(str) == str(id_para_editar)].iloc[0]
         id_atual = str(registro_selecionado["Id"])
 
 elif modo == "🗑️ Deletar Linha (ID)":
     if df_atual.empty:
-        st.sidebar.markdown("<div style='padding:8px; border-radius:5px; background-color:#2a2415; color:#fbbf24;'>⚠️ Base de dados vazia para exclusão.</div>", unsafe_allow_html=True)
+        st.sidebar.warning("Base de dados vazia para exclusão.")
         modo = "📊 Visualizar Base"
     else:
         ids_disponiveis = df_atual["Id"].dropna().astype(str).unique().tolist()
-        id_para_deletar = st.sidebar.selectbox("Selecione o ID para Deletar:", ids_disponiveis)
+        
+        # Criamos o texto explicativo em branco puro usando Markdown
+        st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: -15px;'>Selecione o ID para Deletar:</p>", unsafe_allow_html=True)
+        # Deixamos o label do selectbox vazio (label_visibility="collapsed") para sumir com o texto escuro nativo
+        id_para_deletar = st.sidebar.selectbox("", ids_disponiveis, label_visibility="collapsed")
+        
         id_atual = str(id_para_deletar)
 
 
