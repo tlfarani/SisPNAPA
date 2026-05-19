@@ -6,43 +6,59 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- BLINDAGEM VISUAL CORPORATIVA (CONTROLE TOTAL SIDEBAR) ---
+# --- BLINDAGEM COMPLETA DA BARRA LATERAL (FOCO NO ST.RADIO) ---
 st.markdown("""
     <style>
         /* =================================================================
-           1. BARRA LATERAL (SIDEBAR): FORÇAR BRANCO EM ABSOLUTAMENTE TUDO
+           1. BARRA LATERAL (SIDEBAR): DESARMANDO AS CORES DO ST.RADIO
            ================================================================= */
-        /* Captura qualquer texto, div, parágrafo, label ou elemento interno na Sidebar */
-        div[data-testid="stSidebar"] *,
-        section[data-testid="stSidebar"] *,
-        div[data-testid="stSidebar"] div,
-        div[data-testid="stSidebar"] p,
-        div[data-testid="stSidebar"] span,
-        div[data-testid="stSidebar"] label {
+        /* Força a escrita "Painel de Controle" a ficar Branca */
+        section[data-testid="stSidebar"] h2 {
             color: #ffffff !important;
+            font-weight: 700 !important;
         }
 
-        /* Mantém o peso das fontes legíveis em negrito na lateral */
-        div[data-testid="stSidebar"] h2,
-        div[data-testid="stSidebar"] label p,
-        div[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+        /* Alvo direto na label principal ("Operação:") e textos explicativos */
+        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        section[data-testid="stSidebar"] label p,
+        section[data-testid="stSidebar"] p {
+            color: #ffffff !important;
             font-weight: 600 !important;
+        }
+
+        /* ATAQUE DIRETO AO COMPONENTE DE RÁDIO: Força os textos das opções a ficarem brancos */
+        div[data-testid="stRadio"] label,
+        div[data-testid="stRadio"] label span,
+        div[data-testid="stRadio"] [data-testid="stMarkdownContainer"] p,
+        div[data-testid="stRadio"] * {
             color: #ffffff !important;
         }
 
-        /* RE-ISOLAMENTO DO SELECTBOX DA LATERAL (Para não misturar com o texto geral) */
-        /* Força a caixinha do ID a manter o fundo branco e as bordas claras */
+        /* Mantém as bolinhas de seleção (Radio Buttons) visíveis */
+        div[data-testid="stRadio"] input[type="radio"] {
+            accent-color: #4d6b53 !important; /* Deixa o miolo da bolinha ativa no Verde Musgo */
+        }
+
+        /* =================================================================
+           RE-ISOLAMENTO CRÍTICO DO SELECTBOX DA LATERAL 
+           (Garante que a força bruta do rádio não pinte o ID de branco)
+           ================================================================= */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
         }
 
-        /* Força o número selecionado de dentro da caixinha (ex: "1") a continuar escuro */
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] * {
+        /* Força o número de dentro da caixinha (o ID "1") a continuar escuro no verde principal */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] [aria-selected="true"],
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] span,
+        section[data-testid="stSidebar"] .stSelectbox p,
+        section[data-testid="stSidebar"] .stSelectbox span {
             color: #03170a !important;
+            font-weight: bold !important;
         }
         
-        /* Mantém a setinha para baixo do ID escura e visível */
+        /* Setinha do Selectbox na lateral */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg {
             fill: #03170a !important;
         }
