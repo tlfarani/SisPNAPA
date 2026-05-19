@@ -99,29 +99,42 @@ with st.form(key="form_power_automate", clear_on_submit=True):
         municipio = st.text_input("Municipio Onde Ocorreu/Ocorrerá a Ação", value=str(registro_selecionado["Municipio Onde Ocorreu/Ocorrerá a Ação"]) if registro_selecionado is not None else "")
 
     with aba4:
+        with aba4:
         # --- Tratamento Robusto de Datas ---
-        # Tenta converter a data de início de forma segura. Se falhar, assume a data de hoje.
         dt_inicio_convertida = pd.to_datetime(registro_selecionado["Data de Início"], errors='coerce') if registro_selecionado is not None else pd.NaT
         val_dt_inicio = dt_inicio_convertida.date() if pd.notna(dt_inicio_convertida) else date.today()
         
-        # Tenta converter a data de término de forma segura.
         dt_termino_convertida = pd.to_datetime(registro_selecionado["Data de Término"], errors='coerce') if registro_selecionado is not None else pd.NaT
         val_dt_termino = dt_termino_convertida.date() if pd.notna(dt_termino_convertida) else date.today()
 
-        # Agora passamos os valores tratados para os componentes visuais:
         dt_inicio = st.date_input("Data de Início", value=val_dt_inicio)
         dt_termino = st.date_input("Data de Término", value=val_dt_termino)
-        dias_plan = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=float(registro_selecionado["Dias_Gastos_Plan"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Dias_Gastos_Plan"]) else 0.0)
-        dias_exec = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=float(registro_selecionado["Dias_Gastos_Exec"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Dias_Gastos_Exec"]) else 0.0)
+        
+        # --- FUNÇÃO DE CONVERSÃO NUMÉRICA SEGURA ---
+        # Converte o valor para número de forma segura. Se tiver texto ou erro, vira 0.0
+        def obter_num_seguro(registro, coluna):
+            if registro is not None and coluna in registro:
+                val = pd.to_numeric(registro[coluna], errors='coerce')
+                return float(val) if pd.notna(val) else 0.0
+            return 0.0
+
+        # --- Inputs de Dias (Tratadas) ---
+        dias_plan = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
+        dias_exec = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"))
+        
         origem_recurso = st.text_input("Origem do Recurso", value=str(registro_selecionado["Origem do Recurso"]) if registro_selecionado is not None else "")
         
-        rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=float(registro_selecionado["Rec_Plan_Diarias"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Rec_Plan_Diarias"]) else 0.0)
-        rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=float(registro_selecionado["Rec_Plan_Passagens"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Rec_Plan_Passagens"]) else 0.0)
-        rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=float(registro_selecionado["Rec_Plan_Outras_Despesas"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Rec_Plan_Outras_Despesas"]) else 0.0)
+        st.markdown("**Valores Orçamentários**")
         
-        rec_e_diarias = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=float(registro_selecionado["Rec_Exec_Diarias"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Rec_Exec_Diarias"]) else 0.0)
-        rec_e_passagens = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=float(registro_selecionado["Rec_Exec_Passagens"]) if registro_selecionado is not None and pd.notna(registro_exec_passagens := registro_selecionado["Rec_Exec_Passagens"]) else 0.0)
-        rec_e_outras = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=float(registro_selecionado["Rec_Exec_Outras_Despesas"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Rec_Exec_Outras_Despesas"]) else 0.0)
+        # --- Inputs de Custos Planejados (Tratadas) ---
+        rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f")
+        rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f")
+        rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), format="%.2f")
+        
+        # --- Inputs de Custos Executados (Tratadas) ---
+        rec_e_diarias = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Diarias"), format="%.2f")
+        rec_e_passagens = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Passagens"), format="%.2f")
+        rec_e_outras = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Outras_Despesas"), format="%.2f")
 
     with aba5:
         obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "")
