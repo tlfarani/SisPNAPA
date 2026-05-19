@@ -356,9 +356,15 @@ elif modo == "👥 Gerenciar Equipes":
             
             if st.button("Salvar Modificações"):
                 payload = {"Acao": "Editar", "ID_SERV": id_srv_edit, "Servidor": sel_srv, "E_mail": novo_email, "Funcao": nova_funcao, "Perfil": n_perf}
-                executar_api_equipes(payload)
-                st.success("Cadastro do integrante updated no Excel!")
-                st.cache_data.clear()
+                
+                with st.spinner("Atualizando cadastro da equipe..."):
+                    executar_api_equipes(payload)
+                    import time
+                    time.sleep(2)  # Janela de segurança para o Power Automate
+                    st.cache_data.clear()  # Expulsa os dados antigos do cache
+                    
+                st.success("Cadastro do integrante atualizado no Excel!")
+                st.rerun()  # Recarrega a página atualizando os selects na hora
 
     with ts_del:
         if not df_visualizacao_srv.empty:
