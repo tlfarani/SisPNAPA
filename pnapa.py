@@ -140,6 +140,48 @@ with st.form(key="form_power_automate", clear_on_submit=True):
         obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "")
         justificativa = st.text_area("Justificativa_Acao_PNAPA", value=str(registro_selecionado["Justificativa_Acao_PNAPA"]) if registro_selecionado is not None else "")
 
+    # Adicione "Excluir Registro" na criação das suas abas
+    # exemplo: aba1, aba2, aba3, aba4, aba5 = st.tabs(["Visualizar", "Inserir", "Editar", "Avançado", "Excluir"])
+    
+    with aba6:
+        st.subheader("🗑️ Excluir Registro da Base do PNAPA")
+        st.warning("Atenção: A exclusão de um registro é permanente e não poderá ser desfeita no SharePoint/Excel.")
+    
+        # Caixa para o usuário digitar ou confirmar o ID que deseja apagar
+        id_deletar = st.text_input("Confirme o ID do registro que deseja deletar:", value="")
+    
+        if id_deletar:
+            # Criando a caixa de atenção e confirmação (Popover funciona como um modal seguro)
+            with st.popover("🚨 Desejo excluir este registro permanentemente"):
+                st.write(f"Você tem certeza absoluta de que deseja deletar o registro com ID **{id_deletar}**?")
+                
+                # Botão de confirmação final dentro do popover
+                confirmou_exclusao = st.button("Sim, tenho certeza. Deletar agora!", type="primary")
+    
+                if confirmou_exclusao:
+                    payload_deletar = {"Id": str(id_deletar)}
+                    
+                    with st.spinner("Removendo registro do SharePoint..."):
+                        try:
+                            # Busca a URL_DELETAR configurada nos seus secrets
+                            URL_DELETAR = st.secrets["URL_DELETAR"]
+                            
+                            resposta_del = requests.post(URL_DELETAR, json=payload_deletar)
+                            
+                            if resposta_del.status_code in [200, 202]:
+                                st.success(f"💥 Registro {id_deletar} deletado com sucesso!")
+                                
+                                # Limpa o cache e atualiza a tela automaticamente
+                                time.sleep(2)
+                                st.cache_data.clear()
+                                if "df" in st.session_state:
+                                    del st.session_state.df
+                                st.rerun()
+                            else:
+                                st.error(f"Erro no Power Automate ao deletar: Status {resposta_del.status_code}")
+                        except Exception as e:
+                            st.error(f"Falha na comunicação com o fluxo de exclusão: {e}")
+
     submetido = st.form_submit_button(label="🚀 Disparar Atualização para o SharePoint")
 
 # --- PROCESSAMENTO DO ENVIO ---
