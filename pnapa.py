@@ -177,20 +177,66 @@ elif modo == "🗑️ Deletar Linha (ID)":
 
 # --- FLUXO DE TELAS CENTRAL ---
 
-# --- TELA 1: VISUALIZAÇÃO COM DESIGN E RECURSOS COMPLETOS ---
+# --- TELA 1: VISUALIZAÇÃO COM FILTROS DINÂMICOS INTERDEPENDENTES ---
 if modo == "📊 Visualizar Base":
     st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     
-    # Função que define as cores das linhas pares e ímpares (Efeito Zebrado)
-    def estilar_linhas_zebradas(linha):
-        cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
-        return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
+    if df_atual.empty:
+        st.info("A base de dados está vazia.")
+    else:
+        # --- LÓGICA DE FILTROS CASCATA (INTERDEPENDENTES) ---
+        # Criamos uma cópia para não afetar o DataFrame principal durante a extração das listas
+        df_filtros = df_atual.copy()
+        
+        # Criamos 3 colunas na área central para colocar os filtros lado a lado
+        col_ano, col_uf, col_servidor = st.columns(3)
+        
+        # 1. FILTRO: Ano da Ação
+        anos_disponiveis = ["Todos"] + sorted(df_filtros["Ano da Ação"].dropna().astype(str).unique().tolist())
+        with col_ano:
+            ano_selecionado = st.selectbox("📅 Filtrar por Ano:", anos_disponiveis)
+        
+        # Aplica o filtro de Ano antes de gerar a lista de UFs
+        if ano_selecionado != "Todos":
+            df_filtros = df_filtros[df_filtros["Ano da Ação"].astype(str) == ano_selecionado]
+            
+        # 2. FILTRO: UF_Acao_PNAPA (Baseado no que sobrou após o filtro de Ano)
+        ufs_disponiveis = ["Todas"] + sorted(df_filtros["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
+        with col_uf:
+            uf_selecionada = st.selectbox("📍 Filtrar por UF:", ufs_disponiveis)
+            
+        # Aplica o filtro de UF antes de gerar a lista de Servidores
+        if uf_selecionada != "Todas":
+            df_filtros = df_filtros[df_filtros["UF_Acao_PNAPA"].astype(str) == uf_selecionada]
+            
+        # 3. FILTRO: Servidor (Baseado no que sobrou após Ano e UF)
+        servidores_disponiveis = ["Todos"] + sorted(df_filtros["Servidor"].dropna().astype(str).unique().tolist())
+        with col_servidor:
+            servidor_selecionado = st.selectbox("👤 Filtrar por Servidor:", servidores_disponiveis)
+            
+        # --- APLICAÇÃO FINAL DOS FILTROS NO DATAFRAME EXIBIDO ---
+        df_exibicao = df_atual.copy()
+        if ano_selecionado != "Todos":
+            df_exibicao = df_exibicao[df_exibicao["Ano da Ação"].astype(str) == ano_selecionado]
+        if uf_selecionada != "Todas":
+            df_exibicao = df_exibicao[df_exibicao["UF_Acao_PNAPA"].astype(str) == uf_selecionada]
+        if servidor_selecionado != "Todos":
+            df_exibicao = df_exibicao[df_exibicao["Servidor"].astype(str) == servidor_selecionado]
+            
+        # Espaçador visual antes da tabela
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # --- RENDERIZAÇÃO DA TABELA ZEBRADA INTERATIVA ---
+        def estilar_linhas_zebradas(linha):
+            # Garante o efeito zebrado resetando o índice na visualização
+            cor_fundo = '#f0f5df' if linha.name % 2 == 0 else '#ffffff'
+            return [f'background-color: {cor_fundo}; color: #03170a;' for _ in linha]
 
-    # Aplicamos a formatação zebrada nas linhas do Pandas
-    df_estilizado = df_atual.style.apply(estilar_linhas_zebradas, axis=1)
-    
-    # Exibimos via st.dataframe para garantir filtros, busca, expansão e rolagem interna
-    st.dataframe(df_estilizado, use_container_width=True)
+        # Resetamos o índice temporariamente apenas no Style para o cálculo do par/ímpar funcionar certinho
+        df_estilizado = df_exibicao.reset_index(drop=True).style.apply(estilar_linhas_zebradas, axis=1)
+        
+        # Exibe o dataframe final com filtros aplicados e mantendo rolagem e busca nativas
+        st.dataframe(df_estilizado, use_container_width=True)
 
 # --- TELA 2 E 3: FORMULÁRIO (INSERIR OU EDITAR) ---
 elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
