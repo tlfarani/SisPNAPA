@@ -6,34 +6,53 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- INJEÇÃO DE ESTILO PARA ACENDER O LAYOUT (PALETA IBAMA) ---
+# --- CUSTOMIZAÇÃO ESTÉTICA DE ALTA LEGIBILIDADE ---
 st.markdown("""
     <style>
-        /* 1. Altera a cor da linha de destaque das abas (Tabs) para o Verde Musgo */
-        button[data-baseweb="tab"] div[data-testid="stMarkdownContainer"] p {
-            color: #f1f3f5 !important; /* Texto das abas em branco/cinza claro */
+        /* 1. Força TODAS as fontes do painel lateral (Sidebar) a ficarem em Branco */
+        section[data-testid="stSidebar"] *, 
+        section[data-testid="stSidebar"] p, 
+        section[data-testid="stSidebar"] label {
+            color: #ffffff !important;
         }
         
-        /* Cor da aba ativa (Selecionada) */
-        button[aria-selected="true"] div[data-testid="stMarkdownContainer"] p {
-            color: #a3e635 !important; /* Destaque verde limão/musgo na aba ativa */
-            font-weight: bold;
-        }
-        
-        /* Linha inferior de seleção da Tab */
-        div[data-baseweb="tab-highlight"] {
-            background-color: #4d6b53 !important;
+        /* Ajusta a cor do seletor (radio) de operações na lateral para contrastar no verde escuro */
+        section[data-testid="stSidebar"] div[role="radiogroup"] label {
+            color: #ffffff !important;
         }
 
-        /* 2. Deixar as bordas dos campos de texto mais nítidas sobre o fundo escuro */
-        div[data-testid="stTextInput"] input, div[data-testid="stNumberInput"] input, div[role="combobox"] {
-            border: 1px solid #2d333b !important;
-            background-color: #1c2026 !important;
+        /* 2. Customização dos Cabeçalhos das Telas (Visualizar/Inserir/Editar/Excluir) em #03170a */
+        h2, h3, [data-testid="stHeader"] {
+            color: #03170a !important;
+            font-weight: 700 !important;
+        }
+
+        /* 3. Estilização e Legibilidade das Abas (Tabs) do Formulário */
+        button[data-baseweb="tab"] p {
+            color: #4a5568 !important; /* Abas inativas em um cinza escuro legível */
+            font-weight: 500;
+        }
+        button[aria-selected="true"] p {
+            color: #03170a !important; /* Aba ativa no verde escuro principal */
+            font-weight: 700 !important;
+        }
+        div[data-baseweb="tab-highlight"] {
+            background-color: #4d6b53 !important; /* Linha indicadora no verde primário */
+        }
+
+        /* 4. Contorno dos Inputs para não sumirem no fundo claro */
+        div[data-testid="stTextInput"] input, 
+        div[data-testid="stNumberInput"] input, 
+        div[data-testid="stTextArea"] textarea,
+        div[role="combobox"] {
+            border: 1px solid #cbd5e1 !important; /* Borda cinza clara bem definida */
+            background-color: #ffffff !important; /* Fundo interno branco puro */
+            color: #03170a !important; /* Texto digitado no verde escuro */
         }
         
-        /* 3. Realce nos rótulos (Labels) dos campos */
+        /* Labels dos campos em destaque escuro */
         label[data-testid="stWidgetLabel"] p {
-            color: #e5e7eb !important;
+            color: #03170a !important;
             font-weight: 500;
         }
     </style>
