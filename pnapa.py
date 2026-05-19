@@ -6,13 +6,12 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- CUSTOMIZAÇÃO ESTÉTICA DEFINITIVA (MÁXIMO CONTRASTE & INTERATIVIDADE) ---
+# --- BLINDAGEM VISUAL CORPORATIVA (MÁXIMO CONTRASTE GERAL) ---
 st.markdown("""
     <style>
         /* =================================================================
-           1. BARRA LATERAL (SIDEBAR): TEXTOS E CAIXA DO ID TOTALMENTE ACESOS
+           1. BARRA LATERAL (SIDEBAR): TEXTOS GERAIS E LABELS EM BRANCO
            ================================================================= */
-        /* Força títulos, parágrafos e labels explicativas da lateral a ficarem brancos */
         section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
         section[data-testid="stSidebar"] label p,
@@ -22,70 +21,63 @@ st.markdown("""
             font-weight: 700 !important;
         }
 
-        /* CORREÇÃO DO SELECTBOX (ID) NA SIDEBAR: */
-        /* Força o fundo da caixinha a ser o Verde Escuro do seu tema para dar contraste */
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div {
-            background-color: #1c4029 !important; 
-            border: 1px solid #4d6b53 !important;
+        /* CAIXA DO SELECTBOX (ID) NA SIDEBAR */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div,
+        section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
+            background-color: #ffffff !important; /* Mantém a caixinha do ID branca */
+            border: 1px solid #cbd5e1 !important;
         }
 
-        /* Força o número selecionado (o texto interno) a ficar BRANCO PURO e visível */
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div,
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] span,
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] [role="button"],
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] [data-baseweb="select"] * {
-            color: #ffffff !important;
+        /* Garante que o número '1' de dentro do selectbox da lateral fique escoro e nítido */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] *,
+        section[data-testid="stSidebar"] div[data-baseweb="select"] * {
+            color: #03170a !important;
             font-weight: bold !important;
         }
         
-        /* Modifica a setinha do dropdown da lateral para branco */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg {
-            fill: #ffffff !important;
-        }
-
-
-        /* =================================================================
-           2. ESTILIZAÇÃO DO ST.DATAFRAME INTERATIVO (CANVAS/GLIDE DATA GRID)
-           ================================================================= */
-        /* Injeta as variáveis de tema diretamente no motor gráfico da planilha do Streamlit */
-        div[data-testid="stDataFrame"] {
-            --st-dataframe-header-background-color: #4d6b53 !important;
-            --st-dataframe-header-text-color: #ffffff !important;
-            --st-dataframe-font-family: "sans serif" !important;
-        }
-
-        /* Cobertura de segurança para navegadores que renderizam em camadas alternativas */
-        div[data-testid="stDataFrame"] [role="columnheader"] *, 
-        div[data-testid="stDataFrame"] [class*="header"] * {
-            color: #ffffff !important;
-            background-color: #4d6b53 !important;
-        }
-
-
-        /* =================================================================
-           3. FORMULÁRIOS DA ÁREA CENTRAL (MANTÉM O CONTEÚDO CLARO E LEGÍVEL)
-           ================================================================= */
-        /* Caixas de Seleção Centrais (Nível, Andamento) Brancas com texto no Verde Escuro (#03170a) */
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div {
-            background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
-        }
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] span,
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] p {
-            color: #03170a !important;
-            font-weight: normal !important;
-        }
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg {
             fill: #03170a !important;
         }
 
-        /* Inputs Numéricos (+ / -) e de Texto da área central */
+        /* =================================================================
+           2. ÁREA CENTRAL: BANIMENTO COMPLETO DE FUNDO ESCURO EM SELECTBOXES (COMBO)
+           ================================================================= */
+        /* Captura QUALQUE caixa de seleção ou combo na área central e força fundo branco */
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div,
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] {
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+
+        /* Força os textos internos de todas as opções centrais ("Alta", "Nacional", etc.) a ficarem escuros */
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] * ,
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] *,
+        div[data-testid="stAppViewContainer"] [aria-selected="true"] {
+            color: #03170a !important;
+            background-color: transparent !important;
+        }
+
+        /* Garante a cor escura na setinha das caixas de seleção centrais */
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg,
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] svg {
+            fill: #03170a !important;
+        }
+
+        /* =================================================================
+           3. DEMAIS COMPONENTES DA ÁREA CENTRAL (TEXTO, NÚMERO, DATAS, ABAS)
+           ================================================================= */
+        h2, h3, [data-testid="stHeader"] {
+            color: #03170a !important;
+            font-weight: 700 !important;
+        }
+
+        /* Inputs Numéricos (+ / -) e de Texto */
         div[data-testid="stNumberInput"] input { background-color: #ffffff !important; color: #03170a !important; }
         div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
         div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
         
-        /* Ajuste de Datas */
+        /* Datas */
         div[data-testid="stDateInput"] > div, div[data-testid="stDateInput"] div[role="button"], div[data-testid="stDateInput"] input {
             background-color: #ffffff !important; color: #03170a !important; border: 1px solid #cbd5e1 !important;
         }
@@ -96,7 +88,7 @@ st.markdown("""
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
         div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
 
-        /* Caixas normais de texto */
+        /* Caixas de Texto */
         div[data-testid="stTextInput"] input, div[data-testid="stTextArea"] textarea {
             border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; color: #03170a !important;
         }
@@ -162,9 +154,8 @@ if modo == "📝 Editar Linha Existente":
     else:
         ids_disponiveis = df_atual["Id"].dropna().astype(str).unique().tolist()
         
-        # Criamos o texto explicativo em branco puro usando Markdown
-        st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: -15px;'>Selecione o ID para Editar:</p>", unsafe_allow_html=True)
-        # Deixamos o label do selectbox vazio (label_visibility="collapsed") para sumir com o texto escuro nativo
+        # Corrigido: margem reajustada para dar espaço seguro ao texto
+        st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: 5px;'>Selecione o ID para Editar:</p>", unsafe_allow_html=True)
         id_para_editar = st.sidebar.selectbox("", ids_disponiveis, label_visibility="collapsed")
         
         registro_selecionado = df_atual[df_atual["Id"].astype(str) == str(id_para_editar)].iloc[0]
@@ -177,9 +168,8 @@ elif modo == "🗑️ Deletar Linha (ID)":
     else:
         ids_disponiveis = df_atual["Id"].dropna().astype(str).unique().tolist()
         
-        # Criamos o texto explicativo em branco puro usando Markdown
-        st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: -15px;'>Selecione o ID para Deletar:</p>", unsafe_allow_html=True)
-        # Deixamos o label do selectbox vazio (label_visibility="collapsed") para sumir com o texto escuro nativo
+        # Corrigido: margem reajustada para dar espaço seguro ao texto
+        st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: 5px;'>Selecione o ID para Deletar:</p>", unsafe_allow_html=True)
         id_para_deletar = st.sidebar.selectbox("", ids_disponiveis, label_visibility="collapsed")
         
         id_atual = str(id_para_deletar)
