@@ -6,38 +6,46 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- BLINDAGEM VISUAL CORPORATIVA (RESOLUÇÃO DE CONFLITOS) ---
+# --- BLINDAGEM VISUAL CORPORATIVA (CONTROLE TOTAL SIDEBAR) ---
 st.markdown("""
     <style>
         /* =================================================================
-           1. BARRA LATERAL (SIDEBAR): FORCE TOTAL PARA FONTES BRANCAS
+           1. BARRA LATERAL (SIDEBAR): FORÇAR BRANCO EM ABSOLUTAMENTE TUDO
            ================================================================= */
-        /* Alveja absolutamente todas as estruturas de texto possíveis dentro da Sidebar */
-        section[data-testid="stSidebar"] h2,
-        section[data-testid="stSidebar"] label,
-        section[data-testid="stSidebar"] label p,
-        section[data-testid="stSidebar"] span,
-        section[data-testid="stSidebar"] p,
-        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p,
-        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+        /* Captura qualquer texto, div, parágrafo, label ou elemento interno na Sidebar */
+        div[data-testid="stSidebar"] *,
+        section[data-testid="stSidebar"] *,
+        div[data-testid="stSidebar"] div,
+        div[data-testid="stSidebar"] p,
+        div[data-testid="stSidebar"] span,
+        div[data-testid="stSidebar"] label {
             color: #ffffff !important;
-            font-weight: 600 !important;
         }
 
-        /* Fundo do Selectbox da barra lateral */
+        /* Mantém o peso das fontes legíveis em negrito na lateral */
+        div[data-testid="stSidebar"] h2,
+        div[data-testid="stSidebar"] label p,
+        div[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+            font-weight: 600 !important;
+            color: #ffffff !important;
+        }
+
+        /* RE-ISOLAMENTO DO SELECTBOX DA LATERAL (Para não misturar com o texto geral) */
+        /* Força a caixinha do ID a manter o fundo branco e as bordas claras */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
         }
 
-        /* Texto interno do Selectbox da barra lateral (ID) */
+        /* Força o número selecionado de dentro da caixinha (ex: "1") a continuar escuro */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] * {
             color: #03170a !important;
         }
+        
+        /* Mantém a setinha para baixo do ID escura e visível */
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg {
             fill: #03170a !important;
         }
-
 
         /* =================================================================
            2. SELETORES DE DROP-DOWN / SELECTBOX (ÁREA CENTRAL)
@@ -59,30 +67,22 @@ st.markdown("""
             fill: #03170a !important;
         }
 
-
         /* =================================================================
            3. CORREÇÃO COMPLETA DOS CAMPOS NUMÉRICOS (+/- NUMBER_INPUT) E DATAS
            ================================================================= */
-        /* Força a caixa interna de digitação do número a ter fundo branco e texto escuro */
         div[data-testid="stNumberInput"] input {
             background-color: #ffffff !important;
             color: #03170a !important;
         }
-
-        /* Força o container que envolve o número a ficar branco e sem bordas escuras */
         div[data-testid="stNumberInput"] > div {
             border: 1px solid #cbd5e1 !important;
             background-color: #ffffff !important;
         }
-
-        /* Ajusta os botões de mais e menos nas pontas dos campos numéricos */
         div[data-testid="stNumberInput"] button {
-            background-color: #f1f5f9 !important; /* Cinza claro de botão */
-            color: #03170a !important;            /* Sinais de + e - em verde escuro */
+            background-color: #f1f5f9 !important;
+            color: #03170a !important;
             border: 1px solid #cbd5e1 !important;
         }
-
-        /* Manutenção das Entradas de Data (Date Input) */
         div[data-testid="stDateInput"] > div,
         div[data-testid="stDateInput"] div[role="button"],
         div[data-testid="stDateInput"] input {
@@ -94,7 +94,6 @@ st.markdown("""
             fill: #03170a !important;
         }
 
-
         /* =================================================================
            4. ENTRADAS DE TEXTO, ABAS E CONFIGURAÇÃO GERAL (ÁREA CENTRAL)
            ================================================================= */
@@ -102,8 +101,6 @@ st.markdown("""
             color: #03170a !important;
             font-weight: 700 !important;
         }
-
-        /* Abas (Tabs) */
         button[data-baseweb="tab"] p {
             color: #4a5568 !important;
             font-weight: 500;
@@ -115,16 +112,12 @@ st.markdown("""
         div[data-baseweb="tab-highlight"] {
             background-color: #4d6b53 !important;
         }
-
-        /* Inputs normais de texto e áreas grandes de digitação */
         div[data-testid="stTextInput"] input, 
         div[data-testid="stTextArea"] textarea {
             border: 1px solid #cbd5e1 !important;
             background-color: #ffffff !important;
             color: #03170a !important;
         }
-        
-        /* Rótulos das caixas da área central */
         div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p {
             color: #03170a !important;
             font-weight: 500;
