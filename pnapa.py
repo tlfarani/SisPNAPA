@@ -295,57 +295,58 @@ elif modo == "🏢 Gerenciar Unidades":
     
     t_add, t_edit, t_del = st.tabs(["➕ Adicionar Unidade", "📝 Editar Unidade", "🗑️ Excluir Unidade"])
     
+    # LISTA FIXA OFICIAL: Todas as UFs do Brasil + Ceneac para o cadastro
+    LISTA_UFS_COMPLETA = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", 
+                          "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Ceneac"]
+    
     # --- TAB 1: ADICIONAR ---
     with t_add:
         if perfil_usuario == "Administrador": 
-            # Lista todas as UFs possíveis para garantir que todas estejam representadas
-            lista_ufs_totais = sorted(df_servidores["UF_Servidor"].dropna().unique().tolist())
-            if "SP" not in lista_ufs_totais: lista_ufs_totais.append("SP")
-            uf_uni = st.selectbox("Selecione a UF para adicionar a unidade:", sorted(list(set(lista_ufs_totais))), key="uni_add_uf")
+            uf_uni = st.selectbox("Selecione a UF / Órgão para adicionar a unidade:", LISTA_UFS_COMPLETA, key="uni_add_uf")
         else: 
             uf_uni = st.text_input("UF da Lotação:", value=uf_usuario, disabled=True, key="uni_add_uf_rep")
             
-        nova_uni = st.text_input("Nome da Nova Unidade (Ex: Campinas, Cabo Frio):")
+        nova_uni = st.text_input("Nome da Nova Unidade (Ex: Campinas, Cabo Frio, Sede COAEM):")
         if st.button("Salvar Unidade"): 
-            st.success(f"Unidade '{nova_uni}' adicionada com sucesso para a UF {uf_uni}!")
+            st.success(f"Unidade '{nova_uni}' adicionada com sucesso para {uf_uni}!")
         
-    # --- TAB 2: EDITAR (COM FILTRO PRÉVIO DE UF) ---
+    # --- TAB 2: EDITAR ---
     with t_edit:
         st.write("#### Modificar Unidade")
         if perfil_usuario == "Administrador":
             ufs_disponiveis_edit = sorted(df_lotacoes["UF"].dropna().unique().tolist())
-            uf_filtrada_edit = st.selectbox("1. Filtrar Unidades por UF:", ufs_disponiveis_edit, key="uf_filt_edit")
+            uf_filtrada_edit = st.selectbox("1. Filtrar Unidades por UF/Órgão:", ufs_disponiveis_edit, key="uf_filt_edit")
             df_unidades_filtradas = df_lotacoes[df_lotacoes["UF"] == uf_filtrada_edit]
         else:
             uf_filtrada_edit = st.text_input("UF de Gestão:", value=uf_usuario, disabled=True, key="uf_filt_edit_rep")
             df_unidades_filtradas = df_lotacoes[df_lotacoes["UF"] == uf_usuario]
             
         if df_unidades_filtradas.empty:
-            st.warning("Nenhuma unidade cadastrada para a UF selecionada.")
+            st.warning("Nenhuma unidade cadastrada para a seleção atual.")
         else:
             sel_uni = st.selectbox("2. Selecione a Unidade para alterar:", df_unidades_filtradas["Unidade"].tolist(), key="uni_sel_edit")
             m_uni = st.text_input("3. Novo nome da Unidade:", value=sel_uni, key="uni_novo_nome")
             if st.button("Modificar Unidade", key="btn_mod_uni"): 
-                st.success(f"Unidade '{sel_uni}' alterada para '{m_uni}' com sucesso na UF {uf_filtrada_edit}!")
+                st.success(f"Unidade '{sel_uni}' alterada para '{m_uni}' com sucesso em {uf_filtrada_edit}!")
             
-    # --- TAB 3: EXCLUIR (COM FILTRO PRÉVIO DE UF) ---
+    # --- TAB 3: EXCLUIR ---
     with t_del:
         st.write("#### Remover Unidade")
         if perfil_usuario == "Administrador":
             ufs_disponiveis_del = sorted(df_lotacoes["UF"].dropna().unique().tolist())
-            uf_filtrada_del = st.selectbox("1. Filtrar Unidades por UF:", ufs_disponiveis_del, key="uf_filt_del")
+            uf_filtrada_del = st.selectbox("1. Filtrar Unidades por UF/Órgão:", ufs_disponiveis_del, key="uf_filt_del")
             df_unidades_filtradas_del = df_lotacoes[df_lotacoes["UF"] == uf_filtrada_del]
         else:
             uf_filtrada_del = st.text_input("UF de Gestão:", value=uf_usuario, disabled=True, key="uf_filt_del_rep")
             df_unidades_filtradas_del = df_lotacoes[df_lotacoes["UF"] == uf_usuario]
             
         if df_unidades_filtradas_del.empty:
-            st.warning("Nenhuma unidade cadastrada para a UF selecionada.")
+            st.warning("Nenhuma unidade cadastrada para a seleção atual.")
         else:
             del_uni = st.selectbox("2. Selecione a Unidade para REMOVER:", df_unidades_filtradas_del["Unidade"].tolist(), key="uni_sel_del")
-            chk = st.checkbox(f"Confirmo que desejo excluir permanentemente a unidade {del_uni} da UF {uf_filtrada_del}")
+            chk = st.checkbox(f"Confirmo que desejo excluir permanentemente a unidade {del_uni} de {uf_filtrada_del}")
             if st.button("❌ Excluir Unidade", disabled=not chk, key="btn_del_uni"): 
-                st.success(f"Unidade '{del_uni}' removida com sucesso da base de dados da UF {uf_filtrada_del}!")
+                st.success(f"Unidade '{del_uni}' removida com sucesso da base de dados de {uf_filtrada_del}!")
 
 # --- TELA 6: GERENCIAR EQUIPES ---
 elif modo == "👥 Gerenciar Equipes":
@@ -358,9 +359,7 @@ elif modo == "👥 Gerenciar Equipes":
     if df_visualizacao_srv.empty:
         st.info(f"Nenhum servidor cadastrado para a UF {uf_usuario}.")
     else:
-        # Otimização de segurança: oculta o token da tela
         df_exibir_srv = df_visualizacao_srv.drop(columns=["Token"], errors="ignore")
-        
         def estilar_srv(linha):
             return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
         st.dataframe(df_exibir_srv.reset_index(drop=True).style.apply(estilar_srv, axis=1), use_container_width=True)
@@ -369,14 +368,17 @@ elif modo == "👥 Gerenciar Equipes":
     
     ts_add, ts_edit, ts_del = st.tabs(["➕ Cadastrar Servidor", "📝 Alterar Cadastro", "🗑️ Remover Acesso"])
     
+    # LISTA FIXA PARA PERFIS
+    LISTA_PERFIS = ["Visualização", "Editor Regional", "Administrador"]
+    
     # --- TAB 1: CADASTRAR INTEGRANTE ---
     with ts_add:
         n_srv = st.text_input("Nome Completo do Servidor:")
         e_srv = st.text_input("E-mail Institucional (@ibama.gov.br):")
         
-        # Alinhando dinamicamente as lotações da UF escolhida
         if perfil_usuario == "Administrador":
-            uf_srv = st.selectbox("UF de Lotação:", sorted(df_lotacoes["UF"].unique().tolist()), key="srv_add_uf")
+            uf_srv = st.selectbox("UF/Órgão de Lotação:", ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", 
+                                                           "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Ceneac"], key="srv_add_uf")
         else:
             uf_srv = st.text_input("UF de Lotação:", value=uf_usuario, disabled=True, key="srv_add_uf_rep")
             
@@ -391,7 +393,7 @@ elif modo == "👥 Gerenciar Equipes":
         with col_eq3: eq_aeac = st.selectbox("Possui AEAC?", ["Sim", "Não"])
         
         if perfil_usuario == "Administrador":
-            perf_srv = st.selectbox("Perfil de Acesso no Sistema:", ["Visualização", "Editor Regional", "Administrador"])
+            perf_srv = st.selectbox("Perfil de Acesso no Sistema:", LISTA_PERFIS)
         else:
             perf_srv = st.selectbox("Perfil de Acesso no Sistema:", ["Visualização", "Editor Regional"])
             
@@ -400,24 +402,28 @@ elif modo == "👥 Gerenciar Equipes":
         if st.button("Habilitar Servidor", key="btn_add_srv"): 
             st.success(f"Servidor {n_srv} cadastrado com sucesso como {perf_srv} em {uf_srv}!")
 
-    # --- TAB 2: EDITAR INTEGRANTE (CORRIGIDO PARA AS COLUNAS DO EXCEL DO IBAMA) ---
+    # --- TAB 2: EDITAR INTEGRANTE (RESOLUÇÃO DO ERROR DE INDEX COM TRATAMENTO) ---
     with ts_edit:
         st.write("#### Atualizar Atributos do Servidor")
         if not df_visualizacao_srv.empty:
             sel_srv = st.selectbox("Selecione o Servidor para alterar:", df_visualizacao_srv["Servidor"].tolist(), key="srv_sel_edit")
-            
-            # Captura a linha correta do servidor selecionado para preencher os inputs de forma dinâmica
             dados_atuais_srv = df_visualizacao_srv[df_visualizacao_srv["Servidor"] == sel_srv].iloc[0]
             
             novo_email = st.text_input("Alterar E-mail:", value=str(dados_atuais_srv["E_mail"]))
-            nova_funcao = st.text_input("Alterar Função Interno / Cargo:", value=str(dados_atuais_srv["Funcao"]))
+            nova_funcao = st.text_input("Alterar Função Interna / Cargo:", value=str(dados_atuais_srv["Funcao"]))
+            
+            # BLINDAGEM DO INDEX: Se o texto da base vier com grafia diferente, ele joga o index para 0 em vez de travar o app
+            perfil_atual_string = str(dados_atuais_srv["Perfil"]).strip()
+            try:
+                index_padrao = LISTA_PERFIS.index(perfil_atual_string)
+            except ValueError:
+                index_padrao = 0 # Fallback caso esteja escrito de forma diferente (ex: "Visualização" vs "Visualizador")
             
             if perfil_usuario == "Administrador":
-                n_perf = st.selectbox("Alterar Perfil de Acesso:", ["Visualização", "Editor Regional", "Administrador"], 
-                                      index=["Visualização", "Editor Regional", "Administrador"].index(dados_atuais_srv["Perfil"]))
+                n_perf = st.selectbox("Alterar Perfil de Acesso:", LISTA_PERFIS, index=index_padrao)
             else:
                 n_perf = st.selectbox("Alterar Perfil de Acesso:", ["Visualização", "Editor Regional"], 
-                                      index=["Visualização", "Editor Regional"].index(dados_atuais_srv["Perfil"]))
+                                      index=1 if index_padrao == 1 else 0)
                 
             if st.button("Salvar Modificações", key="btn_edit_srv"): 
                 st.success(f"Cadastro do servidor {sel_srv} atualizado com sucesso!")
