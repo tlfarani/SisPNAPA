@@ -167,7 +167,7 @@ modo = st.sidebar.radio("Operação:", opcoes_menu)
 # V. NÚCLEO OPERACIONAL DAS TELAS COORDENADAS PELO POWER AUTOMATE
 # =================================================================
 
-# --- TELA 1: VISUALIZAÇÃO COM FILTROS ---
+# --- TELA 1: VISUALIZAÇÃO COM FILTROS INTERDEPENDENTES ---
 if modo == "📊 Visualizar Base":
     st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     if df_atual.empty:
@@ -177,17 +177,28 @@ if modo == "📊 Visualizar Base":
             if pd.isna(valor): return pd.NaT
             val_str = str(valor).strip()
             if val_str == "" or val_str.lower() in ["none", "nat", "nan"]: return pd.NaT
+            # Trata se o Excel devolver o número serial clássico (ex: 45818)
             if val_str.replace('.', '', 1).isdigit():
                 try: return pd.to_datetime(int(float(val_str)), unit='D', origin='1899-12-30')
                 except: pass
-            return pd.to_datetime(val_str, errors='coerce', format='mixed')
+            # Força a conversão tratando hifens ou barras de forma flexível
+            return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
 
         df_trabalho = df_atual.copy()
         df_trabalho["Data_Inicio_Datetime"] = df_trabalho["Data de Início"].apply(limpar_e_converter_data)
+        df_trabalho["Data_Termino_Datetime"] = df_trabalho["Data de Término"].apply(limpar_e_converter_data)
+
+        # Determina os limites do Slider dando 30 dias de margem para o usuário não perder registros nas pontas
         data_min_absoluta = df_trabalho["Data_Inicio_Datetime"].min()
         data_max_absoluta = df_trabalho["Data_Inicio_Datetime"].max()
+        
         if pd.isna(data_min_absoluta) or pd.isna(data_max_absoluta):
-            data_min_absoluta, data_max_absoluta = pd.Timestamp("2025-01-01"), pd.Timestamp("2026-12-31")
+            data_min_slider = date(2025, 1, 1)
+            data_max_slider = date(2026, 12, 31)
+        else:
+            # Subtrai/Soma dias para criar uma folga visual no Slider
+            data_min_slider = (data_min_absoluta - pd.Timedelta(days=30)).to_pydatetime().date()
+            data_max_slider = (data_max_absoluta + pd.Timedelta(days=30)).to_pydatetime().date()
 
         col_ano, col_uf, col_nivel = st.columns(3)
         df_filtros = df_trabalho.copy()
@@ -201,18 +212,30 @@ if modo == "📊 Visualizar Base":
         col_servidor, col_data = st.columns([1, 2])
         with col_servidor: servidor_sel = st.selectbox("👤 Filtrar por Servidor:", ["Todos"] + sorted(df_filtros["Servidor"].dropna().astype(str).unique().tolist()))
         with col_data:
-            intervalo_datas = st.slider("⏳ Período (Data de Início):", min_value=data_min_absoluta.to_pydatetime().date(), max_value=data_max_absoluta.to_pydatetime().date(), value=(data_min_absoluta.to_pydatetime().date(), data_max_absoluta.to_pydatetime().date()), format="DD/MM/YYYY")
+            intervalo_datas = st.slider("⏳ Período (Data de Início):", 
+                                        min_value=data_min_slider, 
+                                        max_value=data_max_slider, 
+                                        value=(data_min_slider, data_max_slider), 
+                                        format="DD/MM/YYYY")
 
+        # Aplicação dos Filtros no DataFrame de Exibição
         df_exibicao = df_trabalho.copy()
         if ano_sel != "Todos": df_exibicao = df_exibicao[df_exibicao["Ano da Ação"].astype(str) == ano_sel]
         if uf_sel != "Todas": df_exibicao = df_exibicao[df_exibicao["UF_Acao_PNAPA"].astype(str) == uf_sel]
         if nivel_sel != "Todos": df_exibicao = df_exibicao[df_exibicao["Nível"].astype(str) == nivel_sel]
         if servidor_sel != "Todos": df_exibicao = df_exibicao[df_exibicao["Servidor"].astype(str) == servidor_sel]
-        if not (intervalo_datas[0] == data_min_absoluta.to_pydatetime().date() and intervalo_datas[1] == data_max_absoluta.to_pydatetime().date()):
-            df_exibicao = df_exibicao[(df_exibicao["Data_Inicio_Datetime"] >= pd.Timestamp(intervalo_datas[0])) & (df_exibicao["Data_Inicio_Datetime"] <= pd.Timestamp(intervalo_datas[1]))]
+        
+        # Filtro de data por período usando objetos date puros
+        df_exibicao = df_exibicao[(df_exibicao["Data_Inicio_Datetime"].dt.date >= intervalo_datas[0]) & 
+                                  (df_exibicao["Data_Inicio_Datetime"].dt.date <= intervalo_datas[1])]
 
+        # Padroniza a exibição visual das colunas de data para o padrão nacional BR antes de plotar
         df_exibicao["Data de Início"] = df_exibicao["Data_Inicio_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
-        df_exibicao = df_exibicao.drop(columns=["Data_Inicio_Datetime"])
+        df_exibicao["Data de Término"] = df_exibicao["Data_Termino_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
+        
+        # Remove as colunas auxiliares de datetime para não poluir o layout
+        df_exibicao = df_exibicao.drop(columns=["Data_Inicio_Datetime", "Data_Termino_Datetime"])
+        
         st.markdown("<br>", unsafe_allow_html=True)
         def estilar_linhas_zebradas(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
         st.dataframe(df_exibicao.reset_index(drop=True).style.apply(estilar_linhas_zebradas, axis=1), use_container_width=True)
