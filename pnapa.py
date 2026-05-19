@@ -177,31 +177,33 @@ elif modo == "🗑️ Deletar Linha (ID)":
 
 # --- FLUXO DE TELAS CENTRAL ---
 
-# --- TELA 1: VISUALIZAÇÃO COM FILTROS FIXADOS E DATAS INDEPENDENTES ---
+# --- TELA 1: VISUALIZAÇÃO COM PARSER ADAPTATIVO DE DATA ---
 if modo == "📊 Visualizar Base":
     st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     
     if df_atual.empty:
         st.info("A base de dados está vazia.")
     else:
-        # --- 1. TRATAMENTO ISOLADO DE DATAS ---
+        # --- 1. TRATAMENTO INTELIGENTE E ULTRA-PROTEGIDO DE DATAS ---
         df_trabalho = df_atual.copy()
         
-        # Converte para datetime forçando o formato brasileiro dia/mês/ano
-        df_trabalho["Data_Datetime"] = pd.to_datetime(df_trabalho["Data de Início"], format='%d/%m/%Y', errors='coerce')
+        # Remove espaços em branco e garante que tudo seja tratado como string limpa
+        df_trabalho["Data de Início"] = df_trabalho["Data de Início"].astype(str).str.strip()
         
-        # Se alguma falhou (formato ISO YYYY-MM-DD), tenta converter de forma genérica
-        linhas_nulas = df_trabalho["Data_Datetime"].isna() & df_trabalho["Data de Início"].notna()
-        if linhas_nulas.any():
-            df_trabalho.loc[linhas_nulas, "Data_Datetime"] = pd.to_datetime(df_trabalho.loc[linhas_nulas, "Data de Início"], errors='coerce')
+        # Converte permitindo formatos mistos (detecta automaticamente DD/MM/YYYY, ISO, com ou sem hora)
+        df_trabalho["Data_Datetime"] = pd.to_datetime(
+            df_trabalho["Data de Início"], 
+            errors='coerce', 
+            format='mixed'
+        )
         
-        # Define os limites ABSOLUTOS da base para o Slider nunca encolher ou quebrar
+        # Descobre os limites REAIS baseados no que realmente existe nos dados (ex: vai achar 2025)
         data_min_absoluta = df_trabalho["Data_Datetime"].min()
         data_max_absoluta = df_trabalho["Data_Datetime"].max()
         
-        # Fallback de segurança se a coluna inteira estiver com problemas
+        # Se mesmo assim a coluna inteira falhar, pegamos o ano corrente como última opção
         if pd.isna(data_min_absoluta) or pd.isna(data_max_absoluta):
-            data_min_absoluta = pd.Timestamp("2026-01-01")
+            data_min_absoluta = pd.Timestamp("2025-01-01")
             data_max_absoluta = pd.Timestamp("2026-12-31")
 
         # --- 2. LÓGICA DOS FILTROS DE SELEÇÃO (CASCATA SEQUENCIAL) ---
@@ -210,7 +212,7 @@ if modo == "📊 Visualizar Base":
         # LINHA 1 DE FILTROS
         col_ano, col_uf, col_nivel = st.columns(3)
         
-        # Filtro 1: Ano da Ação (Tratado estritamente como texto/classe)
+        # Filtro 1: Ano da Ação
         anos_disponiveis = ["Todos"] + sorted(df_filtros["Ano da Ação"].dropna().astype(str).unique().tolist())
         with col_ano:
             ano_selecionado = st.selectbox("📅 Filtrar por Ano:", anos_disponiveis)
@@ -239,7 +241,7 @@ if modo == "📊 Visualizar Base":
         with col_servidor:
             servidor_selecionado = st.selectbox("👤 Filtrar por Servidor:", servidores_disponiveis)
 
-        # Filtro 5: Slider de Datas (Lê sempre os limites absolutos estáveis)
+        # Filtro 5: Slider de Datas (Lê os limites reais e estáveis da base)
         with col_data:
             intervalo_datas = st.slider(
                 "⏳ Período (Data de Início):",
@@ -264,12 +266,18 @@ if modo == "📊 Visualizar Base":
         # Filtro do intervalo do Slider
         inicio_busca = pd.Timestamp(intervalo_datas[0])
         fim_busca = pd.Timestamp(intervalo_datas[1])
-        df_exibicao = df_exibicao[
-            (df_exibicao["Data_Datetime"] >= inicio_busca) & 
-            (df_exibicao["Data_Datetime"] <= fim_busca)
-        ]
         
-        # Remove a coluna auxiliar para não poluir o dataframe final do usuário
+        # Registros sem data válida (NaT) não somem se o slider estiver no máximo
+        if intervalo_datas[0] == data_min_absoluta.to_pydatetime().date() and intervalo_datas[1] == data_max_absoluta.to_pydatetime().date():
+            # Se o slider não foi mexido, mantém inclusive quem deu erro de conversão para não sumir nada por padrão
+            pass
+        else:
+            df_exibicao = df_exibicao[
+                (df_exibicao["Data_Datetime"] >= inicio_busca) & 
+                (df_exibicao["Data_Datetime"] <= fim_busca)
+            ]
+        
+        # Remove a coluna temporária de cálculo antes de exibir
         df_exibicao = df_exibicao.drop(columns=["Data_Datetime"])
 
         st.markdown("<br>", unsafe_allow_html=True)
