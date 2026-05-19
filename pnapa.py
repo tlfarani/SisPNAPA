@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import time
 from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
@@ -8,7 +9,7 @@ st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 # =================================================================
 # 1. ENDPOINTS DO POWER AUTOMATE (URLs DOS GATILHOS HTTP)
 # =================================================================
-# Cole aqui as URLs geradas pelo Power Automate no topo do gatilho de cada fluxo:
+# Substitua pelas URLs geradas pelo Power Automate no topo do gatilho de cada fluxo:
 URL_FLOW_UNIDADES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c2207ed01bf64853a477e7b6b165c3e8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=GR6JhJzrEZTapCOAKwlY9VGzT_g-6xQGBG7YLraG6Z4" 
 URL_FLOW_EQUIPES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3d124cc6783845e1b8618cfb3302eca0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ubTQ-LAIsToMOX0CGytlI2YM_WKmC_mRT64ybRLBRSY"
 
@@ -53,7 +54,7 @@ def carregar_bases_vias_power_automate():
 
 df_lotacoes, df_servidores = carregar_bases_vias_power_automate()
 
-# Base principal do PNAPA (Exemplo simulado - adapte para sua leitura do arquivo macro consolidado se necessário)
+# Base principal do PNAPA (Exemplo simulado)
 if "df_base_pnapa" not in st.session_state:
     st.session_state.df_base_pnapa = pd.DataFrame([
         {"Id": 1, "Ano da Ação": "2025", "UF_Acao_PNAPA": "SP", "Nível": "Nacional", "Servidor": "Tiago Farani", "Data de Início": "45818", "Data de Término": "2026-05-19"},
@@ -166,7 +167,7 @@ modo = st.sidebar.radio("Operação:", opcoes_menu)
 # V. NÚCLEO OPERACIONAL DAS TELAS COORDENADAS PELO POWER AUTOMATE
 # =================================================================
 
-# --- TELA 1: VISUALIZAÇÃO COM FILTROS INTERDEPENDENTES ---
+# --- TELA 1: VISUALIZAÇÃO COM FILTROS ---
 if modo == "📊 Visualizar Base":
     st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     if df_atual.empty:
@@ -227,11 +228,11 @@ elif modo == "➕ Inserir Nova Linha":
     municipio_unidade = st.selectbox("Unidade/Município de Lotação Relacionada:", unidades_da_uf if unidades_da_uf else ["Sede Regional"])
     st.button("Enviar Registro")
 
-# --- TELA 3 e 4: EDIÇÃO E EXCLUSÃO DA BASE PRINCIPAL (ESCUTAS FUTURAS) ---
+# --- TELA 3 e 4: EDIÇÃO E EXCLUSÃO DA PLANILHA MACRO ---
 elif modo in ["📝 Editar Linha Existente", "🗑️ Deletar Linha (ID)"]:
     st.info("Estas abas serão conectadas ao fluxo principal da planilha macro em breve.")
 
-# --- TELA 5: GERENCIAR UNIDADES (CONECTADO COM POWER AUTOMATE) ---
+# --- TELA 5: GERENCIAR UNIDADES ---
 elif modo == "🏢 Gerenciar Unidades":
     st.markdown(f"<h3>🏢 Gerenciamento de Unidades / Lotações (Tabela Auxiliar via SharePoint)</h3>", unsafe_allow_html=True)
     
@@ -240,7 +241,7 @@ elif modo == "🏢 Gerenciar Unidades":
     if df_visualizacao_uni.empty:
         st.info(f"Nenhuma unidade cadastrada para a UF {uf_usuario}.")
     else:
-        # --- FILTRO SEGURO PARA ESCONDER COLUNAS INTERNAS DA MICROSOFT ---
+        # Esconde colunas internas automatizadas da Microsoft da visão do usuário
         colunas_validas = [col for col in ["ID_UF", "UF", "Unidade"] if col in df_visualizacao_uni.columns]
         df_limpo_uni = df_visualizacao_uni[colunas_validas]
         
@@ -257,9 +258,12 @@ elif modo == "🏢 Gerenciar Unidades":
         nova_uni = st.text_input("Nome da Nova Unidade:")
         if st.button("Salvar Unidade"):
             payload = {"Acao": "Inserir", "UF": uf_uni, "Unidade": nova_uni}
-            executar_api_unidades(payload)
-            st.success(f"Comando de inserção enviado! Unidade '{nova_uni}' salva.")
-            st.cache_data.clear()
+            with st.spinner("Sincronizando nova unidade com o SharePoint..."):
+                executar_api_unidades(payload)
+                time.sleep(2)
+                st.cache_data.clear()
+            st.success(f"Unidade '{nova_uni}' salva e sincronizada com sucesso!")
+            st.rerun()
 
     with t_edit:
         if perfil_usuario == "Administrador":
@@ -271,13 +275,24 @@ elif modo == "🏢 Gerenciar Unidades":
             
         if not df_unidades_filtradas.empty:
             sel_uni = st.selectbox("2. Selecione a Unidade para alterar:", df_unidades_filtradas["Unidade"].tolist(), key="uni_sel_edit")
-            id_uf_edit = int(df_unidades_filtradas[df_unidades_filtradas["Unidade"] == sel_uni]["ID_UF"].iloc[0])
-            m_uni = st.text_input("3. Novo nome da Unidade:", value=sel_uni, key="uni_novo_nome")
-            if st.button("Modificar Unidade"):
-                payload = {"Acao": "Editar", "ID_UF": id_uf_edit, "UF": uf_filtrada_edit, "Unidade": m_uni}
-                executar_api_unidades(payload)
-                st.success("Unidade modificada com sucesso no SharePoint!")
-                st.cache_data.clear()
+            
+            # Filtro robusto ignorando espaços invisíveis e tratando IDs em float/texto nulo
+            linha_filtrada = df_unidades_filtradas[df_unidades_filtradas["Unidade"].astype(str).str.strip() == str(sel_uni).strip()]
+            
+            if not linha_filtrada.empty:
+                id_uf_edit = int(float(linha_filtrada["ID_UF"].iloc[0]))
+                m_uni = st.text_input("3. Novo nome da Unidade:", value=sel_uni, key="uni_novo_nome")
+                
+                if st.button("Modificar Unidade"):
+                    payload = {"Acao": "Editar", "ID_UF": id_uf_edit, "UF": uf_filtrada_edit, "Unidade": m_uni}
+                    with st.spinner("Sincronizando alterações com o SharePoint..."):
+                        executar_api_unidades(payload)
+                        time.sleep(2)
+                        st.cache_data.clear()
+                    st.success("Unidade modificada com sucesso no SharePoint!")
+                    st.rerun()
+            else:
+                st.warning("⚠️ Não foi possível recuperar o ID interno desta unidade.")
 
     with t_del:
         if perfil_usuario == "Administrador":
@@ -289,26 +304,33 @@ elif modo == "🏢 Gerenciar Unidades":
             
         if not df_unidades_filtradas_del.empty:
             del_uni = st.selectbox("2. Selecione a Unidade para REMOVER:", df_unidades_filtradas_del["Unidade"].tolist(), key="uni_sel_del")
-            id_uf_del = int(df_unidades_filtradas_del[df_unidades_filtradas_del["Unidade"] == del_uni]["ID_UF"].iloc[0])
-            chk = st.checkbox(f"Confirmo que desejo excluir permanentemente a unidade {del_uni}")
-            if st.button("❌ Excluir Unidade", disabled=not chk):
-                payload = {"Acao": "Excluir", "ID_UF": id_uf_del}
-                executar_api_unidades(payload)
-                st.success("Unidade removida do banco do Excel.")
-                st.cache_data.clear()
+            
+            linha_filtrada_del = df_unidades_filtradas_del[df_unidades_filtradas_del["Unidade"].astype(str).str.strip() == str(del_uni).strip()]
+            
+            if not linha_filtrada_del.empty:
+                id_uf_del = int(float(linha_filtrada_del["ID_UF"].iloc[0]))
+                chk = st.checkbox(f"Confirmo que desejo excluir permanentemente a unidade {del_uni}")
+                if st.button("❌ Excluir Unidade", disabled=not chk):
+                    payload = {"Acao": "Excluir", "ID_UF": id_uf_del}
+                    with st.spinner("Removendo registro no SharePoint..."):
+                        executar_api_unidades(payload)
+                        time.sleep(2)
+                        st.cache_data.clear()
+                    st.success("Unidade removida com sucesso!")
+                    st.rerun()
 
-# --- TELA 6: GERENCIAR EQUIPES (CONECTADO COM POWER AUTOMATE) ---
+# --- TELA 6: GERENCIAR EQUIPES ---
 elif modo == "👥 Gerenciar Equipes":
     st.markdown(f"<h3>👥 Gerenciamento de Equipe e Permissões (Tabela Auxiliar via SharePoint)</h3>", unsafe_allow_html=True)
     
+    df_visualizacao_srv = df_servidores if perfil_usuario == "Administrador" else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
     st.write("#### 📋 Integrantes da Equipe Cadastrados no Excel")
     if df_visualizacao_srv.empty:
         st.info(f"Nenhum servidor cadastrado para a UF {uf_usuario}.")
     else:
-        # Mantém apenas as colunas oficiais do sistema, dropando tokens e ids internos
+        # Filtro de colunas oficiais ocultando tokens de senha e IDs do ecossistema PowerApps
         colunas_oficiais_srv = ["ID_SERV", "Servidor", "UF_Servidor", "Lotacao", "Equipe_Emergencias", "Fiscal", "AEAC", "Funcao", "E_mail", "Perfil"]
         colunas_validas_srv = [col for col in colunas_oficiais_srv if col in df_visualizacao_srv.columns]
-        
         df_exibir_srv = df_visualizacao_srv[colunas_validas_srv]
         
         def estilar_srv(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
@@ -335,15 +357,18 @@ elif modo == "👥 Gerenciar Equipes":
         
         if st.button("Habilitar Servidor"):
             payload = {"Acao": "Inserir", "Servidor": n_srv, "UF_Servidor": uf_srv, "Lotacao": lot_srv, "Equipe_Emergencias": eq_emerg, "Fiscal": eq_fiscal, "AEAC": eq_aeac, "Funcao": fun_srv, "E_mail": e_srv, "Perfil": perf_srv, "Token": tkn_srv}
-            executar_api_equipes(payload)
-            st.success(f"Servidor {n_srv} inserido com sucesso na fila do SharePoint!")
-            st.cache_data.clear()
+            with st.spinner("Adicionando integrante da equipe no SharePoint..."):
+                executar_api_equipes(payload)
+                time.sleep(2)
+                st.cache_data.clear()
+            st.success(f"Servidor {n_srv} inserido com sucesso!")
+            st.rerun()
 
     with ts_edit:
         if not df_visualizacao_srv.empty:
             sel_srv = st.selectbox("Selecione o Servidor para alterar:", df_visualizacao_srv["Servidor"].tolist(), key="srv_sel_edit")
             dados_atuais_srv = df_visualizacao_srv[df_visualizacao_srv["Servidor"] == sel_srv].iloc[0]
-            id_srv_edit = int(dados_atuais_srv["ID_SERV"])
+            id_srv_edit = int(float(dados_atuais_srv["ID_SERV"]))
             
             novo_email = st.text_input("Alterar E-mail:", value=str(dados_atuais_srv["E_mail"]))
             nova_funcao = st.text_input("Alterar Função Interna / Cargo:", value=str(dados_atuais_srv["Funcao"]))
@@ -356,23 +381,23 @@ elif modo == "👥 Gerenciar Equipes":
             
             if st.button("Salvar Modificações"):
                 payload = {"Acao": "Editar", "ID_SERV": id_srv_edit, "Servidor": sel_srv, "E_mail": novo_email, "Funcao": nova_funcao, "Perfil": n_perf}
-                
-                with st.spinner("Atualizando cadastro da equipe..."):
+                with st.spinner("Atualizando cadastro da equipe no SharePoint..."):
                     executar_api_equipes(payload)
-                    import time
-                    time.sleep(2)  # Janela de segurança para o Power Automate
-                    st.cache_data.clear()  # Expulsa os dados antigos do cache
-                    
+                    time.sleep(2)
+                    st.cache_data.clear()
                 st.success("Cadastro do integrante atualizado no Excel!")
-                st.rerun()  # Recarrega a página atualizando os selects na hora
+                st.rerun()
 
     with ts_del:
         if not df_visualizacao_srv.empty:
             del_srv = st.selectbox("Selecione quem perderá o acesso:", df_visualizacao_srv["Servidor"].tolist(), key="srv_sel_del")
-            id_srv_del = int(df_visualizacao_srv[df_servidores["Servidor"] == del_srv]["ID_SERV"].iloc[0])
+            id_srv_del = int(float(df_visualizacao_srv[df_servidores["Servidor"] == del_srv]["ID_SERV"].iloc[0]))
             chk_srv = st.checkbox(f"Confirmo o desligamento do servidor {del_srv}")
             if st.button("❌ Revogar Acesso", disabled=not chk_srv):
                 payload = {"Acao": "Excluir", "ID_SERV": id_srv_del}
-                executar_api_equipes(payload)
-                st.success(f"Acesso revogado! Servidor deletado do banco.")
-                st.cache_data.clear()
+                with st.spinner("Revogando credenciais no SharePoint..."):
+                    executar_api_equipes(payload)
+                    time.sleep(2)
+                    st.cache_data.clear()
+                st.success(f"Acesso revogado com sucesso!")
+                st.rerun()
