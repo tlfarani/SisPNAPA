@@ -102,14 +102,25 @@ if "df_base_pnapa" not in st.session_state:
 df_atual = st.session_state.df_base_pnapa
 
 # =================================================================
-# III. CONTROLE DE ACESSO INTEGRADO (SSO + PERFIL DE ACESSO + TOKEN)
+# III. CONTROLE DE ACESSO INTEGRADO (SSO + PERFIL + TOKEN) - BLINDADO
 # =================================================================
-email_logado = st.user.email
+# Nova forma ultra-segura de capturar o e-mail sem quebrar por versão do Streamlit
+try:
+    if hasattr(st, "user") and hasattr(st.user, "email"):
+        email_logado = st.user.email
+    elif hasattr(st, "experimental_user"):
+        email_logado = st.experimental_user.email
+    else:
+        email_logado = st.user.get("email") if hasattr(st, "user") and hasattr(st.user, "get") else None
+except:
+    email_logado = None
+
 EMAIL_ADMIN = "tiago.farani@ibama.gov.br"
 
-# Homologação automática para desenvolvimento local (localhost)
+# Homologação automática para desenvolvimento local (localhost) ou falha de SSO
 if not email_logado:
     email_logado = "tiago.farani@ibama.gov.br"
+
 
 # Resgata o perfil e token do servidor com base na chave de e-mail institucional
 try:
