@@ -6,19 +6,20 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- BLINDAGEM VISUAL CORPORATIVA (VERSÃO FINAL COMPLETA) ---
+# --- BLINDAGEM VISUAL CORPORATIVA (RESOLUÇÃO DE CONFLITOS) ---
 st.markdown("""
     <style>
         /* =================================================================
-           1. BARRA LATERAL (SIDEBAR): CLAREAMENTO TOTAL E ABSOLUTO
+           1. BARRA LATERAL (SIDEBAR): FORCE TOTAL PARA FONTES BRANCAS
            ================================================================= */
-        /* Força absolutamente TUDO que for texto na lateral a ficar branco (h2, p, labels, etc.) */
+        /* Alveja absolutamente todas as estruturas de texto possíveis dentro da Sidebar */
         section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] label,
         section[data-testid="stSidebar"] label p,
-        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        section[data-testid="stSidebar"] span,
         section[data-testid="stSidebar"] p,
-        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
+        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p,
+        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
             color: #ffffff !important;
             font-weight: 600 !important;
         }
@@ -60,9 +61,28 @@ st.markdown("""
 
 
         /* =================================================================
-           3. CORREÇÃO DE DATAS (DATE_INPUT) E INCREMENTOS (+/- NUMBER_INPUT)
+           3. CORREÇÃO COMPLETA DOS CAMPOS NUMÉRICOS (+/- NUMBER_INPUT) E DATAS
            ================================================================= */
-        /* Força os blocos de Entrada de Data (Date Input) a ficarem com fundo branco */
+        /* Força a caixa interna de digitação do número a ter fundo branco e texto escuro */
+        div[data-testid="stNumberInput"] input {
+            background-color: #ffffff !important;
+            color: #03170a !important;
+        }
+
+        /* Força o container que envolve o número a ficar branco e sem bordas escuras */
+        div[data-testid="stNumberInput"] > div {
+            border: 1px solid #cbd5e1 !important;
+            background-color: #ffffff !important;
+        }
+
+        /* Ajusta os botões de mais e menos nas pontas dos campos numéricos */
+        div[data-testid="stNumberInput"] button {
+            background-color: #f1f5f9 !important; /* Cinza claro de botão */
+            color: #03170a !important;            /* Sinais de + e - em verde escuro */
+            border: 1px solid #cbd5e1 !important;
+        }
+
+        /* Manutenção das Entradas de Data (Date Input) */
         div[data-testid="stDateInput"] > div,
         div[data-testid="stDateInput"] div[role="button"],
         div[data-testid="stDateInput"] input {
@@ -70,28 +90,13 @@ st.markdown("""
             color: #03170a !important;
             border: 1px solid #cbd5e1 !important;
         }
-        
-        /* Ícone do calendário dentro do campo de data */
         div[data-testid="stDateInput"] svg {
             fill: #03170a !important;
         }
 
-        /* Força os botões laterais de mais e menos (+ / -) dos campos numéricos a ficarem claros */
-        div[data-testid="stNumberInput"] button {
-            background-color: #f1f5f9 !important; /* Cinza bem clarinho nos botões */
-            color: #03170a !important;            /* Sinais de + e - em verde escuro */
-            border: 1px solid #cbd5e1 !important;
-        }
-
-        /* Garante que o contorno das caixas numéricas fique nítido */
-        div[data-testid="stNumberInput"] > div {
-            border: 1px solid #cbd5e1 !important;
-            background-color: #ffffff !important;
-        }
-
 
         /* =================================================================
-           4. CONFIGURAÇÃO GERAL E ENTRADAS DE TEXTO / ABAS (ÁREA CENTRAL)
+           4. ENTRADAS DE TEXTO, ABAS E CONFIGURAÇÃO GERAL (ÁREA CENTRAL)
            ================================================================= */
         h2, h3, [data-testid="stHeader"] {
             color: #03170a !important;
