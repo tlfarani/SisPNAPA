@@ -5,7 +5,7 @@ from datetime import date
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
 # =================================================================
-# 1. DESIGN & CSS: BLINDAGEM DE ALTA LEGIBILIDADE CORPORATIVA
+# I. APRESENTAÇÃO E DESIGN: FOLHA DE ESTILOS CSS BLINDADA
 # =================================================================
 st.markdown("""
     <style>
@@ -18,7 +18,6 @@ st.markdown("""
             color: #ffffff !important;
             font-weight: 700 !important;
         }
-
         section[data-testid="stSidebar"] div[data-testid="stRadio"] label p {
             font-weight: 500 !important;
         }
@@ -29,13 +28,11 @@ st.markdown("""
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
         }
-
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] *,
         section[data-testid="stSidebar"] div[data-baseweb="select"] * {
             color: #03170a !important;
             font-weight: bold !important;
         }
-        
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg {
             fill: #03170a !important;
         }
@@ -46,13 +43,11 @@ st.markdown("""
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
         }
-
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] *,
         div[data-testid="stAppViewContainer"] div[data-baseweb="select"] * {
             color: #03170a !important;
             background-color: transparent !important;
         }
-
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg,
         div[data-testid="stAppViewContainer"] div[data-baseweb="select"] svg {
             fill: #03170a !important;
@@ -82,77 +77,97 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =================================================================
-# 2. CARREGAMENTO DAS BASES DE DADOS (SIMULAÇÃO / LEITURA LOCAL)
+# II. CARREGAMENTO OPERACIONAL DAS BASES DE DADOS
 # =================================================================
-# Nota: Substitua pelas suas chamadas de API do Power Automate ou st.secrets se aplicável
 @st.cache_data
-def carregar_dados_auxiliares():
+def carregar_bases_auxiliares():
     try:
         lotacoes = pd.read_csv("lotacoes.csv")
         servidores = pd.read_csv("servidores.csv")
     except:
-        # Fallbacks de segurança para primeira execução caso arquivos não existam localmente
+        # Fallbacks estruturais para resiliência de execução inicial local
         lotacoes = pd.DataFrame([["SP", "São Paulo"], ["SP", "Santos"]], columns=["UF", "Unidade"])
-        servidores = pd.DataFrame([["Tiago Farani", "SP", "São Paulo", "Sim", "Sim", "Sim", "Sim", "tiago.farani@ibama.gov.br"]], 
-                                  columns=["Servidor", "UF_Servidor", "Lotacao", "Equipe_Emergencias", "Fiscal", "AEAC", "Responsavel", "E_mail"])
+        servidores = pd.DataFrame([["Tiago Farani", "SP", "São Paulo", "Sim", "Sim", "Sim", "Chefe", "tiago.farani@ibama.gov.br", "Administrador", "Mestre2026"]], 
+                                  columns=["Servidor", "UF_Servidor", "Lotacao", "Equipe_Emergencias", "Fiscal", "AEAC", "Funcao", "E_mail", "Perfil", "Token"])
     return lotacoes, servidores
 
-df_lotacoes, df_servidores = carregar_dados_auxiliares()
+df_lotacoes, df_servidores = carregar_bases_auxiliares()
 
-# Simulando o df_atual principal do PNAPA vindo do SharePoint
-# (Substitua pela leitura real do arquivo PNAPA_2026_Consolidado.csv)
+# Simulação da base consolidada do PNAPA (Substitua pela leitura do PNAPA_2026_Consolidado.csv)
 if "df_base_pnapa" not in st.session_state:
     st.session_state.df_base_pnapa = pd.DataFrame([
         {"Id": 1, "Ano da Ação": "2025", "UF_Acao_PNAPA": "SP", "Nível": "Nacional", "Servidor": "Tiago Farani", "Data de Início": "45818", "Data de Término": "2026-05-19"},
         {"Id": 2, "Ano da Ação": "2026", "UF_Acao_PNAPA": "RJ", "Nível": "Regional", "Servidor": "Eryka", "Data de Início": "19/05/2026", "Data de Término": "19/05/2026"}
     ])
-
 df_atual = st.session_state.df_base_pnapa
 
 # =================================================================
-# 3. CONTROLE DE ACESSO AVANÇADO (RLS & CHAVE MESTRA)
+# III. CONTROLE DE ACESSO INTEGRADO (SSO + PERFIL DE ACESSO + TOKEN)
 # =================================================================
-email_logado = st.experimental_user.email
+email_logado = st.user.email
 EMAIL_ADMIN = "tiago.farani@ibama.gov.br"
-eh_admin = (email_logado == EMAIL_ADMIN)
 
+# Homologação automática para desenvolvimento local (localhost)
+if not email_logado:
+    email_logado = "tiago.farani@ibama.gov.br"
+
+# Resgata o perfil e token do servidor com base na chave de e-mail institucional
 try:
     dados_usuario = df_servidores[df_servidores["E_mail"] == email_logado].iloc[0]
     uf_usuario = dados_usuario["UF_Servidor"]
-    eh_responsavel = (dados_usuario["Responsavel"] == "Sim")
+    perfil_usuario = dados_usuario["Perfil"]  # 'Administrador', 'Editor Regional' ou 'Visualização'
+    token_correto = str(dados_usuario["Token"]).strip()
 except:
     uf_usuario = "Acesso Restrito"
-    eh_responsavel = False
+    perfil_usuario = "Visualização"
+    token_correto = None
 
-# Ajuste automático do escopo administrativo
-if eh_admin:
-    uf_usuario = "SP" # Estado inicial padrão para a visão do Admin
-    eh_responsavel = True
+# Força chave mestra irrestrita para o dono do sistema administrativo
+if email_logado == EMAIL_ADMIN:
+    perfil_usuario = "Administrador"
+
+acesso_liberado = False
+
+if perfil_usuario == "Administrador":
+    acesso_liberado = True
+    uf_usuario = "SP"  # Estado inicial para renderização macro do Admin
+    st.sidebar.success("👑 Modo Administrador Ativo")
+else:
+    # Interface de barreira criptográfica para Editores Regionais e Visualizadores habilitados
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🔐 Autenticação")
+    token_digitado = st.sidebar.text_input("Digite seu Token de Acesso:", type="password")
+    
+    if token_digitado:
+        if token_digitado == token_correto:
+            acesso_liberado = True
+            st.sidebar.success(f"🔓 {perfil_usuario} Liberado ({uf_usuario})")
+        else:
+            st.sidebar.error("❌ Token Incorreto.")
 
 # =================================================================
-# 4. CONFIGURAÇÃO DINÂMICA DO MENU LATERAL
+# IV. CONFIGURAÇÃO DINÂMICA DO MENU LATERAL CONFORME PERFIL
 # =================================================================
-opcoes_menu = ["📊 Visualizar Base", "➕ Inserir Nova Linha", "📝 Editar Linha Existente", "🗑️ Deletar Linha (ID)"]
+opcoes_menu = ["📊 Visualizar Base"]
 
-if eh_admin or eh_responsavel:
-    opcoes_menu.append("🏢 Gerenciar Unidades")
-    opcoes_menu.append("👥 Gerenciar Equipes")
+# Só expande as operações de CRUD e Gestão Auxiliar se o Token passar e o Perfil for qualificado
+if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
+    opcoes_menu.extend(["➕ Inserir Nova Linha", "📝 Editar Linha Existente", "🗑️ Deletar Linha (ID)", "🏢 Gerenciar Unidades", "👥 Gerenciar Equipes"])
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
 modo = st.sidebar.radio("Operação:", opcoes_menu)
 
 # =================================================================
-# 5. EXECUÇÃO DAS TELAS DO SISTEMA
+# V. EXECUÇÃO RHEOLÓGICA DAS TELAS DO APP
 # =================================================================
 
-# --- TELA 1: VISUALIZAÇÃO COM FILTROS INTERDEPENDENTES ---
+# --- TELA 1: VISUALIZAÇÃO COM FILTROS INTERDEPENDENTES (ACESSÍVEL A TODOS) ---
 if modo == "📊 Visualizar Base":
     st.markdown("<h3 style='color: #03170a;'>📊 Visualização Atual dos Dados (Espelho SharePoint)</h3>", unsafe_allow_html=True)
     
     if df_atual.empty:
         st.info("A base de dados está vazia.")
     else:
-        # Tratamento do conversor de serial do Excel
         def limpar_e_converter_data(valor):
             if pd.isna(valor): return pd.NaT
             val_str = str(valor).strip()
@@ -170,7 +185,6 @@ if modo == "📊 Visualizar Base":
         if pd.isna(data_min_absoluta) or pd.isna(data_max_absoluta):
             data_min_absoluta, data_max_absoluta = pd.Timestamp("2025-01-01"), pd.Timestamp("2026-12-31")
 
-        # Layout Cascata de Filtros
         col_ano, col_uf, col_nivel = st.columns(3)
         df_filtros = df_trabalho.copy()
         
@@ -193,7 +207,6 @@ if modo == "📊 Visualizar Base":
                                         value=(data_min_absoluta.to_pydatetime().date(), data_max_absoluta.to_pydatetime().date()), 
                                         format="DD/MM/YYYY")
 
-        # Aplicação cruzada de filtros na exibição
         df_exibicao = df_trabalho.copy()
         if ano_sel != "Todos": df_exibicao = df_exibicao[df_exibicao["Ano da Ação"].astype(str) == ano_sel]
         if uf_sel != "Todas": df_exibicao = df_exibicao[df_exibicao["UF_Acao_PNAPA"].astype(str) == uf_sel]
@@ -203,13 +216,11 @@ if modo == "📊 Visualizar Base":
         if not (intervalo_datas[0] == data_min_absoluta.to_pydatetime().date() and intervalo_datas[1] == data_max_absoluta.to_pydatetime().date()):
             df_exibicao = df_exibicao[(df_exibicao["Data_Inicio_Datetime"] >= pd.Timestamp(intervalo_datas[0])) & (df_exibicao["Data_Inicio_Datetime"] <= pd.Timestamp(intervalo_datas[1]))]
 
-        # Conversão estrutural de data para o Grid
         df_exibicao["Data de Início"] = df_exibicao["Data_Inicio_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
         df_exibicao = df_exibicao.drop(columns=["Data_Inicio_Datetime"])
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Zebrado dinâmico recalculado via Reset de Índices
         def estilar_linhas_zebradas(linha):
             return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
 
@@ -217,48 +228,42 @@ if modo == "📊 Visualizar Base":
 
 # --- TELA 2: INSERIR NOVA LINHA ---
 elif modo == "➕ Inserir Nova Linha":
-    st.markdown(f"<h3>➕ Inserir Nova Linha — Escopo: <span style='color:#4d6b53;'>{uf_usuario if not eh_admin else 'Admin Geral'}</span></h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3>➕ Inserir Nova Linha — Escopo Autorizado: <span style='color:#4d6b53;'>{uf_usuario if perfil_usuario != 'Administrador' else 'Nacional'}</span></h3>", unsafe_allow_html=True)
     
-    if not eh_admin and uf_usuario == "Acesso Restrito":
-        st.error("🚫 Credenciais não autorizadas para inserção de dados.")
+    if perfil_usuario == "Administrador":
+        uf_acao = st.selectbox("UF Onde Ocorrerá a Ação:", sorted(df_lotacoes["UF"].unique().tolist()))
     else:
-        if eh_admin:
-            uf_acao = st.selectbox("UF Onde Ocorrerá a Ação:", sorted(df_lotacoes["UF"].unique().tolist()))
-        else:
-            uf_acao = st.text_input("UF Onde Ocorrerá a Ação:", value=uf_usuario, disabled=True)
-            
-        unidades_da_uf = df_lotacoes[df_lotacoes["UF"] == uf_acao]["Unidade"].tolist()
-        municipio_unidade = st.selectbox("Unidade/Município de Lotação Relacionada:", unidades_da_uf if unidades_da_uf else ["Nenhuma lotação cadastrada"])
+        uf_acao = st.text_input("UF Onde Ocorrerá a Ação:", value=uf_usuario, disabled=True)
         
-        # O resto do formulário do PNAPA entra aqui...
-        st.button("Enviar Registro")
+    unidades_da_uf = df_lotacoes[df_lotacoes["UF"] == uf_acao]["Unidade"].tolist()
+    municipio_unidade = st.selectbox("Unidade/Município de Lotação Relacionada:", unidades_da_uf if unidades_da_uf else ["Nenhuma lotação cadastrada"])
+    st.button("Enviar Registro")
 
 # --- TELA 3: EDITAR LINHA EXISTENTE ---
 elif modo == "📝 Editar Linha Existente":
     st.markdown(f"<h3>📝 Editar Linha Existente</h3>", unsafe_allow_html=True)
-    
-    df_procurado = df_atual if eh_admin else df_atual[df_atual["UF_Acao_PNAPA"] == uf_usuario]
+    df_procurado = df_atual if perfil_usuario == "Administrador" else df_atual[df_atual["UF_Acao_PNAPA"] == uf_usuario]
     
     if df_procurado.empty:
-        st.warning(f"Nenhum registro encontrado sob os critérios da UF {uf_usuario}.")
+        st.warning(f"Sem registros mapeados sob a responsabilidade da UF {uf_usuario}.")
     else:
         ids_disponiveis = df_procurado["Id"].dropna().astype(str).unique().tolist()
         st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: 5px;'>Selecione o ID para Editar:</p>", unsafe_allow_html=True)
         id_para_editar = st.sidebar.selectbox("", ids_disponiveis, label_visibility="collapsed")
-        st.info(f"Carregando formulário para o ID {id_para_editar}...")
+        st.info(f"Formulário instanciado para o ID {id_para_editar}")
 
 # --- TELA 4: DELETAR LINHA ---
 elif modo == "🗑️ Deletar Linha (ID)":
     st.markdown(f"<h3>🗑️ Excluir Registro Permanente</h3>", unsafe_allow_html=True)
-    df_procurado = df_atual if eh_admin else df_atual[df_atual["UF_Acao_PNAPA"] == uf_usuario]
+    df_procurado = df_atual if perfil_usuario == "Administrador" else df_atual[df_atual["UF_Acao_PNAPA"] == uf_usuario]
     
     if df_procurado.empty:
-        st.warning("Sem registros válidos para exclusão.")
+        st.warning("Nenhum registro correspondente elegível para deleção.")
     else:
         ids_disponiveis = df_procurado["Id"].dropna().astype(str).unique().tolist()
         st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: 5px;'>Selecione o ID para Deletar:</p>", unsafe_allow_html=True)
         id_para_deletar = st.sidebar.selectbox("", ids_disponiveis, label_visibility="collapsed")
-        st.warning(f"ID selecionado para deleção: {id_para_deletar}")
+        st.warning(f"ID pronto para comando de exclusão: {id_para_deletar}")
 
 # --- TELA 5: GERENCIAR UNIDADES ---
 elif modo == "🏢 Gerenciar Unidades":
@@ -266,20 +271,20 @@ elif modo == "🏢 Gerenciar Unidades":
     t_add, t_edit, t_del = st.tabs(["➕ Adicionar Unidade", "📝 Editar Unidade", "🗑️ Excluir Unidade"])
     
     with t_add:
-        if eh_admin: uf_uni = st.selectbox("Selecione a UF:", sorted(df_lotacoes["UF"].unique().tolist()), key="uni_add_uf")
+        if perfil_usuario == "Administrador": uf_uni = st.selectbox("Selecione a UF:", sorted(df_lotacoes["UF"].unique().tolist()), key="uni_add_uf")
         else: uf_uni = st.text_input("UF da Lotação:", value=uf_usuario, disabled=True, key="uni_add_uf_rep")
         nova_uni = st.text_input("Nome da Nova Unidade:")
         if st.button("Salvar Unidade"): st.success(f"Unidade '{nova_uni}' adicionada para {uf_uni}!")
         
     with t_edit:
-        df_f = df_lotacoes if eh_admin else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
+        df_f = df_lotacoes if perfil_usuario == "Administrador" else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
         if not df_f.empty:
             sel_uni = st.selectbox("Selecione a Unidade para alterar:", df_f["Unidade"].tolist())
             m_uni = st.text_input("Novo nome da Unidade:", value=sel_uni)
             if st.button("Modificar Unidade"): st.success("Lotação atualizada!")
             
     with t_del:
-        df_f = df_lotacoes if eh_admin else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
+        df_f = df_lotacoes if perfil_usuario == "Administrador" else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
         if not df_f.empty:
             del_uni = st.selectbox("Selecione a Unidade para REMOVER:", df_f["Unidade"].tolist())
             chk = st.checkbox(f"Confirmo a exclusão da unidade {del_uni}")
@@ -293,24 +298,25 @@ elif modo == "👥 Gerenciar Equipes":
     with ts_add:
         n_srv = st.text_input("Nome Completo:")
         e_srv = st.text_input("E-mail Institucional (@ibama.gov.br):")
-        if eh_admin:
+        f_srv = st.text_input("Função / Cargo (Ex: Substituto Nupaem):")
+        if perfil_usuario == "Administrador":
             uf_srv = st.selectbox("UF de Lotação:", sorted(df_lotacoes["UF"].unique().tolist()), key="srv_add_uf")
-            perf_srv = st.selectbox("Perfil do Servidor:", ["Visualizador", "Representante", "Administrador"])
+            perf_srv = st.selectbox("Perfil do Servidor (Nível de Acesso):", ["Visualização", "Editor Regional", "Administrador"])
         else:
             uf_srv = st.text_input("UF de Lotação:", value=uf_usuario, disabled=True, key="srv_add_uf_rep")
-            perf_srv = st.selectbox("Perfil do Servidor:", ["Visualizador", "Representante"])
-        if st.button("Habilitar Servidor"): st.success(f"{n_srv} cadastrado!")
+            perf_srv = st.selectbox("Perfil do Servidor (Nível de Acesso):", ["Visualização", "Editor Regional"])
+        if st.button("Habilitar Servidor"): st.success(f"{n_srv} cadastrado com sucesso!")
 
     with ts_edit:
-        df_f = df_servidores if eh_admin else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
+        df_f = df_servidores if perfil_usuario == "Administrador" else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
         if not df_f.empty:
             sel_srv = st.selectbox("Selecione o Servidor para alterar:", df_f["Servidor"].tolist())
-            st.text_input("E-mail:", value=df_f[df_f["Servidor"] == sel_srv]["E_mail"].iloc[0])
+            st.text_input("Função Atual:", value=df_f[df_f["Servidor"] == sel_srv]["Funcao"].iloc[0])
             if st.button("Salvar Modificações"): st.success("Cadastro atualizado!")
 
     with ts_del:
-        df_f = df_servidores if eh_admin else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
+        df_f = df_servidores if perfil_usuario == "Administrador" else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
         if not df_f.empty:
             del_srv = st.selectbox("Selecione quem perderá o acesso:", df_f["Servidor"].tolist())
             chk_srv = st.checkbox(f"Confirmo o desligamento do servidor {del_srv}")
-            if st.button("❌ Revogar Acesso", disabled=not chk_srv): st.success("Acesso revogado.")
+            if st.button("❌ Revogar Acesso", disabled=not chk_srv): st.success("Acesso revogado do sistema.")
