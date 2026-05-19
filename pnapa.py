@@ -6,6 +6,39 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
+# --- INJEÇÃO DE ESTILO PARA ACENDER O LAYOUT (PALETA IBAMA) ---
+st.markdown("""
+    <style>
+        /* 1. Altera a cor da linha de destaque das abas (Tabs) para o Verde Musgo */
+        button[data-baseweb="tab"] div[data-testid="stMarkdownContainer"] p {
+            color: #f1f3f5 !important; /* Texto das abas em branco/cinza claro */
+        }
+        
+        /* Cor da aba ativa (Selecionada) */
+        button[aria-selected="true"] div[data-testid="stMarkdownContainer"] p {
+            color: #a3e635 !important; /* Destaque verde limão/musgo na aba ativa */
+            font-weight: bold;
+        }
+        
+        /* Linha inferior de seleção da Tab */
+        div[data-baseweb="tab-highlight"] {
+            background-color: #4d6b53 !important;
+        }
+
+        /* 2. Deixar as bordas dos campos de texto mais nítidas sobre o fundo escuro */
+        div[data-testid="stTextInput"] input, div[data-testid="stNumberInput"] input, div[role="combobox"] {
+            border: 1px solid #2d333b !important;
+            background-color: #1c2026 !important;
+        }
+        
+        /* 3. Realce nos rótulos (Labels) dos campos */
+        label[data-testid="stWidgetLabel"] p {
+            color: #e5e7eb !important;
+            font-weight: 500;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- LEITURA DE CREDENCIAIS / SECRETS ---
 URL_LER = st.secrets["power_automate"]["URL_LER"]
 URL_GRAVAR = st.secrets["power_automate"]["URL_GRAVAR"]
