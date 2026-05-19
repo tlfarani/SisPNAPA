@@ -6,52 +6,68 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- CUSTOMIZAÇÃO ESTÉTICA DE ALTA LEGIBILIDADE ---
+# --- CUSTOMIZAÇÃO ESTÉTICA DE ALTA LEGIBILIDADE (REVISADA) ---
 st.markdown("""
     <style>
-        /* 1. Força TODAS as fontes do painel lateral (Sidebar) a ficarem em Branco */
+        /* 1. Força TODOS os textos, labels e spans da barra lateral a ficarem em Branco */
         section[data-testid="stSidebar"] *, 
         section[data-testid="stSidebar"] p, 
-        section[data-testid="stSidebar"] label {
+        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] span {
             color: #ffffff !important;
         }
         
-        /* Ajusta a cor do seletor (radio) de operações na lateral para contrastar no verde escuro */
-        section[data-testid="stSidebar"] div[role="radiogroup"] label {
+        /* Garante que o rótulo específico do selectbox ("Selecione o ID...") fique branco */
+        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
             color: #ffffff !important;
+            font-weight: 600 !important;
         }
 
-        /* 2. Customização dos Cabeçalhos das Telas (Visualizar/Inserir/Editar/Excluir) em #03170a */
+        /* 2. Corrige a caixinha do Selectbox e inputs dentro da Sidebar */
+        /* Altera o texto de dentro do seletor (o ID "1") para Verde Escuro (#03170a) para dar leitura */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div,
+        section[data-testid="stSidebar"] div[role="combobox"] span,
+        section[data-testid="stSidebar"] div[role="combobox"] div {
+            color: #03170a !important;
+        }
+        
+        /* Garante que o fundo da caixinha do selectbox fique branco puro na lateral */
+        section[data-testid="stSidebar"] div[role="combobox"] {
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+
+        /* 3. Customização dos Cabeçalhos das Telas Principais (Fundo Claro) em #03170a */
         h2, h3, [data-testid="stHeader"] {
             color: #03170a !important;
             font-weight: 700 !important;
         }
 
-        /* 3. Estilização e Legibilidade das Abas (Tabs) do Formulário */
+        /* 4. Estilização das Abas (Tabs) do Formulário Principal */
         button[data-baseweb="tab"] p {
-            color: #4a5568 !important; /* Abas inativas em um cinza escuro legível */
+            color: #4a5568 !important; /* Abas inativas em cinza escuro */
             font-weight: 500;
         }
         button[aria-selected="true"] p {
-            color: #03170a !important; /* Aba ativa no verde escuro principal */
+            color: #03170a !important; /* Aba ativa no verde escuro */
             font-weight: 700 !important;
         }
         div[data-baseweb="tab-highlight"] {
             background-color: #4d6b53 !important; /* Linha indicadora no verde primário */
         }
 
-        /* 4. Contorno dos Inputs para não sumirem no fundo claro */
-        div[data-testid="stTextInput"] input, 
-        div[data-testid="stNumberInput"] input, 
-        div[data-testid="stTextArea"] textarea,
-        div[role="combobox"] {
-            border: 1px solid #cbd5e1 !important; /* Borda cinza clara bem definida */
-            background-color: #ffffff !important; /* Fundo interno branco puro */
-            color: #03170a !important; /* Texto digitado no verde escuro */
+        /* 5. Contorno e preenchimento dos Inputs na Área Central (Fundo Claro) */
+        div[data-testid="stAppViewContainer"] div[data-testid="stTextInput"] input, 
+        div[data-testid="stAppViewContainer"] div[data-testid="stNumberInput"] input, 
+        div[data-testid="stAppViewContainer"] div[data-testid="stTextArea"] textarea,
+        div[data-testid="stAppViewContainer"] div[role="combobox"] {
+            border: 1px solid #cbd5e1 !important;
+            background-color: #ffffff !important;
+            color: #03170a !important;
         }
         
-        /* Labels dos campos em destaque escuro */
-        label[data-testid="stWidgetLabel"] p {
+        /* Labels dos campos centrais em destaque escuro */
+        div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p {
             color: #03170a !important;
             font-weight: 500;
         }
