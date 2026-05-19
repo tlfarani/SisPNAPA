@@ -145,7 +145,7 @@ if submetido:
         "Doc_Probatorio_Exec": doc_probatorio, "UF_Acao_PNAPA": uf_acao_pnapa, "Importância da Atividade": importancia,
         "Tema da Atividade": tema, "Objetivo da Atividade": objetivo, "Tipo de Atividade": tipo_atividade,
         "Periculosidade/Insalubridade": periculosidade, "Servidor": servidor, "UF_Servidor": uf_servidor,
-        "Lotação": lotacao, "Faz parte da Equipe de Emergências": equipe_emergency, "Número da PCDP": num_pcdp,
+        "Lotação": lotacao, "Faz parte da Equipe de Emergências": equipe_emergencia, "Número da PCDP": num_pcdp,
         "País": pais, "UF Onde Ocorreu/Ocorrerá a Ação": uf_ocorrencia, "Estado_Local_Acao": estado_local,
         "Municipio Onde Ocorreu/Ocorrerá a Ação": municipio, "Data de Início": str(dt_inicio), "Data de Término": str(dt_termino),
         "Dias_Gastos_Plan": dias_plan, "Dias_Gastos_Exec": dias_exec, "Origem do Recurso": origem_recurso,
