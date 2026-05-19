@@ -6,61 +6,99 @@ from datetime import date
 
 st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 
-# --- BLINDAGEM VISUAL TOTAL (VERSÃO FORÇA BRUTA) ---
+# --- BLINDAGEM VISUAL CORPORATIVA (VERSÃO FINAL COMPLETA) ---
 st.markdown("""
     <style>
         /* =================================================================
-           1. BARRA LATERAL (SIDEBAR): ACENDER AS LABELS APAGADAS
+           1. BARRA LATERAL (SIDEBAR): CLAREAMENTO TOTAL E ABSOLUTO
            ================================================================= */
-        /* Força QUALQUER texto de descrição/rótulo dentro da Sidebar a ficar Branco puro */
+        /* Força absolutamente TUDO que for texto na lateral a ficar branco (h2, p, labels, etc.) */
+        section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] label,
         section[data-testid="stSidebar"] label p,
         section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
-        section[data-testid="stSidebar"] p {
+        section[data-testid="stSidebar"] p,
+        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
             color: #ffffff !important;
             font-weight: 600 !important;
         }
 
+        /* Fundo do Selectbox da barra lateral */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div {
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+
+        /* Texto interno do Selectbox da barra lateral (ID) */
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] * {
+            color: #03170a !important;
+        }
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg {
+            fill: #03170a !important;
+        }
+
+
         /* =================================================================
-           2. UNIVERSAL SELECTBOX (BARRA LATERAL E CENTRAL): FIM DO VERDE ESCURO
+           2. SELETORES DE DROP-DOWN / SELECTBOX (ÁREA CENTRAL)
            ================================================================= */
-        /* Força a caixinha principal de TODOS os selectboxes do app a ter fundo branco e borda clara */
         div[data-testid="stSelectbox"] > div,
         div[data-baseweb="select"] > div {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
         }
-
-        /* Alveja as divs e spans mais profundas onde o texto real ("Nacional", "Não Iniciada", ID) é renderizado */
         div[data-testid="stSelectbox"] * {
-            color: #03170a !important; /* Força o texto interno a ficar no verde escuro legível */
-        }
-
-        /* Garante que o texto selecionado dentro da árvore do BaseWeb fique visível e escuro */
-        div[data-baseweb="select"] [aria-selected="true"],
-        div[data-baseweb="select"] span,
-        div[data-baseweb="select"] value {
             color: #03170a !important;
-            background-color: transparent !important;
         }
-
-        /* Força o ícone da setinha para baixo a ficar escuro e visível em todos os seletores */
+        div[data-baseweb="select"] [aria-selected="true"],
+        div[data-baseweb="select"] span {
+            color: #03170a !important;
+        }
         div[data-testid="stSelectbox"] svg,
         div[data-baseweb="select"] svg {
             fill: #03170a !important;
-            color: #03170a !important;
         }
 
+
         /* =================================================================
-           3. TEXTOS, ABAS E ENTRADAS DE DADOS (ÁREA CENTRAL)
+           3. CORREÇÃO DE DATAS (DATE_INPUT) E INCREMENTOS (+/- NUMBER_INPUT)
            ================================================================= */
-        /* Títulos principais */
+        /* Força os blocos de Entrada de Data (Date Input) a ficarem com fundo branco */
+        div[data-testid="stDateInput"] > div,
+        div[data-testid="stDateInput"] div[role="button"],
+        div[data-testid="stDateInput"] input {
+            background-color: #ffffff !important;
+            color: #03170a !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+        
+        /* Ícone do calendário dentro do campo de data */
+        div[data-testid="stDateInput"] svg {
+            fill: #03170a !important;
+        }
+
+        /* Força os botões laterais de mais e menos (+ / -) dos campos numéricos a ficarem claros */
+        div[data-testid="stNumberInput"] button {
+            background-color: #f1f5f9 !important; /* Cinza bem clarinho nos botões */
+            color: #03170a !important;            /* Sinais de + e - em verde escuro */
+            border: 1px solid #cbd5e1 !important;
+        }
+
+        /* Garante que o contorno das caixas numéricas fique nítido */
+        div[data-testid="stNumberInput"] > div {
+            border: 1px solid #cbd5e1 !important;
+            background-color: #ffffff !important;
+        }
+
+
+        /* =================================================================
+           4. CONFIGURAÇÃO GERAL E ENTRADAS DE TEXTO / ABAS (ÁREA CENTRAL)
+           ================================================================= */
         h2, h3, [data-testid="stHeader"] {
             color: #03170a !important;
             font-weight: 700 !important;
         }
 
-        /* Navegação por Abas (Tabs) */
+        /* Abas (Tabs) */
         button[data-baseweb="tab"] p {
             color: #4a5568 !important;
             font-weight: 500;
@@ -73,16 +111,15 @@ st.markdown("""
             background-color: #4d6b53 !important;
         }
 
-        /* Caixas de entrada normais (Texto, Números, Áreas de texto) */
-        div[data-testid="stAppViewContainer"] div[data-testid="stTextInput"] input, 
-        div[data-testid="stAppViewContainer"] div[data-testid="stNumberInput"] input, 
-        div[data-testid="stAppViewContainer"] div[data-testid="stTextArea"] textarea {
+        /* Inputs normais de texto e áreas grandes de digitação */
+        div[data-testid="stTextInput"] input, 
+        div[data-testid="stTextArea"] textarea {
             border: 1px solid #cbd5e1 !important;
             background-color: #ffffff !important;
             color: #03170a !important;
         }
         
-        /* Rótulos de campos da área central */
+        /* Rótulos das caixas da área central */
         div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p {
             color: #03170a !important;
             font-weight: 500;
