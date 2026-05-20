@@ -275,90 +275,85 @@ if modo == "📊 Visualizar Base":
 elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
     st.markdown(f"<h3 style='color: #03170a;'>Formulário de Dados PNAPA — Modo: {modo}</h3>", unsafe_allow_html=True)
     
+    # 🌟 PASSO 1: CONTROLES FORA DO FORMULÁRIO PARA GARANTIR REATIVIDADE EM TEMPO REAL
+    idx_nivel_padrao = 0 if registro_selecionado is None or str(registro_selecionado.get("Nível", "")) == "Ação" else 1
+    nivel_selecionado = st.selectbox("O que deseja cadastrar/editar?", ["Ação", "Atividade"], index=idx_nivel_padrao, key="main_txt_nivel")
+    
+    st.markdown("#### 🔗 Vinculação Automática com o Catálogo de Ações PNAPA")
+    if not df_pnapas.empty:
+        anos_aux_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
+        
+        ano_padrao_form = int(registro_selecionado["Ano da Ação"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Ano da Ação"]) else anos_aux_disponiveis[0]
+        try: idx_ano_form = anos_aux_disponiveis.index(ano_padrao_form)
+        except ValueError: idx_ano_form = 0
+            
+        ano_vinculo = st.selectbox("Selecione o Ano para filtrar as Ações:", anos_aux_disponiveis, index=idx_ano_form, key="form_pna_vinculo_ano")
+        df_pnapas_ano = df_pnapas[df_pnapas["Ano"].astype(int) == ano_vinculo]
+        
+        if not df_pnapas_ano.empty:
+            lista_opcoes_vinc = (df_pnapas_ano["Acao_Ano"].astype(str) + " - " + df_pnapas_ano["Nome_Acao_Apelido"].astype(str)).tolist()
+            
+            num_acao_gravada = str(registro_selecionado.get("Número da Ação PNAPA", "")) if registro_selecionado is not None else ""
+            idx_pna_vinc = 0
+            for i, opc in enumerate(lista_opcoes_vinc):
+                if opc.startswith(num_acao_gravada + "-"):
+                    idx_pna_vinc = i
+                    break
+            
+            opcao_vinc_sel = st.selectbox("Selecione a Ação PNAPA correspondente:", lista_opcoes_vinc, index=idx_pna_vinc, key="form_pna_vinculo_sel")
+            
+            # PROCV automático do Catálogo Auxiliar
+            acao_ano_detectado = opcao_vinc_sel.split(" - ")[0]
+            dados_aux_linha = df_pnapas_ano[df_pnapas_ano["Acao_Ano"].astype(str) == acao_ano_detectado].iloc[0]
+            
+            val_ano = int(dados_aux_linha["Ano"])
+            val_num_acao = str(dados_aux_linha["Num_Acao_PNAPA"])
+            val_nome_acao = str(dados_aux_linha["Nome_Acao_Completo"])
+            val_indicador = str(dados_aux_linha["Indicador"])
+            
+            st.success(f"✅ Dados Vinculados: Código {val_num_acao} | {val_nome_acao[:60]}...")
+        else:
+            st.warning("⚠️ Nenhuma ação cadastrada para este ano no catálogo auxiliar.")
+            val_ano, val_num_acao, val_nome_acao, val_indicador = None, "", "", ""
+    else:
+        st.error("⚠️ O catálogo auxiliar de Ações PNAPA está vazio.")
+        val_ano, val_num_acao, val_nome_acao, val_indicador = None, "", "", ""
+
+    st.markdown("---")
+    
+    # Fallbacks de Configuração Geral de Dados
+    dt_inicio_convertida = pd.to_datetime(registro_selecionado["Data de Início"], errors='coerce') if registro_selecionado is not None else pd.NaT
+    val_dt_inicio = dt_inicio_convertida.date() if pd.notna(dt_inicio_convertida) else date.today()
+    dt_termino_convertida = pd.to_datetime(registro_selecionado["Data de Término"], errors='coerce') if registro_selecionado is not None else pd.NaT
+    val_dt_termino = dt_termino_convertida.date() if pd.notna(dt_termino_convertida) else date.today()
+
+    def obter_num_seguro(registro, coluna):
+        if registro is not None and coluna in registro:
+            val = pd.to_numeric(registro[coluna], errors='coerce')
+            return float(val) if pd.notna(val) else 0.0
+        return 0.0
+
+    # 🌟 PASSO 2: INÍCIO DO FORMULÁRIO ENVELOPANDO AS ABAS TEMÁTICAS DINÂMICAS
     with st.form(key="form_power_automate", clear_on_submit=True):
         st.text_input("ID do Registro", value=id_atual if id_atual else "Definido no envio", disabled=True)
         
-        # 1. Combo de escolha principal que dita as regras de negócio
-        idx_nivel_padrao = 0 if registro_selecionado is None or str(registro_selecionado.get("Nível", "")) == "Ação" else 1
-        nivel_selecionado = st.selectbox("O que deseja cadastrar/editar?", ["Ação", "Atividade"], index=idx_nivel_padrao, key="main_txt_nivel")
-        
-        # 2. Lógica de Filtro Cronológico em Cascata com a Tabela Auxiliar
-        st.markdown("#### 🔗 Vinculação Automática com o Catálogo de Ações PNAPA")
-        if not df_pnapas.empty:
-            anos_aux_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
-            
-            # Se for edição, tenta preencher o ano atual do registro
-            ano_padrao_form = int(registro_selecionado["Ano da Ação"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Ano da Ação"]) else anos_aux_disponiveis[0]
-            try: idx_ano_form = anos_aux_disponiveis.index(ano_padrao_form)
-            except ValueError: idx_ano_form = 0
-                
-            ano_vinculo = st.selectbox("Selecione o Ano para filtrar as Ações:", anos_aux_disponiveis, index=idx_ano_form, key="form_pna_vinculo_ano")
-            
-            # Filtra o catálogo auxiliar pelo ano selecionado
-            df_pnapas_ano = df_pnapas[df_pnapas["Ano"].astype(int) == ano_vinculo]
-            
-            if not df_pnapas_ano.empty:
-                lista_opcoes_vinc = (df_pnapas_ano["Acao_Ano"].astype(str) + " - " + df_pnapas_ano["Nome_Acao_Apelido"].astype(str)).tolist()
-                
-                # Se for edição, tenta pré-selecionar o número da ação gravada
-                num_acao_gravada = str(registro_selecionado.get("Número da Ação PNAPA", "")) if registro_selecionado is not None else ""
-                idx_pna_vinc = 0
-                for i, opc in enumerate(lista_opcoes_vinc):
-                    if opc.startswith(num_acao_gravada + "-"):
-                        idx_pna_vinc = i
-                        break
-                
-                opcao_vinc_sel = st.selectbox("Selecione a Ação PNAPA correspondente:", lista_opcoes_vinc, index=idx_pna_vinc, key="form_pna_vinculo_sel")
-                
-                # Coleta e faz o PROCV em memória dos dados automáticos da tabela de PNAPAs
-                acao_ano_detectado = opcao_vinc_sel.split(" - ")[0]
-                dados_aux_linha = df_pnapas_ano[df_pnapas_ano["Acao_Ano"].astype(str) == acao_ano_detectado].iloc[0]
-                
-                val_ano = int(dados_aux_linha["Ano"])
-                val_num_acao = str(dados_aux_linha["Num_Acao_PNAPA"])
-                val_nome_acao = str(dados_aux_linha["Nome_Acao_Completo"])
-                val_indicador = str(dados_aux_linha["Indicador"])
-                
-                st.success(f"✅ Dados da Ação Auxiliar Vinculados: Código {val_num_acao} | {val_nome_acao[:60]}...")
-            else:
-                st.warning("⚠️ Nenhuma ação cadastrada para este ano no catálogo auxiliar.")
-                val_ano, val_num_acao, val_nome_acao, val_indicador = None, "", "", ""
-        else:
-            st.error("⚠️ O catálogo auxiliar de Ações PNAPA está totalmente vazio. Cadastre uma Ação na aba de gerenciamento antes de prosseguir.")
-            val_ano, val_num_acao, val_nome_acao, val_indicador = None, "", "", ""
-
-        st.markdown("---")
-        st.markdown(f"### 📝 Preenchimento de Parâmetros da {nivel_selecionado}")
-        
-        # Estrutura em 2 Colunas para otimizar espaço na tela central
-        col_esq, col_dir = st.columns(2)
-        
-        # Fallbacks de Datas para Edição
-        dt_inicio_convertida = pd.to_datetime(registro_selecionado["Data de Início"], errors='coerce') if registro_selecionado is not None else pd.NaT
-        val_dt_inicio = dt_inicio_convertida.date() if pd.notna(dt_inicio_convertida) else date.today()
-        dt_termino_convertida = pd.to_datetime(registro_selecionado["Data de Término"], errors='coerce') if registro_selecionado is not None else pd.NaT
-        val_dt_termino = dt_termino_convertida.date() if pd.notna(dt_termino_convertida) else date.today()
-
-        def obter_num_seguro(registro, coluna):
-            if registro is not None and coluna in registro:
-                val = pd.to_numeric(registro[coluna], errors='coerce')
-                return float(val) if pd.notna(val) else 0.0
-            return 0.0
-
         # =================================================================
-        # RENDERIZAÇÃO CASO SEJA: AÇÃO
+        # CONDICIONAL VISUAL: SE FOR AÇÃO
         # =================================================================
         if nivel_selecionado == "Ação":
-            with col_esq:
+            aba1, aba2, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "4. Cronograma & Custos", "5. Justificativas"])
+            
+            with aba1:
                 st.text_input("Ano da Ação (Automático)", value=str(val_ano if val_ano else ""), disabled=True)
                 st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
                 st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
-                st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
                 
                 lista_andamentos = ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"]
                 idx_and = lista_andamentos.index(registro_selecionado["Andamento"]) if registro_selecionado is not None and registro_selecionado["Andamento"] in lista_andamentos else 0
                 andamento = st.selectbox("Andamento", lista_andamentos, index=idx_and)
-                
+
+            with aba2:
+                st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
                 meta_indicador = st.text_input("Meta do Indicador", value=str(registro_selecionado["Meta_Indicador"]) if registro_selecionado is not None else "")
                 uf_acao = st.text_input("UF da Ação PNAPA", value=str(registro_selecionado["UF_Acao_PNAPA"]) if registro_selecionado is not None else "", max_chars=2)
                 
@@ -368,44 +363,49 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
                 
                 tema = st.text_input("Tema da Atividade", value=str(registro_selecionado["Tema da Atividade"]) if registro_selecionado is not None else "")
                 objetivo = st.text_area("Objetivo da Atividade", value=str(registro_selecionado["Objetivo da Atividade"]) if registro_selecionado is not None else "")
-
-            with col_dir:
                 tipo_atividade = st.text_input("Tipo de Atividade", value=str(registro_selecionado["Tipo de Atividade"]) if registro_selecionado is not None else "")
+
+            with aba4:
                 dt_inicio = st.date_input("Data de Início", value=val_dt_inicio)
                 dt_termino = st.date_input("Data de Término", value=val_dt_termino)
                 dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
                 origem_recurso = st.text_input("Origem do Recurso", value=str(registro_selecionado["Origem do Recurso"]) if registro_selecionado is not None else "")
                 
-                st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
+                st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
                 rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f")
                 rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f")
                 rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), format="%.2f")
-                
+
+            with aba5:
                 obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "")
                 justificativa = st.text_area("Justificativa_Acao_PNAPA", value=str(registro_selecionado["Justificativa_Acao_PNAPA"]) if registro_selecionado is not None else "")
                 
-                # Zera variáveis exclusivas de Atividade para o payload não quebrar
-                nome_atividade, resultado_indicador, doc_probatorio, periculosidade = "", "", "", "Não"
-                servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp = "", "", "", "Não", ""
-                pais, uf_ocorrencia, estado_local, municipio, dias_exec = "Brasil", "", "", "", 0.0
-                rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
+            # Inicializa nulos de Atividade para o payload
+            nome_atividade, resultado_indicador, doc_probatorio, periculosidade = "", "", "", "Não"
+            servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp = "", "", "", "Não", ""
+            pais, uf_ocorrencia, estado_local, municipio, dias_exec = "Brasil", "", "", "", 0.0
+            rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
+            meta_indicador = ""
 
         # =================================================================
-        # RENDERIZAÇÃO CASO SEJA: ATIVIDADE
+        # CONDICIONAL VISUAL: SE FOR ATIVIDADE
         # =================================================================
         elif nivel_selecionado == "Atividade":
-            with col_esq:
+            aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
+            
+            with aba1:
                 st.text_input("Ano da Ação (Automático)", value=str(val_ano if val_ano else ""), disabled=True)
                 st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
                 st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
-                st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
                 
                 nome_atividade = st.text_input("Nome da Atividade", value=str(registro_selecionado["Nome da Atividade"]) if registro_selecionado is not None else "")
                 
                 lista_andamentos = ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"]
                 idx_and = lista_andamentos.index(registro_selecionado["Andamento"]) if registro_selecionado is not None and registro_selecionado["Andamento"] in lista_andamentos else 0
                 andamento = st.selectbox("Andamento", lista_andamentos, index=idx_and)
-                
+
+            with aba2:
+                st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
                 resultado_indicador = st.text_input("Resultado do Indicador", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "")
                 doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI)", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "")
                 uf_acao = st.text_input("UF da Ação PNAPA", value=str(registro_selecionado["UF_Acao_PNAPA"]) if registro_selecionado is not None else "", max_chars=2)
@@ -421,45 +421,42 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
                 lista_perigos = ["Não", "Insalubridade", "Periculosidade", "Ambos"]
                 idx_per = lista_perigos.index(registro_selecionado["Periculosidade/Insalubridade"]) if registro_selecionado is not None and registro_selecionado["Periculosidade/Insalubridade"] in lista_perigos else 0
                 periculosidade = st.selectbox("Periculosidade/Insalubridade", lista_perigos, index=idx_per)
-                
-                st.markdown("<p style='font-weight: bold; margin-top:10px; color:#4d6b53;'>👤 Recursos Humanos</p>", unsafe_allow_html=True)
+
+            with aba3:
                 servidor = st.text_input("Servidor", value=str(registro_selecionado["Servidor"]) if registro_selecionado is not None else "")
                 uf_servidor = st.text_input("UF_Servidor", value=str(registro_selecionado["UF_Servidor"]) if registro_selecionado is not None else "", max_chars=2)
                 lotacao = st.text_input("Lotação", value=str(registro_selecionado["Lotação"]) if registro_selecionado is not None else "")
                 equipe_emergencia = st.selectbox("Faz parte da Equipe de Emergências", ["Não", "Sim"], index=1 if registro_selecionado is not None and registro_selecionado["Faz parte da Equipe de Emergências"] == "Sim" else 0)
                 num_pcdp = st.text_input("Número da PCDP", value=str(registro_selecionado["Número da PCDP"]) if registro_selecionado is not None else "")
-
-            with col_dir:
-                st.markdown("<p style='font-weight: bold; color:#4d6b53;'>📍 Local da Execução</p>", unsafe_allow_html=True)
+                
+                st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
                 pais = st.text_input("País", value=str(registro_selecionado["País"]) if registro_selecionado is not None else "Brasil")
                 uf_ocorrencia = st.text_input("UF Onde Ocorreu/Ocorrerá a Ação", value=str(registro_selecionado["UF Onde Ocorreu/Ocorrerá a Ação"]) if registro_selecionado is not None else "", max_chars=2)
                 estado_local = st.text_input("Estado_Local_Acao", value=str(registro_selecionado["Estado_Local_Acao"]) if registro_selecionado is not None else "")
                 municipio = st.text_input("Municipio Onde Ocorreu/Ocorrerá a Ação", value=str(registro_selecionado["Municipio Onde Ocorreu/Ocorrerá a Ação"]) if registro_selecionado is not None else "")
-                
-                st.markdown("<p style='font-weight: bold; color:#4d6b53;'>⏳ Cronograma Real</p>", unsafe_allow_html=True)
+
+            with aba4:
                 dt_inicio = st.date_input("Data de Início", value=val_dt_inicio)
                 dt_termino = st.date_input("Data de Término", value=val_dt_termino)
                 dias_plan = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
                 dias_exec = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"))
                 origem_recurso = st.text_input("Origem do Recurso", value=str(registro_selecionado["Origem do Recurso"]) if registro_selecionado is not None else "")
                 
-                st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>Valores Orçamentários (Plan vs Exec)</p>", unsafe_allow_html=True)
+                st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
                 c_pl, c_ex = st.columns(2)
                 with c_pl:
-                    st.caption("Planejado")
                     rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f")
                     rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f")
                     rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), format="%.2f")
                 with c_ex:
-                    st.caption("Executado")
                     rec_e_diarias = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Diarias"), format="%.2f")
                     rec_e_passagens = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Passagens"), format="%.2f")
                     rec_e_outras = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Outras_Despesas"), format="%.2f")
-                
+
+            with aba5:
                 obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "")
                 justificativa = st.text_area("Justificativa_Acao_PNAPA", value=str(registro_selecionado["Justificativa_Acao_PNAPA"]) if registro_selecionado is not None else "")
                 
-                # Zera campos de Ação pura
                 meta_indicador = ""
 
         submetido = st.form_submit_button(label="🚀 Disparar Atualização para o SharePoint")
@@ -475,50 +472,24 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
             acao_fluxo = "editar"
             id_final = id_atual
 
-        # O payload monta a linha consolidando os PROCVs automáticos obtidos da tabela auxiliar
         payload = {
-            "acao_fluxo": acao_fluxo, 
-            "Id": id_final, 
+            "acao_fluxo": acao_fluxo, "Id": id_final, 
             "Ano da Ação": int(val_ano) if val_ano else 2026, 
             "Número da Ação PNAPA": str(val_num_acao),
             "Nome da Ação PNAPA": str(val_nome_acao), 
             "Nível": nivel_selecionado, 
-            "Nome da Atividade": nome_atividade, 
-            "Andamento": andamento,
-            "Indicador": str(val_indicador), 
-            "Meta_Indicador": meta_indicador, 
-            "Resultado_Indicador": resultado_indicador,
-            "Doc_Probatorio_Exec": doc_probatorio, 
-            "UF_Acao_PNAPA": uf_acao, 
-            "Importância da Atividade": importancia,
-            "Tema da Atividade": tema, 
-            "Objetivo da Atividade": objetivo, 
-            "Tipo de Atividade": tipo_atividade,
-            "Periculosidade/Insalubridade": periculosidade, 
-            "Servidor": servidor, 
-            "UF_Servidor": uf_servidor,
-            "Lotação": lotacao, 
-            "Faz parte da Equipe de Emergências": equipe_emergencia, 
-            "Número da PCDP": num_pcdp,
-            "País": pais, 
-            "UF Onde Ocorreu/Ocorrerá a Ação": uf_ocorrencia, 
-            "Estado_Local_Acao": estado_local,
-            "Municipio Onde Ocorreu/Ocorrerá a Ação": municipio, 
-            "Data de Início": str(dt_inicio), 
-            "Data de Término": str(dt_termino),
-            "Dias_Gastos_Plan": dias_plan, 
-            "Dias_Gastos_Exec": dias_exec, 
-            "Origem do Recurso": origem_recurso,
-            "Rec_Plan_Diarias": rec_p_diarias, 
-            "Rec_Plan_Passagens": rec_p_passagens, 
-            "Rec_Plan_Outras_Despesas": rec_p_outras,
-            "Rec_Plan_Total": total_plan, 
-            "Rec_Exec_Diarias": rec_e_diarias, 
-            "Rec_Exec_Passagens": rec_e_passagens,
-            "Rec_Exec_Outras_Despesas": rec_e_outras, 
-            "Rec_Exec_Total": total_exec, 
-            "Observações": obs, 
-            "Justificativa_Acao_PNAPA": justificativa
+            "Nome da Atividade": nome_atividade, "Andamento": andamento,
+            "Indicador": str(val_indicador), "Meta_Indicador": meta_indicador, "Resultado_Indicador": resultado_indicador,
+            "Doc_Probatorio_Exec": doc_probatorio, "UF_Acao_PNAPA": uf_acao, "Importância da Atividade": importancia,
+            "Tema da Atividade": tema, "Objetivo da Atividade": objetivo, "Tipo de Atividade": tipo_atividade,
+            "Periculosidade/Insalubridade": periculosidade, "Servidor": servidor, "UF_Servidor": uf_servidor,
+            "Lotação": lotacao, "Faz parte da Equipe de Emergências": equipe_emergencia, "Número da PCDP": num_pcdp,
+            "País": pais, "UF Onde Ocorreu/Ocorrerá a Ação": uf_ocorrencia, "Estado_Local_Acao": estado_local,
+            "Municipio Onde Ocorreu/Ocorrerá a Ação": municipio, "Data de Início": str(dt_inicio), "Data de Término": str(dt_termino),
+            "Dias_Gastos_Plan": dias_plan, "Dias_Gastos_Exec": dias_exec, "Origem do Recurso": origem_recurso,
+            "Rec_Plan_Diarias": rec_p_diarias, "Rec_Plan_Passagens": rec_p_passagens, "Rec_Plan_Outras_Despesas": rec_p_outras,
+            "Rec_Plan_Total": total_plan, "Rec_Exec_Diarias": rec_e_diarias, "Rec_Exec_Passagens": rec_e_passagens,
+            "Rec_Exec_Outras_Despesas": rec_e_outras, "Rec_Exec_Total": total_exec, "Observações": obs, "Justificativa_Acao_PNAPA": justificativa
         }
 
         with st.spinner("Sincronizando com a nuvem do IBAMA..."):
