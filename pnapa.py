@@ -496,11 +496,18 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
             try:
                 resposta = requests.post(URL_GRAVAR, json=payload, timeout=20)
                 if resposta.status_code in [200, 202]:
-                    st.success(f"🎉 Registro {id_final} enviado ao SharePoint!")
-                    time.sleep(2)
-                    st.cache_data.clear()
-                    if "df" in st.session_state: del st.session_state.df
-                    st.rerun()
+                    # 1. Garante uma animação curta enquanto o SharePoint grava o dado fisicamente
+                    with st.spinner("Consolidando dados no SharePoint..."):
+                        time.sleep(2)  # Janela de segurança essencial
+                        st.cache_data.clear()  # Limpa os caches de funções do Streamlit
+                        
+                        # 2. Destrói o estado antigo da planilha macro para forçar a releitura do zero
+                        if "df" in st.session_state:
+                            del st.session_state.df
+                    
+                    st.success(f"🎉 Registro {id_final} enviado e atualizado com sucesso!")
+                    time.sleep(1) # Tempo para o usuário ler a mensagem de sucesso
+                    st.rerun()  # Recarrega o app forçando o acionamento do webhook 'Ler'
                 else:
                     st.error(f"❌ Erro no Power Automate: Status {resposta.status_code}")
             except Exception as e:
