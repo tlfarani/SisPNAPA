@@ -662,53 +662,81 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
 
     with tp_edit:
         if not df_pnapas.empty:
-            lista_selecao_pna = (df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()
-            sel_pnapa_str = st.selectbox("Selecione a Ação que deseja editar:", lista_selecao_pna, key="pna_edit_sel")
+            st.markdown("### 📝 Filtrar e Editar Ação")
             
-            acao_ano_sel = sel_pnapa_str.split(" - ")[0]
-            dados_atuais_p = df_pnapas[df_pnapas["Acao_Ano"].astype(str) == acao_ano_sel].iloc[0]
-            id_pnapa_edit = int(float(dados_atuais_p["ID_PNAPA"]))
+            # --- NOVO FILTRO DE ANO PARA EDIÇÃO ---
+            anos_disponiveis_edit = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
+            ano_selecionado_edit = st.selectbox("1. Filtrar Ações pelo Ano:", anos_disponiveis_edit, key="pna_ed_filtro_ano")
             
-            col_pe1, col_pe2 = st.columns(2)
-            with col_pe1:
-                ed_nome_completo = st.text_input("Alterar Nome Completo:", value=str(dados_atuais_p.get("Nome_Acao_Completo", "")), key="pna_ed_comp")
-                ed_nome_apelido = st.text_input("Alterar Nome Apelido:", value=str(dados_atuais_p.get("Nome_Acao_Apelido", "")), key="pna_ed_apel")
-            with col_pe2:
-                idx_imp = 0 if str(dados_atuais_p.get("Importância", "")) == "Ordinária" else 1
-                ed_importancia = st.selectbox("Alterar Importância:", ["Ordinária", "Estratégica"], index=idx_imp, key="pna_ed_imp")
-                ed_indicador = st.text_input("Alterar Indicador:", value=str(dados_atuais_p.get("Indicador", "")), key="pna_ed_ind")
+            # Filtra o DataFrame de PNAPAs pelo ano escolhido antes de montar o dropdown de seleção
+            df_pnapas_filtrado_edit = df_pnapas[df_pnapas["Ano"].astype(int) == ano_selecionado_edit]
+            
+            if not df_pnapas_filtrado_edit.empty:
+                lista_selecao_pna = (df_pnapas_filtrado_edit["Acao_Ano"].astype(str) + " - " + df_pnapas_filtrado_edit["Nome_Acao_Apelido"].astype(str)).tolist()
+                sel_pnapa_str = st.selectbox("2. Selecione a Ação que deseja editar:", lista_selecao_pna, key="pna_edit_sel")
                 
-            if st.button("Salvar Modificações DA Ação"):
-                payload_editar_pna = {
-                    "Acao": "Editar",
-                    "ID_PNAPA": id_pnapa_edit,
-                    "Ano": int(dados_atuais_p["Ano"]),
-                    "Num_Acao_PNAPA": str(dados_atuais_p["Num_Acao_PNAPA"]), # <- Forçado para String
-                    "Acao_Ano": acao_ano_sel,
-                    "Nome_Acao_Completo": ed_nome_completo,
-                    "Nome_Acao_Apelido": ed_nome_apelido,
-                    "Importância": ed_importancia,
-                    "Indicador": ed_indicador
-                }
-                with st.spinner("Atualizando dados no SharePoint..."):
-                    executar_api_pnapas(payload_editar_pna)
-                    time.sleep(2)
-                    st.cache_data.clear()
-                st.success(f"🚀 Ação {acao_ano_sel} atualizada com sucesso!")
-                st.rerun()
+                acao_ano_sel = sel_pnapa_str.split(" - ")[0]
+                dados_atuais_p = df_pnapas_filtrado_edit[df_pnapas_filtrado_edit["Acao_Ano"].astype(str) == acao_ano_sel].iloc[0]
+                id_pnapa_edit = int(float(dados_atuais_p["ID_PNAPA"]))
+                
+                col_pe1, col_pe2 = st.columns(2)
+                with col_pe1:
+                    ed_nome_completo = st.text_input("Alterar Nome Completo:", value=str(dados_atuais_p.get("Nome_Acao_Completo", "")), key="pna_ed_comp")
+                    ed_nome_apelido = st.text_input("Alterar Nome Apelido:", value=str(dados_atuais_p.get("Nome_Acao_Apelido", "")), key="pna_ed_apel")
+                with col_pe2:
+                    idx_imp = 0 if str(dados_atuais_p.get("Importância", "")) == "Ordinária" else 1
+                    ed_importancia = st.selectbox("Alterar Importância:", ["Ordinária", "Estratégica"], index=idx_imp, key="pna_ed_imp")
+                    ed_indicador = st.text_input("Alterar Indicador:", value=str(dados_atuais_p.get("Indicador", "")), key="pna_ed_ind")
+                    
+                if st.button("Salvar Modificações da Ação"):
+                    payload_editar_pna = {
+                        "Acao": "Editar",
+                        "ID_PNAPA": id_pnapa_edit,
+                        "Ano": int(dados_atuais_p["Ano"]),
+                        "Num_Acao_PNAPA": str(dados_atuais_p["Num_Acao_PNAPA"]),
+                        "Acao_Ano": acao_ano_sel,
+                        "Nome_Acao_Completo": ed_nome_completo,
+                        "Nome_Acao_Apelido": ed_nome_apelido,
+                        "Importância": ed_importancia,
+                        "Indicador": ed_indicador
+                    }
+                    with st.spinner("Atualizando dados no SharePoint..."):
+                        executar_api_pnapas(payload_editar_pna)
+                        time.sleep(2)
+                        st.cache_data.clear()
+                    st.success(f"🚀 Ação {acao_ano_sel} atualizada com sucesso!")
+                    st.rerun()
+            else:
+                st.warning(f"Nenhuma ação cadastrada para o ano de {ano_selecionado_edit}.")
+        else:
+            st.info("Nenhuma ação disponível para edição.")
 
     with tp_del:
         if not df_pnapas.empty:
-            lista_del_pna = (df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()
-            del_pnapa_str = st.selectbox("Selecione a Ação para REMOVER:", lista_del_pna, key="pna_del_sel")
+            st.markdown("### 🗑️ Filtrar e Remover Ação")
             
-            acao_ano_del = del_pnapa_str.split(" - ")[0]
-            id_pnapa_del = int(float(df_pnapas[df_pnapas["Acao_Ano"].astype(str) == acao_ano_del]["ID_PNAPA"].iloc[0]))
+            # --- NOVO FILTRO DE ANO PARA EXCLUSÃO ---
+            anos_disponiveis_del = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
+            ano_selecionado_del = st.selectbox("1. Filtrar Ações pelo Ano:", anos_disponiveis_del, key="pna_del_filtro_ano")
             
-            if st.button("❌ Eliminar Ação", disabled=not st.checkbox(f"Confirmo que desejo excluir permanentemente a ação {acao_ano_del}", key="chk_pna_del")):
-                with st.spinner("Removendo do SharePoint..."):
-                    executar_api_pnapas({"Acao": "Excluir", "ID_PNAPA": id_pnapa_del})
-                    time.sleep(2)
-                    st.cache_data.clear()
-                st.success(f"Ação {acao_ano_del} removida com sucesso!")
-                st.rerun()
+            # Filtra o DataFrame de PNAPAs pelo ano escolhido antes de montar o dropdown de remoção
+            df_pnapas_filtrado_del = df_pnapas[df_pnapas["Ano"].astype(int) == ano_selecionado_del]
+            
+            if not df_pnapas_filtrado_del.empty:
+                lista_del_pna = (df_pnapas_filtrado_del["Acao_Ano"].astype(str) + " - " + df_pnapas_filtrado_del["Nome_Acao_Apelido"].astype(str)).tolist()
+                del_pnapa_str = st.selectbox("2. Selecione a Ação para REMOVER:", lista_del_pna, key="pna_del_sel")
+                
+                acao_ano_del = del_pnapa_str.split(" - ")[0]
+                id_pnapa_del = int(float(df_pnapas_filtrado_del[df_pnapas_filtrado_del["Acao_Ano"].astype(str) == acao_ano_del]["ID_PNAPA"].iloc[0]))
+                
+                if st.button("❌ Eliminar Ação", disabled=not st.checkbox(f"Confirmo que desejo excluir permanentemente a ação {acao_ano_del}", key="chk_pna_del")):
+                    with st.spinner("Removendo do SharePoint..."):
+                        executar_api_pnapas({"Acao": "Excluir", "ID_PNAPA": id_pnapa_del})
+                        time.sleep(2)
+                        st.cache_data.clear()
+                    st.success(f"Ação {acao_ano_del} removida com sucesso!")
+                    st.rerun()
+            else:
+                st.warning(f"Nenhuma ação cadastrada para o ano de {ano_selecionado_del}.")
+        else:
+            st.info("Nenhuma ação disponível para exclusão.")
