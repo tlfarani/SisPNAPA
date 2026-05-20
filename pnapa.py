@@ -625,26 +625,28 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             p_ano = st.number_input("Ano da Ação PNAPA:", min_value=2020, max_value=2100, value=2026, step=1, key="pna_ins_ano")
-            p_num = st.number_input("Número da Ação PNAPA:", min_value=1, max_value=99999, value=1, step=1, key="pna_ins_num")
+            # --- MODIFICADO PARA TEXTO LIVRE ---
+            p_num = st.text_input("Número da Ação PNAPA:", placeholder="Ex: CEN001", key="pna_ins_num").strip()
             p_importancia = st.selectbox("Importância da Ação:", ["Ordinária", "Estratégica"], key="pna_ins_imp")
         with col_p2:
             p_nome_completo = st.text_input("Nome da Ação Completo:", placeholder="Ex: Reuniões do Plano de Área do Porto de Santos", key="pna_ins_comp")
             p_nome_apelido = st.text_input("Nome da Ação Apelido (Amigável):", placeholder="Ex: Reuniões Plano de Área Santos", key="pna_ins_apel")
             p_indicador = st.text_input("Indicador Associado:", placeholder="Ex: Reuniões Atendidas", key="pna_ins_ind")
             
-        p_acao_ano = f"{int(p_num)}-{int(p_ano)}"
+        # Concatenação flexível (ex: CEN001-2026)
+        p_acao_ano = f"{p_num}-{int(p_ano)}" if p_num else f"-[{int(p_ano)}]"
         st.info(f"**Código Identificador Gerado Automaticamente (Acao_Ano):** {p_acao_ano}")
         
         if st.button("Gravar Nova Ação"):
-            if not p_nome_completo or not p_nome_apelido:
-                st.error("❌ Os campos de Nome Completo e Nome Apelido são obrigatórios.")
+            if not p_num or not p_nome_completo or not p_nome_apelido:
+                st.error("❌ Os campos de Número da Ação, Nome Completo e Nome Apelido são obrigatórios.")
             else:
                 next_id_pnapa = int(pd.to_numeric(df_pnapas["ID_PNAPA"], errors='coerce').dropna().max() + 1) if not df_pnapas.empty else 1
                 payload_novo_pna = {
                     "Acao": "Inserir",
                     "ID_PNAPA": next_id_pnapa,
                     "Ano": int(p_ano),
-                    "Num_Acao_PNAPA": int(p_num),
+                    "Num_Acao_PNAPA": str(p_num), # <- Enviado como String
                     "Acao_Ano": p_acao_ano,
                     "Nome_Acao_Completo": p_nome_completo,
                     "Nome_Acao_Apelido": p_nome_apelido,
@@ -676,12 +678,12 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 ed_importancia = st.selectbox("Alterar Importância:", ["Ordinária", "Estratégica"], index=idx_imp, key="pna_ed_imp")
                 ed_indicador = st.text_input("Alterar Indicador:", value=str(dados_atuais_p.get("Indicador", "")), key="pna_ed_ind")
                 
-            if st.button("Salvar Modificações da Ação"):
+            if st.button("Salvar Modificações DA Ação"):
                 payload_editar_pna = {
                     "Acao": "Editar",
                     "ID_PNAPA": id_pnapa_edit,
                     "Ano": int(dados_atuais_p["Ano"]),
-                    "Num_Acao_PNAPA": int(dados_atuais_p["Num_Acao_PNAPA"]),
+                    "Num_Acao_PNAPA": str(dados_atuais_p["Num_Acao_PNAPA"]), # <- Forçado para String
                     "Acao_Ano": acao_ano_sel,
                     "Nome_Acao_Completo": ed_nome_completo,
                     "Nome_Acao_Apelido": ed_nome_apelido,
