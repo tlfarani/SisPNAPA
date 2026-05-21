@@ -502,21 +502,26 @@ if modo == "📊 Visualizar Base":
             # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PRESERVAÇÃO E FOCO) ---
             if submeter_alteracao:
                 payloads_envio_final = []
-                ids_salvos_fluxo = [] # Guarda os IDs afetados para dar o zoom visual posterior
+                ids_salvos_fluxo = []  # Guarda os IDs afetados para dar o zoom visual posterior
                 
                 for _, row_orig in df_linhas_selecionadas.iterrows():
                     id_alvo_loop = str(row_orig["Id"])
                     ids_salvos_fluxo.append(id_alvo_loop)
                     
+                    # Reconstrói a base do payload garantindo tipos primitivos limpos
                     p_final = {col: row_orig[col] for col in df_exibicao.columns if col in row_orig}
                     p_final["acao_fluxo"] = "editar"
                     p_final["Id"] = str(id_alvo_loop)
+                    p_final["Ano da Ação"] = int(v_ano) if v_ano else int(pd.to_numeric(row_orig.get("Ano da Ação"), errors='coerce') or 2026)
+                    p_final["Número da Ação PNAPA"] = str(v_num) if v_num else str(row_orig.get("Número da Ação PNAPA", ""))
+                    p_final["Nome da Ação PNAPA"] = str(v_nome) if v_nome else str(row_orig.get("Nome da Ação PNAPA", ""))
+                    p_final["Indicador"] = str(v_ind) if v_ind else str(row_orig.get("Indicador", ""))
                     
-                    # [Toda a sua árvore de ifs estruturada de injeção e data permanece intacta...]
+                    # Injeção condicional adaptativa inteligente
                     if qtd_selecionada == 1 or ed_nivel != f_nivel: p_final["Nível"] = str(ed_nivel)
                     if qtd_selecionada == 1 or (ed_nome_atv.strip() != ""): p_final["Nome da Atividade"] = str(ed_nome_atv).strip()
                     if qtd_selecionada == 1 or ed_andamento != f_andamento: p_final["Andamento"] = str(ed_andamento)
-                    if qtd_selecionada == 1 or (ed_res_ind.strip() != ""): p_final["Resultado_Indicador"] = str(ed_res_ind).strip()
+                    if qtd_selecionada == 1 or (ed_res_ind.strip() != ""): p_final["Result_Indicador"] = str(ed_res_ind).strip()
                     if qtd_selecionada == 1 or (ed_doc.strip() != ""): p_final["Doc_Probatorio_Exec"] = str(ed_doc).strip()
                     if qtd_selecionada == 1 or (ed_uf_pna.strip() != ""): p_final["UF_Acao_PNAPA"] = str(ed_uf_pna).strip()
                     if qtd_selecionada == 1 or ed_importancia != f_imp: p_final["Importância da Atividade"] = str(ed_importancia)
@@ -525,6 +530,7 @@ if modo == "📊 Visualizar Base":
                     if qtd_selecionada == 1 or (ed_tipo.strip() != ""): p_final["Tipo de Atividade"] = str(ed_tipo).strip()
                     if qtd_selecionada == 1 or ed_periculosidade != f_perigo: p_final["Periculosidade/Insalubridade"] = str(ed_periculosidade)
                     if qtd_selecionada == 1 or (ed_meta.strip() != ""): p_final["Meta_Indicador"] = str(ed_meta).strip()
+                    
                     if qtd_selecionada == 1 or (ed_servidor.strip() != ""): p_final["Servidor"] = str(ed_servidor).strip()
                     if qtd_selecionada == 1 or (ed_uf_srv.strip() != ""): p_final["UF_Servidor"] = str(ed_uf_srv).strip()
                     if qtd_selecionada == 1 or (ed_lotacao.strip() != ""): p_final["Lotação"] = str(ed_lotacao).strip()
@@ -535,8 +541,6 @@ if modo == "📊 Visualizar Base":
                     if qtd_selecionada == 1 or (ed_estado_local.strip() != ""): p_final["Estado_Local_Acao"] = str(ed_estado_local).strip()
                     if qtd_selecionada == 1 or (ed_municipio.strip() != ""): p_final["Municipio Onde Ocorreu/Ocorrerá a Ação"] = str(ed_municipio).strip()
                     
-                    if qtd_selecionada == 1 or (ed_dt_ini.strip() != ""): p_final["Data de Início"] = str(ed_dt_ini).strip()
-                    if qtd_selecionada == 1 or (ed_dt_fim.strip() != ""): p_final["Data de Término"] = str(ed_dt_fim).strip()
                     if qtd_selecionada == 1 or ed_dias_pl != 0.0: p_final["Dias_Gastos_Plan"] = float(ed_dias_pl)
                     if qtd_selecionada == 1 or ed_dias_ex != 0.0: p_final["Dias_Gastos_Exec"] = float(ed_dias_ex)
                     if qtd_selecionada == 1 or (ed_origem.strip() != ""): p_final["Origem do Recurso"] = str(ed_origem).strip()
@@ -547,35 +551,42 @@ if modo == "📊 Visualizar Base":
                     if qtd_selecionada == 1 or ed_re_p != 0.0: p_final["Rec_Exec_Passagens"] = float(ed_re_p)
                     if qtd_selecionada == 1 or ed_re_o != 0.0: p_final["Rec_Exec_Outras_Despesas"] = float(ed_re_o)
                     
+                    # 🚀 INTERPRETADOR E CONVERSOR SEGURO DE DATAS (Brasil DD/MM/AAAA -> ISO AAAA-MM-DD)
                     raw_ini = ed_dt_ini.strip() if (qtd_selecionada == 1 or ed_dt_ini.strip() != "") else str(row_orig.get("Data de Início", ""))
                     raw_fim = ed_dt_fim.strip() if (qtd_selecionada == 1 or ed_dt_fim.strip() != "") else str(row_orig.get("Data de Término", ""))
                     
-                    def normalizar_padrao_iso(data_str):
-                        data_limpa = data_str.strip()
-                        if "/" in data_limpa:
+                    def converter_para_iso_estrito(data_str):
+                        limpa = str(data_str).strip()
+                        if "/" in limpa:
                             try:
-                                d, m, a = data_limpa.split("/")
-                                return f"{a}-{m}-{d}"
+                                partes = limpa.split("/")
+                                if len(partes) == 3:
+                                    # Se veio como DD/MM/AAAA converte para AAAA-MM-DD
+                                    if len(partes[2]) == 4: return f"{partes[2]}-{partes[1]}-{partes[0]}"
+                                    # Se veio como AAAA/MM/DD ajusta o separador
+                                    if len(partes[0]) == 4: return f"{partes[0]}-{partes[1]}-{partes[2]}"
                             except: pass
-                        return data_limpa
+                        return limpa
                     
-                    p_final["Data de Início"] = normalizar_padrao_iso(raw_ini)
-                    p_final["Data de Término"] = normalizar_padrao_iso(raw_fim)
+                    p_final["Data de Início"] = converter_para_iso_estrito(raw_ini)
+                    p_final["Data de Término"] = converter_para_iso_estrito(raw_fim)
                     
+                    # 💡 FIX definitivo do NameError ocultado: ed_obs em vez do antigo ed_ed_obs
                     if qtd_selecionada == 1 or (ed_obs.strip() != ""): p_final["Observações"] = str(ed_obs).strip()
                     if qtd_selecionada == 1 or (ed_justificativa.strip() != ""): p_final["Justificativa_Acao_PNAPA"] = str(ed_justificativa).strip()
 
+                    # Recálculo matemático transparente dos totais orçamentários mesclados
                     p_final["Rec_Plan_Total"] = float(p_final.get("Rec_Plan_Diarias", 0)) + float(p_final.get("Rec_Plan_Passagens", 0)) + float(p_final.get("Rec_Plan_Outras_Despesas", 0))
                     p_final["Rec_Exec_Total"] = float(p_final.get("Rec_Exec_Diarias", 0)) + float(p_final.get("Rec_Exec_Passagens", 0)) + float(p_final.get("Rec_Exec_Outras_Despesas", 0))
                     payloads_envio_final.append(p_final)
                 
-                # Despacha e limpa o estado
+                # Despacha o lote higienizado com a tipagem aceita pelo Power Automate
                 executar_envio_sharepoint(payloads_envio_final)
                 
                 # --- MEMÓRIA PÓS-SUBMISSÃO ATIVA ---
-                st.session_state["selecoes_macro"] = {}  # Limpa os checkboxes marcados
-                st.session_state["ids_editados_recentemente"] = ids_salvos_fluxo # Salva os alvos para fixar no topo
-                st.session_state["version_editor"] += 1  # Força a destruição do cache antigo do widget
+                st.session_state["selecoes_macro"] = {}  # Reseta os checkboxes marcados
+                st.session_state["ids_editados_recentemente"] = ids_salvos_fluxo  # Fixa os itens salvos no topo
+                st.session_state["version_editor"] += 1  # Destrói o estado visual antigo do st.data_editor
                 st.rerun()
 
 # --- TELA 2 E 3: FORMULÁRIO DA PLANILHA MACRO (INSERIR OU EDITAR) ---
