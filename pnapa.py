@@ -303,9 +303,10 @@ if modo == "📊 Visualizar Base":
         # Ativa a seleção múltipla de linhas com checkboxes nativos
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # O TRUQUE: Passamos o df_exibicao puro e injetamos o estilo usando o parâmetro .style
+        # ✅ CORREÇÃO DEFINITIVA: Passamos o DataFrame PURO. 
+        # O Streamlit lida perfeitamente com a seleção múltipla se não houver .style acoplado.
         selecao = st.dataframe(
-            df_exibicao.style.apply(estilar_linhas_zebradas, axis=1),
+            df_exibicao,
             use_container_width=True,
             on_select="rerun",
             selection_mode="multiple"
@@ -334,7 +335,7 @@ if modo == "📊 Visualizar Base":
                 with st.popover("🗑️ Excluir Linhas Selecionadas", use_container_width=True):
                     st.markdown(f"<p style='color:#03170a;'>⚠️ <b>Atenção:</b> Você está prestes a apagar permanentemente os registros de ID: <b>{', '.join(ids_selecionados)}</b> no SharePoint.</p>", unsafe_allow_html=True)
                     if st.button("Sim, confirmar exclusão!", type="primary", key="btn_del_lote_tabela"):
-                        payloads_del = [{"Id": str(id_del)} for id_del in ids_selecionados] # <- Corrigido de ids_selected para ids_selecionados
+                        payloads_del = [{"Id": str(id_del)} for id_del in ids_selecionados]
                         
                         sucessos_del = 0
                         with st.spinner("Removendo registros no SharePoint..."):
