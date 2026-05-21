@@ -334,7 +334,9 @@ if modo == "📊 Visualizar Base":
         # Se o usuário marcou ou desmarcou algo, atualizamos o dicionário de sessão antes que o dado se perca
         if st.session_state.editor_lote_pnapa and "edited_rows" in st.session_state.editor_lote_pnapa:
             linhas_editadas = st.session_state.editor_lote_pnapa["edited_rows"]
-            for idx_linha, alteracao in lines_editadas.items():
+            
+            # --- CORRIGIDO AQUI: de lines_editadas para linhas_editadas ---
+            for idx_linha, alteracao in linhas_editadas.items():
                 if "Selecionar" in alteracao:
                     # Captura o ID real da linha alterada usando o índice do DataFrame interativo
                     id_real_linha = str(df_interativo.iloc[int(idx_linha)]["Id"])
