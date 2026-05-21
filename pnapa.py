@@ -37,23 +37,40 @@ COLUNAS_PNAPA = [
 # =================================================================
 def executar_envio_sharepoint(lista_payloads):
     sucessos = 0
-    with st.spinner(f"Processando e sincronizando {len(lista_payloads)} requisições com o IBAMA..."):
-        for p in lista_payloads:
+    total_requisicoes = len(lista_payloads)
+    
+    with st.spinner(f"Processando e sincronizando {total_requisicoes} requisições com o IBAMA..."):
+        for idx, p in enumerate(lista_payloads):
             try:
-                resposta = requests.post(URL_GRAVAR, json=p, timeout=20)
-                if resposta.status_code in [200, 202]: sucessos += 1
-            except: pass
+                # Se for um lote (mais de 1 item), mostra em qual linha o motor está trabalhando
+                if total_requisicoes > 1:
+                    st.caption(f"⏳ Sincronizando registro {idx + 1} de {total_requisicoes} (ID: {p.get('Id')})...")
+                
+                resposta = requests.post(URL_GRAVAR, json=p, timeout=30) # Aumentado timeout para 30s
+                
+                if resposta.status_code in [200, 202]: 
+                    sucessos += 1
+                
+                # 🚀 O SEGREDO DO LOTE: Se houver mais linhas para enviar, força um respiro de 3 segundos
+                # Isso dá tempo para o Power Automate liberar o arquivo Excel no SharePoint evitando o bloqueio por concorrência
+                if total_requisicoes > 1 and idx < (total_requisicoes - 1):
+                    time.sleep(3.0)
+                    
+            except Exception as e:
+                pass
             
     if sucessos > 0:
         with st.spinner("Consolidando alterações no banco do SharePoint..."):
-            time.sleep(2.5)
+            # Dá um respiro final maior para o cache da nuvem assentar
+            time.sleep(4.0 if total_requisicoes > 1 else 2.0) 
             st.cache_data.clear()
-            if "df" in st.session_state: del st.session_state.df
-        st.success(f"🎉 🎉 Sucesso! {sucessos} atividades cadastradas e indexadas no SharePoint!")
-        time.sleep(1)
+            if "df" in st.session_state: 
+                del st.session_state.df
+        st.success(f"🎉 🎉 Sucesso! {sucessos} de {total_requisicoes} registros foram processados e indexados com sucesso!")
+        time.sleep(1.5)
         st.rerun()
     else:
-        st.error("❌ Falha crítica: O Power Automate rejeitou a carga em lote.")
+        st.error("❌ Falha crítica: O SharePoint rejeitou a rajada de carga ou o arquivo estava bloqueado para edição.")
 
 def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, importancia, tema, objective, tipo_atividade, periculosidade, servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual):
     id_final = str(int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1)) if modo == "➕ Inserir Nova Linha" else id_atual
