@@ -506,74 +506,106 @@ if modo == "📊 Visualizar Base":
 
                 submeter_alteracao = st.form_submit_button(label="💾 Gravar Alterações no SharePoint")
 
-            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO ---
+            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PRESERVAÇÃO TOTAL) ---
             if submeter_alteracao:
                 payloads_envio_final = []
                 
-                # Mapeia chaves que o usuário digitou no lote para fazer a mesclagem condicional
                 for _, row_orig in df_linhas_selecionadas.iterrows():
                     id_alvo_loop = str(row_orig["Id"])
                     
-                    # Se for lote (qtd > 1), só substitui o valor se o campo correspondente foi modificado/preenchido
-                    p_final = {
-                        "acao_fluxo": "editar",
-                        "Id": id_alvo_loop,
-                        "Ano da Ação": int(v_ano) if v_ano else 2026,
-                        "Número da Ação PNAPA": str(v_num),
-                        "Nome da Ação PNAPA": str(v_nome),
-                        "Indicador": str(v_ind),
-                        
-                        # Atributos Reativos Inteligentes (Mesclagem Direta)
-                        "Nível": ed_nivel if (qtd_selecionada == 1 or ed_nivel != f_nivel) else row_orig["Nível"],
-                        "Nome da Atividade": ed_nome_atv if (qtd_selecionada == 1 or ed_nome_atv != "") else row_orig["Nome da Atividade"],
-                        "Andamento": ed_andamento if (qtd_selecionada == 1 or ed_andamento != f_andamento) else row_orig["Andamento"],
-                        "Resultado_Indicador": ed_res_ind if (qtd_selecionada == 1 or ed_res_ind != "") else row_orig["Resultado_Indicador"],
-                        "Doc_Probatorio_Exec": ed_doc if (qtd_selecionada == 1 or ed_doc != "") else row_orig["Doc_Probatorio_Exec"],
-                        "UF_Acao_PNAPA": ed_uf_pna if (qtd_selecionada == 1 or ed_uf_pna != "") else row_orig["UF_Acao_PNAPA"],
-                        "Importância da Atividade": ed_importancia if (qtd_selecionada == 1 or ed_importancia != f_imp) else row_orig["Importância da Atividade"],
-                        "Tema da Atividade": ed_tema if (qtd_selecionada == 1 or ed_tema != "") else row_orig["Tema da Atividade"],
-                        "Objetivo da Atividade": ed_objetivo if (qtd_selecionada == 1 or ed_objetivo != "") else row_orig["Objetivo da Atividade"],
-                        "Tipo de Atividade": ed_tipo if (qtd_selecionada == 1 or ed_tipo != "") else row_orig["Tipo de Atividade"],
-                        "Periculosidade/Insalubridade": ed_periculosidade if (qtd_selecionada == 1 or ed_periculosidade != f_perigo) else row_orig["Periculosidade/Insalubridade"],
-                        "Meta_Indicador": ed_meta if (qtd_selecionada == 1 or ed_meta != "") else row_orig["Meta_Indicador"],
-                        
-                        # RH e Local
-                        "Servidor": ed_servidor if (qtd_selecionada == 1 or ed_servidor != "") else row_orig["Servidor"],
-                        "UF_Servidor": ed_uf_srv if (qtd_selecionada == 1 or ed_uf_srv != "") else row_orig["UF_Servidor"],
-                        "Lotação": ed_lotacao if (qtd_selecionada == 1 or ed_lotacao != "") else row_orig["Lotação"],
-                        "Faz parte da Equipe de Emergências": ed_eq_emergencia if (qtd_selecionada == 1 or ed_eq_emergencia != f_eq_emerg) else row_orig["Faz parte da Equipe de Emergências"],
-                        "Número da PCDP": ed_pcdp if (qtd_selecionada == 1 or ed_pcdp != "") else row_orig["Número da PCDP"],
-                        "País": ed_pais if (qtd_selecionada == 1 or ed_pais != "Brasil") else row_orig["País"],
-                        "UF Onde Ocorreu/Ocorrerá a Ação": ed_uf_oc if (qtd_selecionada == 1 or ed_uf_oc != "") else row_orig["UF Onde Ocorreu/Ocorrerá a Ação"],
-                        "Estado_Local_Acao": ed_estado_local if (qtd_selecionada == 1 or ed_estado_local != "") else row_orig["Estado_Local_Acao"],
-                        "Municipio Onde Ocorreu/Ocorrerá a Ação": ed_municipio if (qtd_selecionada == 1 or ed_municipio != "") else row_orig["Municipio Onde Ocorreu/Ocorrerá a Ação"],
-                        
-                        # Cronograma e Custos
-                        "Data de Início": ed_dt_ini if (qtd_selecionada == 1 or ed_dt_ini != "") else row_orig["Data de Início"],
-                        "Data de Término": ed_dt_fim if (qtd_selecionada == 1 or ed_dt_fim != "") else row_orig["Data de Término"],
-                        "Dias_Gastos_Plan": ed_dias_pl if (qtd_selecionada == 1 or ed_dias_pl != 0.0) else row_orig["Dias_Gastos_Plan"],
-                        "Dias_Gastos_Exec": ed_dias_ex if (qtd_selecionada == 1 or ed_dias_ex != 0.0) else row_orig["Dias_Gastos_Exec"],
-                        "Origem do Recurso": ed_origem if (qtd_selecionada == 1 or ed_origem != "") else row_orig["Origem do Recurso"],
-                        
-                        "Rec_Plan_Diarias": ed_rp_d if (qtd_selecionada == 1 or ed_rp_d != 0.0) else row_orig["Rec_Plan_Diarias"],
-                        "Rec_Plan_Passagens": ed_rp_p if (qtd_selecionada == 1 or ed_rp_p != 0.0) else row_orig["Rec_Plan_Passagens"],
-                        "Rec_Plan_Outras_Despesas": ed_rp_o if (qtd_selecionada == 1 or ed_rp_o != 0.0) else row_orig["Rec_Plan_Outras_Despesas"],
-                        "Rec_Exec_Diarias": ed_re_d if (qtd_selecionada == 1 or ed_re_d != 0.0) else row_orig["Rec_Exec_Diarias"],
-                        "Rec_Exec_Passagens": ed_re_p if (qtd_selecionada == 1 or ed_re_p != 0.0) else row_orig["Rec_Exec_Passagens"],
-                        "Rec_Exec_Outras_Despesas": ed_re_o if (qtd_selecionada == 1 or ed_re_o != 0.0) else row_orig["Rec_Exec_Outras_Despesas"],
-                        
-                        "Observações": ed_ed_obs if (qtd_selecionada == 1 or ed_obs != "") else row_orig["Observações"],
-                        "Justificativa_Acao_PNAPA": ed_justificativa if (qtd_selecionada == 1 or ed_justificativa != "") else row_orig["Justificativa_Acao_PNAPA"]
-                    }
+                    # 1. Cria uma cópia exata de todos os valores atuais que já existem no SharePoint para esta linha
+                    p_final = {col: row_orig[col] for col in df_exibicao.columns if col in row_orig}
                     
-                    # Calcula as somas dinâmicas baseadas na mesclagem resultante
-                    p_final["Rec_Plan_Total"] = float(p_final["Rec_Plan_Diarias"]) + float(p_final["Rec_Plan_Passagens"]) + float(p_final["Rec_Plan_Outras_Despesas"])
-                    p_final["Rec_Exec_Total"] = float(p_final["Rec_Exec_Diarias"]) + float(p_final["Rec_Exec_Passagens"]) + float(p_final["Rec_Exec_Outras_Despesas"])
+                    # Força as diretrizes fixas do fluxo de edição
+                    p_final["acao_fluxo"] = "editar"
+                    p_final["Id"] = str(id_alvo_loop)
+                    
+                    # 2. SEÇÃO DE INJEÇÃO INTELIGENTE (Substitui apenas se houver preenchimento/mudança)
+                    if qtd_selecionada == 1 or ed_nivel != f_nivel: 
+                        p_final["Nível"] = str(ed_nivel)
+                    if qtd_selecionada == 1 or (ed_nome_atv.strip() != ""): 
+                        p_final["Nome da Atividade"] = str(ed_nome_atv).strip()
+                    if qtd_selecionada == 1 or ed_andamento != f_andamento: 
+                        p_final["Andamento"] = str(ed_andamento)
+                    if qtd_selecionada == 1 or (ed_res_ind.strip() != ""): 
+                        p_final["Resultado_Indicador"] = str(ed_res_ind).strip()
+                    if qtd_selecionada == 1 or (ed_doc.strip() != ""): 
+                        p_final["Doc_Probatorio_Exec"] = str(ed_doc).strip()
+                    if qtd_selecionada == 1 or (ed_uf_pna.strip() != ""): 
+                        p_final["UF_Acao_PNAPA"] = str(ed_uf_pna).strip()
+                    if qtd_selecionada == 1 or ed_importancia != f_imp: 
+                        p_final["Importância da Atividade"] = str(ed_importancia)
+                    if qtd_selecionada == 1 or (ed_tema.strip() != ""): 
+                        p_final["Tema da Atividade"] = str(ed_tema).strip()
+                    if qtd_selecionada == 1 or (ed_objetivo.strip() != ""): 
+                        p_final["Objetivo da Atividade"] = str(ed_objetivo).strip()
+                    if qtd_selecionada == 1 or (ed_tipo.strip() != ""): 
+                        p_final["Tipo de Atividade"] = str(ed_tipo).strip()
+                    if qtd_selecionada == 1 or ed_periculosidade != f_perigo: 
+                        p_final["Periculosidade/Insalubridade"] = str(ed_periculosidade)
+                    if qtd_selecionada == 1 or (ed_meta.strip() != ""): 
+                        p_final["Meta_Indicador"] = str(ed_meta).strip()
+                    
+                    # RH e Localização
+                    if qtd_selecionada == 1 or (ed_servidor.strip() != ""): 
+                        p_final["Servidor"] = str(ed_servidor).strip()
+                    if qtd_selecionada == 1 or (ed_uf_srv.strip() != ""): 
+                        p_final["UF_Servidor"] = str(ed_uf_srv).strip()
+                    if qtd_selecionada == 1 or (ed_lotacao.strip() != ""): 
+                        p_final["Lotação"] = str(ed_lotacao).strip()
+                    if qtd_selecionada == 1 or ed_eq_emergencia != ("Sim" if f_eq_emerg == "Sim" else "Não"): 
+                        p_final["Faz parte da Equipe de Emergências"] = str(ed_eq_emergencia)
+                    if qtd_selecionada == 1 or (ed_pcdp.strip() != ""): 
+                        p_final["Número da PCDP"] = str(ed_pcdp).strip()
+                    if qtd_selecionada == 1 or (ed_pais.strip() != "Brasil" and ed_pais.strip() != ""): 
+                        p_final["País"] = str(ed_pais).strip()
+                    if qtd_selecionada == 1 or (ed_uf_oc.strip() != ""): 
+                        p_final["UF Onde Ocorreu/Ocorrerá a Ação"] = str(ed_uf_oc).strip()
+                    if qtd_selecionada == 1 or (ed_estado_local.strip() != ""): 
+                        p_final["Estado_Local_Acao"] = str(ed_estado_local).strip()
+                    if qtd_selecionada == 1 or (ed_municipio.strip() != ""): 
+                        p_final["Municipio Onde Ocorreu/Ocorrerá a Ação"] = str(ed_municipio).strip()
+                    
+                    # Cronograma e Custos (Campos de data e numéricos)
+                    if qtd_selecionada == 1 or (ed_dt_ini.strip() != ""): 
+                        p_final["Data de Início"] = str(ed_dt_ini).strip()
+                    if qtd_selecionada == 1 or (ed_dt_fim.strip() != ""): 
+                        p_final["Data de Término"] = str(ed_dt_fim).strip()
+                    if qtd_selecionada == 1 or ed_dias_pl != 0.0: 
+                        p_final["Dias_Gastos_Plan"] = float(ed_dias_pl)
+                    if qtd_selecionada == 1 or ed_dias_ex != 0.0: 
+                        p_final["Dias_Gastos_Exec"] = float(ed_dias_ex)
+                    if qtd_selecionada == 1 or (ed_origem.strip() != ""): 
+                        p_final["Origem do Recurso"] = str(ed_origem).strip()
+                    
+                    if qtd_selecionada == 1 or ed_rp_d != 0.0: 
+                        p_final["Rec_Plan_Diarias"] = float(ed_rp_d)
+                    if qtd_selecionada == 1 or ed_rp_p != 0.0: 
+                        p_final["Rec_Plan_Passagens"] = float(ed_rp_p)
+                    if qtd_selecionada == 1 or ed_rp_o != 0.0: 
+                        p_final["Rec_Plan_Outras_Despesas"] = float(ed_rp_o)
+                    if qtd_selecionada == 1 or ed_re_d != 0.0: 
+                        p_final["Rec_Exec_Diarias"] = float(ed_re_d)
+                    if qtd_selecionada == 1 or ed_re_p != 0.0: 
+                        p_final["Rec_Exec_Passagens"] = float(ed_re_p)
+                    if qtd_selecionada == 1 or ed_re_o != 0.0: 
+                        p_final["Rec_Exec_Outras_Despesas"] = float(ed_re_o)
+                    
+                    # Justificativas
+                    if qtd_selecionada == 1 or (ed_obs.strip() != ""): 
+                        p_final["Observações"] = str(ed_obs).strip()
+                    if qtd_selecionada == 1 or (ed_justificativa.strip() != ""): 
+                        p_final["Justificativa_Acao_PNAPA"] = str(ed_justificativa).strip()
+
+                    # 3. Recalcula as somas orçamentárias de forma limpa baseada no resultado da mesclagem
+                    p_final["Rec_Plan_Total"] = float(p_final.get("Rec_Plan_Diarias", 0)) + float(p_final.get("Rec_Plan_Passagens", 0)) + float(p_final.get("Rec_Plan_Outras_Despesas", 0))
+                    p_final["Rec_Exec_Total"] = float(p_final.get("Rec_Exec_Diarias", 0)) + float(p_final.get("Rec_Exec_Passagens", 0)) + float(p_final.get("Rec_Exec_Outras_Despesas", 0))
+                    
                     payloads_envio_final.append(p_final)
                 
-                # Executa a rajada de atualização via API reaproveitando a função genérica estável
+                # Despacha o lote seguro e mesclado
                 executar_envio_sharepoint(payloads_envio_final)
-                st.session_state["selecoes_macro"] = {}  # Limpa a memória de checkboxes
+                st.session_state["selecoes_macro"] = {}
 
 # --- TELA 2 E 3: FORMULÁRIO DA PLANILHA MACRO (INSERIR OU EDITAR) ---
 elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
