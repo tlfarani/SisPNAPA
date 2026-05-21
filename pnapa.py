@@ -299,10 +299,45 @@ if modo == "📊 Visualizar Base":
         st.markdown("<br>", unsafe_allow_html=True)
         def estilar_linhas_zebradas(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
         
-        # --- 🧠 MEMÓRIA DE SELEÇÃO E CONTROLE DE LOOP ---
+        # --- 🧠 MEMÓRIA DE SELEÇÃO E CONTROLE DE RESET ---
         if "selecoes_macro" not in st.session_state:
             st.session_state["selecoes_macro"] = {}
+        if "version_editor" not in st.session_state:
+            st.session_state["version_editor"] = 0
 
+        # --- 🎛️ BOTÃO DINÂMICO PARA DESMARCAR TODOS ---
+        # Só mostra o botão se houver de fato algum item marcado na memória
+        ids_marcados_check = [k for k, v in st.session_state["selecoes_macro"].items() if v]
+        if ids_marcados_check:
+            if st.button("✕ Desmarcar Todos os Itens", type="secondary", use_container_width=False):
+                st.session_state["selecoes_macro"] = {}
+                st.session_state["version_editor"] += 1  # Força o reset visual do data_editor
+                st.rerun()
+
+        # --- 📊 ORDENAÇÃO DECRESCENTE POR ID ---
+        df_interativo = df_exibicao.copy()
+        # Converte temporariamente para numérico para ordenar matematicamente (ex: 100 acima de 99)
+        df_interativo["Id_Numeric"] = pd.to_numeric(df_interativo["Id"], errors='coerce').fillna(0)
+        df_interativo = df_interativo.sort_values(by="Id_Numeric", ascending=False).drop(columns=["Id_Numeric"]).reset_index(drop=True)
+        
+        # Injeta os estados booleanos gravados na coluna visível do editor
+        df_interativo.insert(
+            0, 
+            "Selecionar", 
+            [st.session_state["selecoes_macro"].get(str(row_id), False) for row_id in df_interativo["Id"]]
+        )
+        
+        colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
+        
+        # Renderiza a tabela única interativa com a key dinâmica da versão
+        key_dinamica = f"editor_lote_pnapa_v{st.session_state['version_editor']}"
+        tabela_editavel = st.data_editor(
+            df_interativo,
+            hide_index=True,
+            use_container_width=True,
+            column_config=colunas_travadas,
+            key=key_dinamica
+        )
         df_interativo = df_exibicao.copy()
         
         # Injeta os estados booleanos gravados diretamente na coluna invisível do editor
