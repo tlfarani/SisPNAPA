@@ -301,6 +301,9 @@ if modo == "📊 Visualizar Base":
         st.markdown("<br>", unsafe_allow_html=True)
         
         # Ativa a seleção múltipla de linhas com checkboxes nativos
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # O TRUQUE: Passamos o df_exibicao puro e injetamos o estilo usando o parâmetro .style
         selecao = st.dataframe(
             df_exibicao.style.apply(estilar_linhas_zebradas, axis=1),
             use_container_width=True,
@@ -308,11 +311,16 @@ if modo == "📊 Visualizar Base":
             selection_mode="multiple"
         )
         
-        # Captura os índices das linhas selecionadas
-        linhas_selecionadas_idx = selecao.selection.rows
+        # Captura de forma robusta a seleção de linhas pelo índice nativo
+        if hasattr(selecao, "selection") and selecao.selection.rows:
+            linhas_selecionadas_idx = selecao.selection.rows
+        elif isinstance(selecao, dict) and "selection" in selecao and "rows" in selecao["selection"]:
+            linhas_selecionadas_idx = selecao["selection"]["rows"]
+        else:
+            linhas_selecionadas_idx = []
         
         if linhas_selecionadas_idx:
-            # Extrai os dados reais das linhas que o usuário marcou
+            # Extrai com segurança os registros mapeados
             df_linhas_selecionadas = df_exibicao.iloc[linhas_selecionadas_idx]
             ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
             
@@ -321,15 +329,15 @@ if modo == "📊 Visualizar Base":
             
             col_b1, col_b2 = st.columns(2)
             
-            # --- 🎛️ BOTÃO 1: EXCLUSÃO EM LOTE COM MODAL POP-OVER ---
+            # --- 🎛️ ACTION 1: EXCLUSÃO COORDENADA ---
             with col_b1:
                 with st.popover("🗑️ Excluir Linhas Selecionadas", use_container_width=True):
                     st.markdown(f"<p style='color:#03170a;'>⚠️ <b>Atenção:</b> Você está prestes a apagar permanentemente os registros de ID: <b>{', '.join(ids_selecionados)}</b> no SharePoint.</p>", unsafe_allow_html=True)
                     if st.button("Sim, confirmar exclusão!", type="primary", key="btn_del_lote_tabela"):
-                        payloads_del = [{"Id": str(id_del)} for id_del in ids_selected]
-                        # Dispara a rajada para a API de exclusão
+                        payloads_del = [{"Id": str(id_del)} for id_del in ids_selecionados] # <- Corrigido de ids_selected para ids_selecionados
+                        
                         sucessos_del = 0
-                        with st.spinner("Excluindo registros no SharePoint..."):
+                        with st.spinner("Removendo registros no SharePoint..."):
                             for p_del in payloads_del:
                                 r = requests.post(URL_DELETAR, json=p_del, timeout=20)
                                 if r.status_code in [200, 202]: sucessos_del += 1
@@ -337,41 +345,37 @@ if modo == "📊 Visualizar Base":
                             st.cache_data.clear()
                             if "df" in st.session_state: del st.session_state.df
                             st.success(f"🎉 {sucessos_del} registros removidos com sucesso!")
-                            time.sleep(1)
+                            time.sleep(1.5)
                             st.rerun()
 
-            # --- 🎛️ BOTÃO 2: EDIÇÃO EM LOTE SELECIONANDO SEÇÃO ---
+            # --- 🎛️ ACTION 2: EDIÇÃO POR SEÇÕES SELECIONADAS ---
             with col_b2:
                 with st.popover("📝 Editar Seção em Lote", use_container_width=True):
                     st.markdown("### Escolha a seção para atualizar de vez:")
-                    secao_ed = st.selectbox("Qual seção deseja alterar nas linhas marcadas?", ["Andamento", "Origem do Recurso", "Observações"])
+                    secao_ed = st.selectbox("Qual seção deseja alterar nas linhas marcadas?", ["Andamento", "Origem do Recurso", "Observações"], key="sb_secao_lote")
                     
                     if secao_ed == "Andamento":
-                        novo_valor = st.selectbox("Novo status de Andamento:", ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"])
+                        novo_valor = st.selectbox("Novo status de Andamento:", ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"], key="sb_val_and_lote")
                         chave_payload = "Andamento"
                     elif secao_ed == "Origem do Recurso":
-                        novo_valor = st.text_input("Nova Origem do Recurso:")
+                        novo_valor = st.text_input("Nova Origem do Recurso:", key="txt_val_origem_lote")
                         chave_payload = "Origem do Recurso"
                     elif secao_ed == "Observações":
-                        novo_valor = st.text_area("Novas Observações:")
+                        novo_valor = st.text_area("Novas Observações:", key="txt_val_obs_lote")
                         chave_payload = "Observações"
                         
                     if st.button("Aplicar Alteração em Lote", type="primary", use_container_width=True):
                         payloads_edit_lote = []
                         
-                        # Varre cada linha selecionada para montar o payload completo mantendo o resto intacto
                         for _, row_original in df_linhas_selecionadas.iterrows():
-                            # Monta o dicionário espelhando a linha original
                             p_edit = {col: row_original[col] for col in df_exibicao.columns if col in row_original}
                             p_edit["acao_fluxo"] = "editar"
                             p_edit["Id"] = str(row_original["Id"])
-                            # Injeta o valor modificado da seção escolhida
                             p_edit[chave_payload] = novo_valor
                             payloads_edit_lote.append(p_edit)
                             
-                        # Dispara para o Power Automate (URL_GRAVAR na ramificação de edição)
                         sucessos_edit = 0
-                        with st.spinner("Atualizando registros..."):
+                        with st.spinner("Atualizando registros no SharePoint..."):
                             for p_ed in payloads_edit_lote:
                                 r = requests.post(URL_GRAVAR, json=p_ed, timeout=20)
                                 if r.status_code in [200, 202]: sucessos_edit += 1
@@ -379,7 +383,7 @@ if modo == "📊 Visualizar Base":
                             st.cache_data.clear()
                             if "df" in st.session_state: del st.session_state.df
                             st.success(f"🎉 {sucessos_edit} registros atualizados com sucesso!")
-                            time.sleep(1)
+                            time.sleep(1.5)
                             st.rerun()
 
 # --- TELA 2 E 3: FORMULÁRIO DA PLANILHA MACRO (INSERIR OU EDITAR) ---
