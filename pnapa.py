@@ -10,41 +10,11 @@ st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
 # 1. ENDPOINTS DO POWER AUTOMATE & CREDENCIAIS (SHAREPOINT)
 # =================================================================
 # URLs das tabelas auxiliares (Gerenciamento de Infraestrutura)
-URL_FLOW_UNIDADES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c2207ed01bf64853a477e7b6b165c3e8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=GR6JhJzrEZTapCOAKwlY9VGzT_g-6xQGBG7YLraG6Z4" 
+URL_FLOW_UNIDADES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c2207ed01bf64853a477e7b6b165c3e8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=GR6JhJzrEZTapCOAKwlY9VGzT_g-6xQGBG7YLraG6Z4"
 URL_FLOW_EQUIPES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3d124cc6783845e1b8618cfb3302eca0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ubTQ-LAIsToMOX0CGytlI2YM_WKmC_mRT64ybRLBRSY"
 URL_FLOW_PNAPAS = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/38cc92ea33ba4d6387b924d6eac62d58/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=LlCDUzrETHyXxp_QLte1eGxKR_4LuwRGzPJbgUsHvgk"
 
-def executar_envio_sharepoint(lista_payloads):
-    sucessos = 0
-    with st.spinner(f"Processando e sincronizando {len(lista_payloads)} requisições com o IBAMA..."):
-        for p in lista_payloads:
-            try:
-                resposta = requests.post(URL_GRAVAR, json=p, timeout=20)
-                if resposta.status_code in [200, 202]: sucessos += 1
-            except: pass
-            
-    if sucessos > 0:
-        with st.spinner("Consolidando alterações no banco do SharePoint..."):
-            time.sleep(2.5) # Respiro ligeiramente maior para o lote assíncrono fixar no Excel
-            st.cache_data.clear()
-            if "df" in st.session_state: del st.session_state.df
-        st.success(f"🎉 🎉 Sucesso! {sucessos} atividades cadastradas e indexadas no SharePoint!")
-        time.sleep(1)
-        st.rerun()
-    else:
-        st.error("❌ Falha crítica: O Power Automate rejeitou a carga em lote.")
-
-def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, importancia, tema, objetivo, tipo_atividade, periculosidade, servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual):
-    id_final = str(int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1)) if modo == "➕ Inserir Nova Linha" else id_atual
-    return {"acao_fluxo": "inserir" if modo == "➕ Inserir Nova Linha" else "editar", "Id": id_final, "Ano da Ação": int(val_ano) if val_ano else 2026, "Número da Ação PNAPA": str(val_num_acao), "Nome da Ação PNAPA": str(val_nome_acao), "Nível": nivel_selecionado, "Nome da Atividade": nome_atividade, "Andamento": andamento, "Indicador": str(val_indicador), "Meta_Indicador": "", "Resultado_Indicador": resultado_indicador, "Doc_Probatorio_Exec": doc_probatorio, "UF_Acao_PNAPA": uf_acao, "Importância da Atividade": importancia, "Tema da Atividade": tema, "Objetivo da Atividade": objetivo, "Tipo de Atividade": tipo_atividade, "Periculosidade/Insalubridade": periculosidade, "Servidor": servidor, "UF_Servidor": uf_servidor, "Lotação": lotacao, "Faz parte da Equipe de Emergências": equipe_emergencia, "Número da PCDP": num_pcdp, "País": pais, "UF Onde Ocorreu/Ocorrerá a Ação": uf_ocorrencia, "Estado_Local_Acao": estado_local, "Municipio Onde Ocorreu/Ocorrerá a Ação": municipio, "Data de Início": str(dt_inicio), "Data de Término": str(dt_termino), "Dias_Gastos_Plan": dias_plan, "Dias_Gastos_Exec": dias_exec, "Origem do Recurso": origem_recurso, "Rec_Plan_Diarias": rec_p_diarias, "Rec_Plan_Passagens": rec_p_passagens, "Rec_Plan_Outras_Despesas": rec_p_outras, "Rec_Plan_Total": (rec_p_diarias+rec_p_passagens+rec_p_outras), "Rec_Exec_Diarias": rec_e_diarias, "Rec_Exec_Passagens": rec_e_passagens, "Rec_Exec_Outras_Despesas": rec_e_outras, "Rec_Exec_Total": (rec_e_diarias+rec_e_passagens+rec_e_outras), "Observações": obs, "Justificativa_Acao_PNAPA": justificativa}
-def executar_api_pnapas(dados_json):
-    try:
-        resposta = requests.post(URL_FLOW_PNAPAS, json=dados_json, timeout=15)
-        if resposta.status_code == 200: return resposta.json()
-        return []
-    except: return []
-
-# URLs da Planilha Macro Principal do PNAPA (Vindas do st.secrets)
+# URLs da Planilha Macro Principal (Movidas para o topo para evitar NameError)
 URL_LER = st.secrets["power_automate"]["URL_LER"]
 URL_GRAVAR = st.secrets["power_automate"]["URL_GRAVAR"]
 URL_DELETAR = st.secrets["power_automate"]["URL_DELETAR"]
@@ -65,6 +35,40 @@ COLUNAS_PNAPA = [
 # =================================================================
 # II. FUNÇÕES DE COMUNICAÇÃO HTTP COM O POWER AUTOMATE (APIs)
 # =================================================================
+def executar_envio_sharepoint(lista_payloads):
+    sucessos = 0
+    with st.spinner(f"Processando e sincronizando {len(lista_payloads)} requisições com o IBAMA..."):
+        for p in lista_payloads:
+            try:
+                resposta = requests.post(URL_GRAVAR, json=p, timeout=20)
+                if resposta.status_code in [200, 202]: sucessos += 1
+            except: pass
+            
+    if sucessos > 0:
+        with st.spinner("Consolidando alterações no banco do SharePoint..."):
+            time.sleep(2.5)
+            st.cache_data.clear()
+            if "df" in st.session_state: del st.session_state.df
+        st.success(f"🎉 🎉 Sucesso! {sucessos} atividades cadastradas e indexadas no SharePoint!")
+        time.sleep(1)
+        st.rerun()
+    else:
+        st.error("❌ Falha crítica: O Power Automate rejeitou a carga em lote.")
+
+def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, importancia, tema, objective, tipo_atividade, periculosidade, servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual):
+    id_final = str(int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1)) if modo == "➕ Inserir Nova Linha" else id_atual
+    return {"acao_fluxo": "inserir" if modo == "➕ Inserir Nova Linha" else "editar", "Id": id_final, "Ano da Ação": int(val_ano) if val_ano else 2026, "Número da Ação PNAPA": str(val_num_acao), "Nome da Ação PNAPA": str(val_nome_acao), "Nível": nivel_selecionado, "Nome da Atividade": nome_atividade, "Andamento": andamento, "Indicador": str(val_indicador), "Meta_Indicador": "", "Resultado_Indicador": resultado_indicador, "Doc_Probatorio_Exec": doc_probatorio, "UF_Acao_PNAPA": uf_acao, "Importância da Atividade": importancia, "Tema da Atividade": tema, "Objetivo da Atividade": objective, "Tipo de Atividade": tipo_atividade, "Periculosidade/Insalubridade": periculosidade, "Servidor": servidor, "UF_Servidor": uf_servidor, "Lotação": lotacao, "Faz parte da Equipe de Emergências": equipe_emergencia, "Número da PCDP": num_pcdp, "País": pais, "UF Onde Ocorreu/Ocorrerá a Ação": uf_ocorrencia, "Estado_Local_Acao": estado_local, "Municipio Onde Ocorreu/Ocorrerá a Ação": municipio, "Data de Início": str(dt_inicio), "Data de Término": str(dt_termino), "Dias_Gastos_Plan": dias_plan, "Dias_Gastos_Exec": dias_exec, "Origem do Recurso": origem_recurso, "Rec_Plan_Diarias": rec_p_diarias, "Rec_Plan_Passagens": rec_p_passagens, "Rec_Plan_Outras_Despesas": rec_p_outras, "Rec_Plan_Total": (rec_p_diarias+rec_p_passagens+rec_p_outras), "Rec_Exec_Diarias": rec_e_diarias, "Rec_Exec_Passagens": rec_e_passagens, "Rec_Exec_Outras_Despesas": rec_e_outras, "Rec_Exec_Total": (rec_e_diarias+rec_e_passagens+rec_e_outras), "Observações": obs, "Justificativa_Acao_PNAPA": justificativa}
+
+def verificar_string_limpa(txt):
+    return str(txt).replace('\xa0', ' ').strip()
+
+def executar_api_pnapas(dados_json):
+    try:
+        resposta = requests.post(URL_FLOW_PNAPAS, json=dados_json, timeout=15)
+        if resposta.status_code == 200: return resposta.json()
+        return []
+    except: return []
+
 def executar_api_unidades(dados_json):
     try:
         resposta = requests.post(URL_FLOW_UNIDADES, json=dados_json, timeout=15)
@@ -98,7 +102,7 @@ def carregar_dados_da_nuvem():
 def carregar_bases_vias_power_automate():
     dados_uni = executar_api_unidades({"Acao": "Ler"})
     dados_srv = executar_api_equipes({"Acao": "Ler"})
-    dados_pna = executar_api_pnapas({"Acao": "Ler"}) # <- Nova leitura assíncrona
+    dados_pna = executar_api_pnapas({"Acao": "Ler"})
     
     df_lot = pd.DataFrame(dados_uni) if dados_uni else pd.DataFrame(columns=["ID_UF", "UF", "Unidade"])
     df_serv = pd.DataFrame(dados_srv) if dados_srv else pd.DataFrame(columns=["ID_SERV", "Servidor", "UF_Servidor", "Lotacao", "Equipe_Emergencias", "Fiscal", "AEAC", "Funcao", "E_mail", "Perfil", "Token"])
@@ -114,6 +118,8 @@ if "df" not in st.session_state:
         st.session_state.df = carregar_dados_da_nuvem()
 
 df_atual = st.session_state.df
+
+# [O restante do seu arquivo de controle visual (CSS, SSO, Menus, Telas 1 a 7) continua exatamente igual]
 
 # =================================================================
 # III. DESIGN & CSS: BLINDAGEM DE INTERFACE CORPORATIVA
@@ -529,9 +535,11 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
                 
                 col_c1, col_c2 = st.columns(2)
                 with col_c1:
-                    if st.button("✓ Marcar Todos"): st.session_state["chk_lote_all"] = True
-                with col_dir:
-                    if st.button("✕ Desmarcar Todos"): st.session_state["chk_lote_all"] = False
+                    if st.button("✓ Marcar Todos"): 
+                        st.session_state["chk_lote_all"] = True
+                with col_c2:  # <- Corrigido de col_dir para col_c2
+                    if st.button("✕ Desmarcar Todos"): 
+                        st.session_state["chk_lote_all"] = False
                 
                 status_padrao = st.session_state.get("chk_lote_all", True)
                 
