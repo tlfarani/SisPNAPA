@@ -578,7 +578,29 @@ if modo == "📊 Visualizar Base":
                     # Recálculo matemático transparente dos totais orçamentários mesclados
                     p_final["Rec_Plan_Total"] = float(p_final.get("Rec_Plan_Diarias", 0)) + float(p_final.get("Rec_Plan_Passagens", 0)) + float(p_final.get("Rec_Plan_Outras_Despesas", 0))
                     p_final["Rec_Exec_Total"] = float(p_final.get("Rec_Exec_Diarias", 0)) + float(p_final.get("Rec_Exec_Passagens", 0)) + float(p_final.get("Rec_Exec_Outras_Despesas", 0))
-                    payloads_envio_final.append(p_final)
+                    
+                    # 🚀 BLINDAGEM ANTI-REJEIÇÃO: Varre o payload e limpa qualquer NaN invisível do Pandas
+                    # Transforma NaNs numéricos em 0.0 e NaNs de texto em string vazia ""
+                    payload_sanitizado = {}
+                    for chave, valor in p_final.items():
+                        if pd.isna(valor):
+                            if "Rec_" in chave or "Dias_" in chave or "Ano" in chave:
+                                payload_sanitizado[chave] = 0.0
+                            else:
+                                payload_sanitizado[chave] = ""
+                        else:
+                            payload_sanitizado[chave] = valor
+
+                    payloads_envio_final.append(payload_sanitizado)
+                
+                # Despacha o lote higienizado sem nenhuma contaminação de NaN para a API
+                executar_envio_sharepoint(payloads_envio_final)
+                
+                # --- MEMÓRIA PÓS-SUBMISSÃO ATIVA ---
+                st.session_state["selecoes_macro"] = {}
+                st.session_state["ids_editados_recentemente"] = ids_salvos_fluxo
+                st.session_state["version_editor"] += 1
+                st.rerun()
                 
                 # Despacha o lote higienizado com a tipagem aceita pelo Power Automate
                 executar_envio_sharepoint(payloads_envio_final)
