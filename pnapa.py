@@ -213,10 +213,10 @@ else:
     elif token_digitado:
         st.sidebar.error("❌ Token Incorreto.")
 
-# Menu de navegação lateral baseado em níveis de acesso
+# Menu de navegação lateral baseado em níveis de acesso (Enxugado)
 opcoes_menu = ["📊 Visualizar Base"]
 if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
-    opcoes_menu.extend(["➕ Inserir Nova Linha", "📝 Editar Linha Existente", "🗑️ Deletar Linha (ID)", "🏢 Gerenciar Unidades", "👥 Gerenciar Equipes", "🗂️ Gerenciar Ações PNAPA"])
+    opcoes_menu.extend(["➕ Inserir Nova Linha", "🏢 Gerenciar Unidades", "👥 Gerenciar Equipes", "🗂️ Gerenciar Ações PNAPA"])
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
 modo = st.sidebar.radio("Operação:", opcoes_menu)
@@ -298,7 +298,89 @@ if modo == "📊 Visualizar Base":
         
         st.markdown("<br>", unsafe_allow_html=True)
         def estilar_linhas_zebradas(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
-        st.dataframe(df_exibicao.reset_index(drop=True).style.apply(estilar_linhas_zebradas, axis=1), use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Ativa a seleção múltipla de linhas com checkboxes nativos
+        selecao = st.dataframe(
+            df_exibicao.style.apply(estilar_linhas_zebradas, axis=1),
+            use_container_width=True,
+            on_select="rerun",
+            selection_mode="multiple"
+        )
+        
+        # Captura os índices das linhas selecionadas
+        linhas_selecionadas_idx = selecao.selection.rows
+        
+        if linhas_selecionadas_idx:
+            # Extrai os dados reais das linhas que o usuário marcou
+            df_linhas_selecionadas = df_exibicao.iloc[linhas_selecionadas_idx]
+            ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
+            
+            st.markdown("---")
+            st.markdown(f"🛠️ **Ações em Lote para os IDs selecionados:** {', '.join(ids_selecionados)}")
+            
+            col_b1, col_b2 = st.columns(2)
+            
+            # --- 🎛️ BOTÃO 1: EXCLUSÃO EM LOTE COM MODAL POP-OVER ---
+            with col_b1:
+                with st.popover("🗑️ Excluir Linhas Selecionadas", use_container_width=True):
+                    st.markdown(f"<p style='color:#03170a;'>⚠️ <b>Atenção:</b> Você está prestes a apagar permanentemente os registros de ID: <b>{', '.join(ids_selecionados)}</b> no SharePoint.</p>", unsafe_allow_html=True)
+                    if st.button("Sim, confirmar exclusão!", type="primary", key="btn_del_lote_tabela"):
+                        payloads_del = [{"Id": str(id_del)} for id_del in ids_selected]
+                        # Dispara a rajada para a API de exclusão
+                        sucessos_del = 0
+                        with st.spinner("Excluindo registros no SharePoint..."):
+                            for p_del in payloads_del:
+                                r = requests.post(URL_DELETAR, json=p_del, timeout=20)
+                                if r.status_code in [200, 202]: sucessos_del += 1
+                        if sucessos_del > 0:
+                            st.cache_data.clear()
+                            if "df" in st.session_state: del st.session_state.df
+                            st.success(f"🎉 {sucessos_del} registros removidos com sucesso!")
+                            time.sleep(1)
+                            st.rerun()
+
+            # --- 🎛️ BOTÃO 2: EDIÇÃO EM LOTE SELECIONANDO SEÇÃO ---
+            with col_b2:
+                with st.popover("📝 Editar Seção em Lote", use_container_width=True):
+                    st.markdown("### Escolha a seção para atualizar de vez:")
+                    secao_ed = st.selectbox("Qual seção deseja alterar nas linhas marcadas?", ["Andamento", "Origem do Recurso", "Observações"])
+                    
+                    if secao_ed == "Andamento":
+                        novo_valor = st.selectbox("Novo status de Andamento:", ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"])
+                        chave_payload = "Andamento"
+                    elif secao_ed == "Origem do Recurso":
+                        novo_valor = st.text_input("Nova Origem do Recurso:")
+                        chave_payload = "Origem do Recurso"
+                    elif secao_ed == "Observações":
+                        novo_valor = st.text_area("Novas Observações:")
+                        chave_payload = "Observações"
+                        
+                    if st.button("Aplicar Alteração em Lote", type="primary", use_container_width=True):
+                        payloads_edit_lote = []
+                        
+                        # Varre cada linha selecionada para montar o payload completo mantendo o resto intacto
+                        for _, row_original in df_linhas_selecionadas.iterrows():
+                            # Monta o dicionário espelhando a linha original
+                            p_edit = {col: row_original[col] for col in df_exibicao.columns if col in row_original}
+                            p_edit["acao_fluxo"] = "editar"
+                            p_edit["Id"] = str(row_original["Id"])
+                            # Injeta o valor modificado da seção escolhida
+                            p_edit[chave_payload] = novo_valor
+                            payloads_edit_lote.append(p_edit)
+                            
+                        # Dispara para o Power Automate (URL_GRAVAR na ramificação de edição)
+                        sucessos_edit = 0
+                        with st.spinner("Atualizando registros..."):
+                            for p_ed in payloads_edit_lote:
+                                r = requests.post(URL_GRAVAR, json=p_ed, timeout=20)
+                                if r.status_code in [200, 202]: sucessos_edit += 1
+                        if sucessos_edit > 0:
+                            st.cache_data.clear()
+                            if "df" in st.session_state: del st.session_state.df
+                            st.success(f"🎉 {sucessos_edit} registros atualizados com sucesso!")
+                            time.sleep(1)
+                            st.rerun()
 
 # --- TELA 2 E 3: FORMULÁRIO DA PLANILHA MACRO (INSERIR OU EDITAR) ---
 elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
