@@ -347,72 +347,233 @@ if modo == "📊 Visualizar Base":
         df_linhas_selecionadas = df_exibicao[df_exibicao["Id"].astype(str).isin(ids_marcados)]
         
         # Se houver linhas retidas na memória, faz saltar o painel operacional de lote
+        # --- MOTOR DINÂMICO DE EDIÇÃO / EXCLUSÃO (INDIVIDUAL OU EM LOTE) ---
         if not df_linhas_selecionadas.empty:
             ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
+            qtd_selecionada = len(ids_selecionados)
             
             st.markdown("---")
-            st.markdown(f"🛠️ **Ações em Lote para os IDs selecionados:** {', '.join(ids_selecionados)}")
+            st.markdown(f"### 🛠️ Central de Operações Dinâmicas ({qtd_selecionada} item(ns) selecionado(s))")
+            st.caption(f"IDs detectados: {', '.join(ids_selecionados)}")
             
-            col_b1, col_b2 = st.columns(2)
-            
-            # --- 🎛️ ACTION 1: EXCLUSÃO COORDENADA ---
-            with col_b1:
-                with st.popover("🗑️ Excluir Linhas Selecionadas", use_container_width=True):
-                    st.markdown(f"<p style='color:#03170a;'>⚠️ <b>Atenção:</b> Você está prestes a apagar permanentemente os registros de ID: <b>{', '.join(ids_selecionados)}</b> no SharePoint.</p>", unsafe_allow_html=True)
-                    if st.button("Sim, confirmar exclusão!", type="primary", key="btn_del_lote_tabela"):
-                        payloads_del = [{"Id": str(id_del)} for id_del in ids_selecionados]
-                        
-                        sucessos_del = 0
-                        with st.spinner("Removendo registros no SharePoint..."):
-                            for p_del in payloads_del:
-                                r = requests.post(URL_DELETAR, json=p_del, timeout=20)
-                                if r.status_code in [200, 202]: sucessos_del += 1
-                        if sucessos_del > 0:
-                            st.cache_data.clear()
-                            if "df" in st.session_state: del st.session_state.df
-                            st.success(f"🎉 {sucessos_del} registros removidos com sucesso!")
-                            st.session_state["selecoes_macro"] = {}  # Limpa os X da memória
-                            time.sleep(1.5)
-                            st.rerun()
+            # Botão de Exclusão unificado no topo do painel operacional
+            with st.popover("🗑️ Remover Registro(s) Selecionado(s)", use_container_width=True):
+                st.markdown(f"<p style='color:#03170a;'>⚠️ <b>CRÍTICO:</b> Deseja apagar de forma definitiva o(s) registro(s) de ID: <b>{', '.join(ids_selecionados)}</b> no SharePoint?</p>", unsafe_allow_html=True)
+                if st.button("Sim, confirmar destruição permanente!", type="primary", key="btn_del_lote_tabela_final"):
+                    payloads_del = [{"Id": str(id_del)} for id_del in ids_selecionados]
+                    sucessos_del = 0
+                    with st.spinner("Removendo dados..."):
+                        for p_del in payloads_del:
+                            r = requests.post(URL_DELETAR, json=p_del, timeout=20)
+                            if r.status_code in [200, 202]: sucessos_del += 1
+                    if sucessos_del > 0:
+                        st.cache_data.clear()
+                        if "df" in st.session_state: del st.session_state.df
+                        st.success(f"💥 {sucessos_del} registro(s) removido(s) com sucesso!")
+                        st.session_state["selecoes_macro"] = {}
+                        time.sleep(1.5)
+                        st.rerun()
 
-            # --- 🎛️ ACTION 2: EDIÇÃO POR SEÇÕES SELECIONADAS ---
-            with col_b2:
-                with st.popover("📝 Editar Seção em Lote", use_container_width=True):
-                    st.markdown("### Escolha a seção para atualizar de vez:")
-                    secao_ed = st.selectbox("Qual seção deseja alterar nas linhas marcadas?", ["Andamento", "Origem do Recurso", "Observações"], key="sb_secao_lote")
+            st.markdown("#### 📝 Formulário Adaptativo de Atualização")
+            
+            # --- DEFINIÇÃO DE FALLBACKS (INDIVIDUAL VS LOTE) ---
+            if qtd_selecionada == 1:
+                # Carrega os dados originais exatos da única linha marcada
+                registro_alvo = df_linhas_selecionadas.iloc[0]
+                st.info(f"ℹ️ Modo de Edição Individual ativo para o ID **{ids_selecionados[0]}**.")
+                
+                f_nivel = str(registro_alvo.get("Nível", "Atividade"))
+                f_andamento = str(registro_alvo.get("Andamento", "Não Iniciada"))
+                f_nome_atv = str(registro_alvo.get("Nome da Atividade", ""))
+                f_res_ind = str(registro_alvo.get("Resultado_Indicador", ""))
+                f_doc = str(registro_alvo.get("Doc_Probatorio_Exec", ""))
+                f_uf_pna = str(registro_alvo.get("UF_Acao_PNAPA", ""))
+                f_imp = str(registro_alvo.get("Importância da Atividade", "Alta"))
+                f_tema = str(registro_alvo.get("Tema da Atividade", ""))
+                f_obj = str(registro_alvo.get("Objetivo da Atividade", ""))
+                f_tipo = str(registro_alvo.get("Tipo de Atividade", ""))
+                f_perigo = str(registro_alvo.get("Periculosidade/Insalubridade", "Não"))
+                f_servidor = str(registro_alvo.get("Servidor", ""))
+                f_uf_srv = str(registro_alvo.get("UF_Servidor", ""))
+                f_lot = str(registro_alvo.get("Lotação", ""))
+                f_eq_emerg = str(registro_alvo.get("Faz parte da Equipe de Emergências", "Não"))
+                f_pcdp = str(registro_alvo.get("Número da PCDP", ""))
+                f_pais = str(registro_alvo.get("País", "Brasil"))
+                f_uf_oc = str(registro_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", ""))
+                f_est = str(registro_alvo.get("Estado_Local_Acao", ""))
+                f_mun = str(registro_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
+                f_dias_pl = float(pd.to_numeric(registro_alvo.get("Dias_Gastos_Plan", 0), errors='coerce') or 0.0)
+                f_dias_ex = float(pd.to_numeric(registro_alvo.get("Dias_Gastos_Exec", 0), errors='coerce') or 0.0)
+                f_origem = str(registro_alvo.get("Origem do Recurso", ""))
+                f_rp_d = float(pd.to_numeric(registro_alvo.get("Rec_Plan_Diarias", 0), errors='coerce') or 0.0)
+                f_rp_p = float(pd.to_numeric(registro_alvo.get("Rec_Plan_Passagens", 0), errors='coerce') or 0.0)
+                f_rp_o = float(pd.to_numeric(registro_alvo.get("Rec_Plan_Outras_Despesas", 0), errors='coerce') or 0.0)
+                f_re_d = float(pd.to_numeric(registro_alvo.get("Rec_Exec_Diarias", 0), errors='coerce') or 0.0)
+                f_re_p = float(pd.to_numeric(registro_alvo.get("Rec_Exec_Passagens", 0), errors='coerce') or 0.0)
+                f_re_o = float(pd.to_numeric(registro_alvo.get("Rec_Exec_Outras_Despesas", 0), errors='coerce') or 0.0)
+                f_obs = str(registro_alvo.get("Observações", ""))
+                f_just = str(registro_alvo.get("Justificativa_Acao_PNAPA", ""))
+                f_meta = str(registro_alvo.get("Meta_Indicador", ""))
+            else:
+                # Carga Multi-Item: Campos em branco ou com padrão neutro
+                st.warning(f"ℹ️ Modo de Edição em Lote ativo para **{qtd_selecionada}** itens. Campos vazios não serão alterados.")
+                f_nivel, f_andamento, f_nome_atv, f_res_ind, f_doc, f_uf_pna = "Atividade", "Não Iniciada", "", "", "", ""
+                f_imp, f_tema, f_obj, f_tipo, f_perigo, f_servidor, f_uf_srv, f_lot, f_eq_emerg, f_pcdp = "Alta", "", "", "", "Não", "", "", "", "Não", ""
+                f_pais, f_uf_oc, f_est, f_mun, f_dias_pl, f_dias_ex, f_origem = "Brasil", "", "", "", 0.0, 0.0, ""
+                f_rp_d, f_rp_p, f_rp_o, f_re_d, f_re_p, f_re_o, f_obs, f_just, f_meta = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", ""
+
+            # --- RENDERING DO FORMULÁRIO COM AS ABAS TEMÁTICAS REATIVAS ---
+            with st.form(key="form_edicao_lote_tabela", clear_on_submit=True):
+                # Recupera metadados da linha (ou da primeira linha se for lote) para o PROCV dinâmico invisível
+                ref_linha = df_linhas_selecionadas.iloc[0]
+                v_ano = ref_linha.get("Ano da Ação")
+                v_num = ref_linha.get("Número da Ação PNAPA")
+                v_nome = ref_linha.get("Nome da Ação PNAPA")
+                v_ind = ref_linha.get("Indicador")
+                
+                # Exibição estática dos dados vinculados superiores da ação macro
+                st.markdown(f"**Vínculo Macro:** {v_num} - {v_nome}")
+                
+                aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
+                
+                with aba1:
+                    lista_niveis = ["Ação", "Atividade"]
+                    idx_n = lista_niveis.index(f_nivel) if f_nivel in lista_niveis else 1
+                    ed_nivel = st.selectbox("Nível", lista_niveis, index=idx_n)
                     
-                    if secao_ed == "Andamento":
-                        novo_valor = st.selectbox("Novo status de Andamento:", ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"], key="sb_val_and_lote")
-                        chave_payload = "Andamento"
-                    elif secao_ed == "Origem do Recurso":
-                        novo_valor = st.text_input("Nova Origem do Recurso:", key="txt_val_origem_lote")
-                        chave_payload = "Origem do Recurso"
-                    elif secao_ed == "Observações":
-                        novo_valor = st.text_area("Novas Observações:", key="txt_val_obs_lote")
-                        chave_payload = "Observações"
+                    ed_nome_atv = st.text_input("Nome da Atividade", value=f_nome_atv)
+                    
+                    lista_andamentos = ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"]
+                    idx_a = lista_andamentos.index(f_andamento) if f_andamento in lista_andamentos else 0
+                    ed_andamento = st.selectbox("Andamento", lista_andamentos, index=idx_a)
+
+                with aba2:
+                    ed_res_ind = st.text_input("Resultado do Indicador", value=f_res_ind)
+                    ed_doc = st.text_input("Doc_Probatorio_Exec (SEI)", value=f_doc)
+                    ed_uf_pna = st.text_input("UF da Ação PNAPA", value=f_uf_pna, max_chars=2)
+                    
+                    lista_importancias = ["Alta", "Média", "Baixa"]
+                    idx_i = lista_importancias.index(f_imp) if f_imp in lista_importancias else 0
+                    ed_importancia = st.selectbox("Importância da Atividade", lista_importancias, index=idx_i)
+                    
+                    ed_tema = st.text_input("Tema da Atividade", value=f_tema)
+                    ed_objetivo = st.text_area("Objetivo da Atividade", value=f_obj)
+                    ed_tipo = st.text_input("Tipo de Atividade", value=f_tipo)
+                    
+                    lista_perigos = ["Não", "Insalubridade", "Periculosidade", "Ambos"]
+                    idx_p = lista_perigos.index(f_perigo) if f_perigo in lista_perigos else 0
+                    ed_periculosidade = st.selectbox("Periculosidade/Insalubridade", lista_perigos, index=idx_p)
+                    ed_meta = st.text_input("Meta do Indicador (Apenas para Nível Ação)", value=f_meta)
+
+                with aba3:
+                    ed_servidor = st.text_input("Servidor", value=f_servidor)
+                    ed_uf_srv = st.text_input("UF_Servidor", value=f_uf_srv, max_chars=2)
+                    ed_lotacao = st.text_input("Lotação", value=f_lot)
+                    ed_eq_emergencia = st.selectbox("Faz parte da Equipe de Emergências", ["Não", "Sim"], index=1 if f_eq_emerg == "Sim" else 0)
+                    ed_pcdp = st.text_input("Número da PCDP", value=f_pcdp)
+                    
+                    st.markdown("##### 📍 Geolocalização")
+                    ed_pais = st.text_input("País", value=f_pais)
+                    ed_uf_oc = st.text_input("UF Onde Ocorreu/Ocorrerá a Ação", value=f_uf_oc, max_chars=2)
+                    ed_estado_local = st.text_input("Estado_Local_Acao", value=f_est)
+                    ed_municipio = st.text_input("Municipio Onde Ocorreu/Ocorrerá a Ação", value=f_mun)
+
+                with aba4:
+                    st.caption("Deixe as datas inalteradas se estiver em modo Lote e não quiser sobrescrevê-las")
+                    ed_dt_ini = st.text_input("Data de Início (AAAA-MM-DD)", value=str(ref_linha["Data de Início"]) if qtd_selecionada == 1 else "")
+                    ed_dt_fim = st.text_input("Data de Término (AAAA-MM-DD)", value=str(ref_linha["Data de Término"]) if qtd_selecionada == 1 else "")
+                    
+                    ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl)
+                    ed_dias_ex = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=f_dias_ex)
+                    ed_origem = st.text_input("Origem do Recurso", value=f_origem)
+                    
+                    st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>Valores Orçamentários</p>", unsafe_allow_html=True)
+                    c_p, c_e = st.columns(2)
+                    with c_p:
+                        st.caption("Planejado")
+                        ed_rp_d = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=f_rp_d, format="%.2f")
+                        ed_rp_p = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=f_rp_p, format="%.2f")
+                        ed_rp_o = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=f_rp_o, format="%.2f")
+                    with c_e:
+                        st.caption("Executado")
+                        ed_re_d = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=f_re_d, format="%.2f")
+                        ed_re_p = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=f_re_p, format="%.2f")
+                        ed_re_o = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=f_re_o, format="%.2f")
+
+                with aba5:
+                    ed_obs = st.text_area("Observações", value=f_obs)
+                    ed_justificativa = st.text_area("Justificativa_Acao_PNAPA", value=f_just)
+
+                submeter_alteracao = st.form_submit_button(label="💾 Gravar Alterações no SharePoint")
+
+            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO ---
+            if submeter_alteracao:
+                payloads_envio_final = []
+                
+                # Mapeia chaves que o usuário digitou no lote para fazer a mesclagem condicional
+                for _, row_orig in df_linhas_selecionadas.iterrows():
+                    id_alvo_loop = str(row_orig["Id"])
+                    
+                    # Se for lote (qtd > 1), só substitui o valor se o campo correspondente foi modificado/preenchido
+                    p_final = {
+                        "acao_fluxo": "editar",
+                        "Id": id_alvo_loop,
+                        "Ano da Ação": int(v_ano) if v_ano else 2026,
+                        "Número da Ação PNAPA": str(v_num),
+                        "Nome da Ação PNAPA": str(v_nome),
+                        "Indicador": str(v_ind),
                         
-                    if st.button("Aplicar Alteração em Lote", type="primary", use_container_width=True):
-                        payloads_edit_lote = []
+                        # Atributos Reativos Inteligentes (Mesclagem Direta)
+                        "Nível": ed_nivel if (qtd_selecionada == 1 or ed_nivel != f_nivel) else row_orig["Nível"],
+                        "Nome da Atividade": ed_nome_atv if (qtd_selecionada == 1 or ed_nome_atv != "") else row_orig["Nome da Atividade"],
+                        "Andamento": ed_andamento if (qtd_selecionada == 1 or ed_andamento != f_andamento) else row_orig["Andamento"],
+                        "Resultado_Indicador": ed_res_ind if (qtd_selecionada == 1 or ed_res_ind != "") else row_orig["Resultado_Indicador"],
+                        "Doc_Probatorio_Exec": ed_doc if (qtd_selecionada == 1 or ed_doc != "") else row_orig["Doc_Probatorio_Exec"],
+                        "UF_Acao_PNAPA": ed_uf_pna if (qtd_selecionada == 1 or ed_uf_pna != "") else row_orig["UF_Acao_PNAPA"],
+                        "Importância da Atividade": ed_importancia if (qtd_selecionada == 1 or ed_importancia != f_imp) else row_orig["Importância da Atividade"],
+                        "Tema da Atividade": ed_tema if (qtd_selecionada == 1 or ed_tema != "") else row_orig["Tema da Atividade"],
+                        "Objetivo da Atividade": ed_objetivo if (qtd_selecionada == 1 or ed_objetivo != "") else row_orig["Objetivo da Atividade"],
+                        "Tipo de Atividade": ed_tipo if (qtd_selecionada == 1 or ed_tipo != "") else row_orig["Tipo de Atividade"],
+                        "Periculosidade/Insalubridade": ed_periculosidade if (qtd_selecionada == 1 or ed_periculosidade != f_perigo) else row_orig["Periculosidade/Insalubridade"],
+                        "Meta_Indicador": ed_meta if (qtd_selecionada == 1 or ed_meta != "") else row_orig["Meta_Indicador"],
                         
-                        for _, row_original in df_linhas_selecionadas.iterrows():
-                            p_edit = {col: row_original[col] for col in df_exibicao.columns if col in row_original}
-                            p_edit["acao_fluxo"] = "editar"
-                            p_edit["Id"] = str(row_original["Id"])
-                            p_edit[chave_payload] = novo_valor
-                            payloads_edit_lote.append(p_edit)
-                            
-                        sucessos_edit = 0
-                        with st.spinner("Atualizando registros no SharePoint..."):
-                            for p_ed in payloads_edit_lote:
-                                r = requests.post(URL_GRAVAR, json=p_ed, timeout=20)
-                                if r.status_code in [200, 202]: sucessos_edit += 1
-                        if sucessos_edit > 0:
-                            st.cache_data.clear()
-                            if "df" in st.session_state: del st.session_state.df
-                            st.success(f"🎉 {sucessos_edit} registros atualizados com sucesso!")
-                            st.session_state["selecoes_macro"] = {}  # Limpa os X da memória
-                            time.sleep(1.5)
-                            st.rerun()
+                        # RH e Local
+                        "Servidor": ed_servidor if (qtd_selecionada == 1 or ed_servidor != "") else row_orig["Servidor"],
+                        "UF_Servidor": ed_uf_srv if (qtd_selecionada == 1 or ed_uf_srv != "") else row_orig["UF_Servidor"],
+                        "Lotação": ed_lotacao if (qtd_selecionada == 1 or ed_lotacao != "") else row_orig["Lotação"],
+                        "Faz parte da Equipe de Emergências": ed_eq_emergencia if (qtd_selecionada == 1 or ed_eq_emergencia != f_eq_emerg) else row_orig["Faz parte da Equipe de Emergências"],
+                        "Número da PCDP": ed_pcdp if (qtd_selecionada == 1 or ed_pcdp != "") else row_orig["Número da PCDP"],
+                        "País": ed_pais if (qtd_selecionada == 1 or ed_pais != "Brasil") else row_orig["País"],
+                        "UF Onde Ocorreu/Ocorrerá a Ação": ed_uf_oc if (qtd_selecionada == 1 or ed_uf_oc != "") else row_orig["UF Onde Ocorreu/Ocorrerá a Ação"],
+                        "Estado_Local_Acao": ed_estado_local if (qtd_selecionada == 1 or ed_estado_local != "") else row_orig["Estado_Local_Acao"],
+                        "Municipio Onde Ocorreu/Ocorrerá a Ação": ed_municipio if (qtd_selecionada == 1 or ed_municipio != "") else row_orig["Municipio Onde Ocorreu/Ocorrerá a Ação"],
+                        
+                        # Cronograma e Custos
+                        "Data de Início": ed_dt_ini if (qtd_selecionada == 1 or ed_dt_ini != "") else row_orig["Data de Início"],
+                        "Data de Término": ed_dt_fim if (qtd_selecionada == 1 or ed_dt_fim != "") else row_orig["Data de Término"],
+                        "Dias_Gastos_Plan": ed_dias_pl if (qtd_selecionada == 1 or ed_dias_pl != 0.0) else row_orig["Dias_Gastos_Plan"],
+                        "Dias_Gastos_Exec": ed_dias_ex if (qtd_selecionada == 1 or ed_dias_ex != 0.0) else row_orig["Dias_Gastos_Exec"],
+                        "Origem do Recurso": ed_origem if (qtd_selecionada == 1 or ed_origem != "") else row_orig["Origem do Recurso"],
+                        
+                        "Rec_Plan_Diarias": ed_rp_d if (qtd_selecionada == 1 or ed_rp_d != 0.0) else row_orig["Rec_Plan_Diarias"],
+                        "Rec_Plan_Passagens": ed_rp_p if (qtd_selecionada == 1 or ed_rp_p != 0.0) else row_orig["Rec_Plan_Passagens"],
+                        "Rec_Plan_Outras_Despesas": ed_rp_o if (qtd_selecionada == 1 or ed_rp_o != 0.0) else row_orig["Rec_Plan_Outras_Despesas"],
+                        "Rec_Exec_Diarias": ed_re_d if (qtd_selecionada == 1 or ed_re_d != 0.0) else row_orig["Rec_Exec_Diarias"],
+                        "Rec_Exec_Passagens": ed_re_p if (qtd_selecionada == 1 or ed_re_p != 0.0) else row_orig["Rec_Exec_Passagens"],
+                        "Rec_Exec_Outras_Despesas": ed_re_o if (qtd_selecionada == 1 or ed_re_o != 0.0) else row_orig["Rec_Exec_Outras_Despesas"],
+                        
+                        "Observações": ed_ed_obs if (qtd_selecionada == 1 or ed_obs != "") else row_orig["Observações"],
+                        "Justificativa_Acao_PNAPA": ed_justificativa if (qtd_selecionada == 1 or ed_justificativa != "") else row_orig["Justificativa_Acao_PNAPA"]
+                    }
+                    
+                    # Calcula as somas dinâmicas baseadas na mesclagem resultante
+                    p_final["Rec_Plan_Total"] = float(p_final["Rec_Plan_Diarias"]) + float(p_final["Rec_Plan_Passagens"]) + float(p_final["Rec_Plan_Outras_Despesas"])
+                    p_final["Rec_Exec_Total"] = float(p_final["Rec_Exec_Diarias"]) + float(p_final["Rec_Exec_Passagens"]) + float(p_final["Rec_Exec_Outras_Despesas"])
+                    payloads_envio_final.append(p_final)
+                
+                # Executa a rajada de atualização via API reaproveitando a função genérica estável
+                executar_envio_sharepoint(payloads_envio_final)
+                st.session_state["selecoes_macro"] = {}  # Limpa a memória de checkboxes
 
 # --- TELA 2 E 3: FORMULÁRIO DA PLANILHA MACRO (INSERIR OU EDITAR) ---
 elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
