@@ -303,26 +303,26 @@ if modo == "📊 Visualizar Base":
         # Ativa a seleção múltipla de linhas com checkboxes nativos
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # ✅ CORREÇÃO DEFINITIVA: Passamos o DataFrame PURO. 
-        # O Streamlit lida perfeitamente com a seleção múltipla se não houver .style acoplado.
-        selecao = st.dataframe(
-            df_exibicao,
+        # 1. Injeta uma coluna temporária de checkbox no início do DataFrame
+        df_interativo = df_exibicao.copy()
+        df_interativo.insert(0, "Selecionar", False)
+        
+        # 2. Renderiza usando data_editor (compatível com versões antigas)
+        # Travamos todas as colunas como desabilitadas, exceto a de 'Selecionar'
+        colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
+        
+        tabela_editavel = st.data_editor(
+            df_interativo,
+            hide_index=True,
             use_container_width=True,
-            on_select="rerun",
-            selection_mode="multiple"
+            column_config=colunas_travadas,
+            key="editor_lote_pnapa"
         )
         
-        # Captura de forma robusta a seleção de linhas pelo índice nativo
-        if hasattr(selecao, "selection") and selecao.selection.rows:
-            linhas_selecionadas_idx = selecao.selection.rows
-        elif isinstance(selecao, dict) and "selection" in selecao and "rows" in selecao["selection"]:
-            linhas_selecionadas_idx = selecao["selection"]["rows"]
-        else:
-            linhas_selecionadas_idx = []
+        # 3. Captura quais linhas o usuário marcou como True
+        df_linhas_selecionadas = tabela_editavel[tabela_editavel["Selecionar"] == True]
         
-        if linhas_selecionadas_idx:
-            # Extrai com segurança os registros mapeados
-            df_linhas_selecionadas = df_exibicao.iloc[linhas_selecionadas_idx]
+        if not df_linhas_selecionadas.empty:
             ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
             
             st.markdown("---")
@@ -369,6 +369,7 @@ if modo == "📊 Visualizar Base":
                         payloads_edit_lote = []
                         
                         for _, row_original in df_linhas_selecionadas.iterrows():
+                            # Limpa a coluna 'Selecionar' para o payload ir idêntico ao SharePoint
                             p_edit = {col: row_original[col] for col in df_exibicao.columns if col in row_original}
                             p_edit["acao_fluxo"] = "editar"
                             p_edit["Id"] = str(row_original["Id"])
