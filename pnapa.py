@@ -500,67 +500,87 @@ if modo == "📊 Visualizar Base":
 
                 submeter_alteracao = st.form_submit_button(label="💾 Gravar Alterações no SharePoint")
 
-            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PRESERVAÇÃO TOTAL) ---
+            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (TRADUÇÃO DE CHAVES E PRESERVAÇÃO) ---
             if submeter_alteracao:
                 payloads_envio_final = []
                 
                 for _, row_orig in df_linhas_selecionadas.iterrows():
-                    id_alvo_loop = str(row_orig["Id"])
+                    # 1. Montagem defensiva usando estritamente os nomes de chaves que o Power Automate exige
+                    p_final = {
+                        "acao_fluxo": "editar",
+                        "Id": str(row_orig.get("Id")),
+                        
+                        # Chaves Auxiliares Superiores (PROCV invisível)
+                        "Ano da Ação": int(v_ano) if v_ano else int(pd.to_numeric(row_orig.get("Ano da Ação"), errors='coerce') or 2026),
+                        "Número da Ação PNAPA": str(v_num) if v_num else str(row_orig.get("Número da Ação PNAPA", "")),
+                        "Nome da Ação PNAPA": str(v_nome) if v_nome else str(row_orig.get("Nome da Ação PNAPA", "")),
+                        "Indicador": str(v_ind) if v_ind else str(row_orig.get("Indicador", "")),
+                        
+                        # Identificação Básica (Mesclagem Condicional com Fallbacks Brutos)
+                        "Nível": str(ed_nivel) if (qtd_selecionada == 1 or ed_nivel != f_nivel) else str(row_orig.get("Nível", "Atividade")),
+                        "Nome da Atividade": str(ed_nome_atv).strip() if (qtd_selecionada == 1 or ed_nome_atv.strip() != "") else str(row_orig.get("Nome da Atividade", "")),
+                        "Andamento": str(ed_andamento) if (qtd_selecionada == 1 or ed_andamento != f_andamento) else str(row_orig.get("Andamento", "Não Iniciada")),
+                        "Resultado_Indicador": str(ed_res_ind).strip() if (qtd_selecionada == 1 or ed_res_ind.strip() != "") else str(row_orig.get("Resultado_Indicador", "")),
+                        "Doc_Probatorio_Exec": str(ed_doc).strip() if (qtd_selecionada == 1 or ed_doc.strip() != "") else str(row_orig.get("Doc_Probatorio_Exec", "")),
+                        "UF_Acao_PNAPA": str(ed_uf_pna).strip() if (qtd_selecionada == 1 or ed_uf_pna.strip() != "") else str(row_orig.get("UF_Acao_PNAPA", "")),
+                        "Importância da Atividade": str(ed_importancia) if (qtd_selecionada == 1 or ed_importancia != f_imp) else str(row_orig.get("Importância da Atividade", "Alta")),
+                        "Tema da Atividade": str(ed_tema).strip() if (qtd_selecionada == 1 or ed_tema.strip() != "") else str(row_orig.get("Tema da Atividade", "")),
+                        "Objetivo da Atividade": str(ed_objetivo).strip() if (qtd_selecionada == 1 or ed_objetivo.strip() != "") else str(row_orig.get("Objetivo da Atividade", "")),
+                        "Tipo de Atividade": str(ed_tipo).strip() if (qtd_selecionada == 1 or ed_tipo.strip() != "") else str(row_orig.get("Tipo de Atividade", "")),
+                        "Periculosidade/Insalubridade": str(ed_periculosidade) if (qtd_selecionada == 1 or ed_periculosidade != f_perigo) else str(row_orig.get("Periculosidade/Insalubridade", "Não")),
+                        "Meta_Indicador": str(ed_meta).strip() if (qtd_selecionada == 1 or ed_meta.strip() != "") else str(row_orig.get("Meta_Indicador", "")),
+                        
+                        # Recursos Humanos e Localização
+                        "Servidor": str(ed_servidor).strip() if (qtd_selecionada == 1 or ed_servidor.strip() != "") else str(row_orig.get("Servidor", "")),
+                        "UF_Servidor": str(ed_uf_srv).strip() if (qtd_selecionada == 1 or ed_uf_srv.strip() != "") else str(row_orig.get("UF_Servidor", "")),
+                        "Lotação": str(ed_lotacao).strip() if (qtd_selecionada == 1 or ed_lotacao.strip() != "") else str(row_orig.get("Lotação", "")),
+                        "Faz parte da Equipe de Emergências": str(ed_eq_emergencia) if (qtd_selecionada == 1 or ed_eq_emergencia != ("Sim" if f_eq_emerg == "Sim" else "Não")) else str(row_orig.get("Faz parte da Equipe de Emergências", "Não")),
+                        "Número da PCDP": str(ed_pcdp).strip() if (qtd_selecionada == 1 or ed_pcdp.strip() != "") else str(row_orig.get("Número da PCDP", "")),
+                        "País": str(ed_pais).strip() if (qtd_selecionada == 1 or (ed_pais.strip() != "Brasil" and ed_pais.strip() != "")) else str(row_orig.get("País", "Brasil")),
+                        "UF Onde Ocorreu/Ocorrerá a Ação": str(ed_uf_oc).strip() if (qtd_selecionada == 1 or ed_uf_oc.strip() != "") else str(row_orig.get("UF Onde Ocorreu/Ocorrerá a Ação", "")),
+                        "Estado_Local_Acao": str(ed_estado_local).strip() if (qtd_selecionada == 1 or ed_estado_local.strip() != "") else str(row_orig.get("Estado_Local_Acao", "")),
+                        "Municipio Onde Ocorreu/Ocorrerá a Ação": str(ed_municipio).strip() if (qtd_selecionada == 1 or ed_municipio.strip() != "") else str(row_orig.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")),
+                        
+                        # Tratamento defensivo de valores numéricos de Custos
+                        "Dias_Gastos_Plan": float(ed_dias_pl) if (qtd_selecionada == 1 or ed_dias_pl != 0.0) else float(pd.to_numeric(row_orig.get("Dias_Gastos_Plan"), errors='coerce') or 0.0),
+                        "Dias_Gastos_Exec": float(ed_dias_ex) if (qtd_selecionada == 1 or ed_dias_ex != 0.0) else float(pd.to_numeric(row_orig.get("Dias_Gastos_Exec"), errors='coerce') or 0.0),
+                        "Origem do Recurso": str(ed_origem).strip() if (qtd_selecionada == 1 or ed_origem.strip() != "") else str(row_orig.get("Origem do Recurso", "")),
+                        
+                        "Rec_Plan_Diarias": float(ed_rp_d) if (qtd_selecionada == 1 or ed_rp_d != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Plan_Diarias"), errors='coerce') or 0.0),
+                        "Rec_Plan_Passagens": float(ed_rp_p) if (qtd_selecionada == 1 or ed_rp_p != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Plan_Passagens"), errors='coerce') or 0.0),
+                        "Rec_Plan_Outras_Despesas": float(ed_rp_o) if (qtd_selecionada == 1 or ed_rp_o != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Plan_Outras_Despesas"), errors='coerce') or 0.0),
+                        
+                        "Rec_Exec_Diarias": float(ed_re_d) if (qtd_selecionada == 1 or ed_re_d != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Exec_Diarias"), errors='coerce') or 0.0),
+                        "Rec_Exec_Passagens": float(ed_re_p) if (qtd_selecionada == 1 or ed_re_p != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Exec_Passagens"), errors='coerce') or 0.0),
+                        "Rec_Exec_Outras_Despesas": float(ed_re_o) if (qtd_selecionada == 1 or ed_re_o != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Exec_Outras_Despesas"), errors='coerce') or 0.0),
+                        
+                        "Observações": str(ed_obs).strip() if (qtd_selecionada == 1 or ed_obs.strip() != "") else str(row_orig.get("Observações", "")),
+                        "Justificativa_Acao_PNAPA": str(ed_justificativa).strip() if (qtd_selecionada == 1 or ed_justificativa.strip() != "") else str(row_orig.get("Justificativa_Acao_PNAPA", ""))
+                    }
                     
-                    # 1. Mapeamento defensivo: Reconstrói o dicionário usando as chaves oficiais da lista COLUNAS_PNAPA
-                    p_final = {col: row_orig[col] for col in df_exibicao.columns if col in row_orig}
+                    # 2. Tratamento defensivo de conversão das Datas (Converte padrão brasileiro DD/MM/AAAA para AAAA-MM-DD exigido pela API)
+                    raw_ini = ed_dt_ini.strip() if (qtd_selecionada == 1 or ed_dt_ini.strip() != "") else str(row_orig.get("Data de Início", ""))
+                    raw_fim = ed_dt_fim.strip() if (qtd_selecionada == 1 or ed_dt_fim.strip() != "") else str(row_orig.get("Data de Término", ""))
                     
-                    p_final["acao_fluxo"] = "editar"
-                    p_final["Id"] = str(id_alvo_loop)
+                    def normalizar_padrao_iso(data_str):
+                        data_limpa = data_str.strip()
+                        if "/" in data_limpa:
+                            try:
+                                d, m, a = data_limpa.split("/")
+                                return f"{a}-{m}-{d}"
+                            except: pass
+                        return data_limpa
                     
-                    # 2. INJEÇÃO DOS CAMPOS SE HOUVER MODIFICAÇÃO
-                    if qtd_selecionada == 1 or ed_nivel != f_nivel: p_final["Nível"] = str(ed_nivel)
-                    if qtd_selecionada == 1 or (ed_nome_atv.strip() != ""): p_final["Nome da Atividade"] = str(ed_nome_atv).strip()
-                    if qtd_selecionada == 1 or ed_andamento != f_andamento: p_final["Andamento"] = str(ed_andamento)
-                    if qtd_selecionada == 1 or (ed_res_ind.strip() != ""): p_final["Resultado_Indicador"] = str(ed_res_ind).strip()
-                    if qtd_selecionada == 1 or (ed_doc.strip() != ""): p_final["Doc_Probatorio_Exec"] = str(ed_doc).strip()
-                    if qtd_selecionada == 1 or (ed_uf_pna.strip() != ""): p_final["UF_Acao_PNAPA"] = str(ed_uf_pna).strip()
-                    if qtd_selecionada == 1 or ed_importancia != f_imp: p_final["Importância da Atividade"] = str(ed_importancia)
-                    if qtd_selecionada == 1 or (ed_tema.strip() != ""): p_final["Tema da Atividade"] = str(ed_tema).strip()
-                    if qtd_selecionada == 1 or (ed_objetivo.strip() != ""): p_final["Objetivo da Atividade"] = str(ed_objetivo).strip()
-                    if qtd_selecionada == 1 or (ed_tipo.strip() != ""): p_final["Tipo de Atividade"] = str(ed_tipo).strip()
-                    if qtd_selecionada == 1 or ed_periculosidade != f_perigo: p_final["Periculosidade/Insalubridade"] = str(ed_periculosidade)
-                    if qtd_selecionada == 1 or (ed_meta.strip() != ""): p_final["Meta_Indicador"] = str(ed_meta).strip()
-                    
-                    if qtd_selecionada == 1 or (ed_servidor.strip() != ""): p_final["Servidor"] = str(ed_servidor).strip()
-                    if qtd_selecionada == 1 or (ed_uf_srv.strip() != ""): p_final["UF_Servidor"] = str(ed_uf_srv).strip()
-                    if qtd_selecionada == 1 or (ed_lotacao.strip() != ""): p_final["Lotação"] = str(ed_lotacao).strip()
-                    if qtd_selecionada == 1 or ed_eq_emergencia != ("Sim" if f_eq_emerg == "Sim" else "Não"): p_final["Faz parte da Equipe de Emergências"] = str(ed_eq_emergencia)
-                    if qtd_selecionada == 1 or (ed_pcdp.strip() != ""): p_final["Número da PCDP"] = str(ed_pcdp).strip()
-                    if qtd_selecionada == 1 or (ed_pais.strip() != "Brasil" and ed_pais.strip() != ""): p_final["País"] = str(ed_pais).strip()
-                    if qtd_selecionada == 1 or (ed_uf_oc.strip() != ""): p_final["UF Onde Ocorreu/Ocorrerá a Ação"] = str(ed_uf_oc).strip()
-                    if qtd_selecionada == 1 or (ed_estado_local.strip() != ""): p_final["Estado_Local_Acao"] = str(ed_estado_local).strip()
-                    if qtd_selecionada == 1 or (ed_municipio.strip() != ""): p_final["Municipio Onde Ocorreu/Ocorrerá a Ação"] = str(ed_municipio).strip()
-                    
-                    if qtd_selecionada == 1 or (ed_dt_ini.strip() != ""): p_final["Data de Início"] = str(ed_dt_ini).strip()
-                    if qtd_selecionada == 1 or (ed_dt_fim.strip() != ""): p_final["Data de Término"] = str(ed_dt_fim).strip()
-                    if qtd_selecionada == 1 or ed_dias_pl != 0.0: p_final["Dias_Gastos_Plan"] = float(ed_dias_pl)
-                    if qtd_selecionada == 1 or ed_dias_ex != 0.0: p_final["Dias_Gastos_Exec"] = float(ed_dias_ex)
-                    if qtd_selecionada == 1 or (ed_origem.strip() != ""): p_final["Origem do Recurso"] = str(ed_origem).strip()
-                    
-                    if qtd_selecionada == 1 or ed_rp_d != 0.0: p_final["Rec_Plan_Diarias"] = float(ed_rp_d)
-                    if qtd_selecionada == 1 or ed_rp_p != 0.0: p_final["Rec_Plan_Passagens"] = float(ed_rp_p)
-                    if qtd_selecionada == 1 or ed_rp_o != 0.0: p_final["Rec_Plan_Outras_Despesas"] = float(ed_rp_o)
-                    if qtd_selecionada == 1 or ed_re_d != 0.0: p_final["Rec_Exec_Diarias"] = float(ed_re_d)
-                    if qtd_selecionada == 1 or ed_re_p != 0.0: p_final["Rec_Exec_Passagens"] = float(ed_re_p)
-                    if qtd_selecionada == 1 or ed_re_o != 0.0: p_final["Rec_Exec_Outras_Despesas"] = float(ed_re_o)
-                    
-                    # 💡 FIX definitivo do NameError ocultado: ed_obs em vez do antigo ed_ed_obs
-                    if qtd_selecionada == 1 or (ed_obs.strip() != ""): p_final["Observações"] = str(ed_obs).strip()
-                    if qtd_selecionada == 1 or (ed_justificativa.strip() != ""): p_final["Justificativa_Acao_PNAPA"] = str(ed_justificativa).strip()
+                    p_final["Data de Início"] = normalizar_padrao_iso(raw_ini)
+                    p_final["Data de Término"] = normalizar_padrao_iso(raw_fim)
 
-                    # 3. Recalculo defensivo dos totais
-                    p_final["Rec_Plan_Total"] = float(p_final.get("Rec_Plan_Diarias", 0)) + float(p_final.get("Rec_Plan_Passagens", 0)) + float(p_final.get("Rec_Plan_Outras_Despesas", 0))
-                    p_final["Rec_Exec_Total"] = float(p_final.get("Rec_Exec_Diarias", 0)) + float(p_final.get("Rec_Exec_Passagens", 0)) + float(p_final.get("Rec_Exec_Outras_Despesas", 0))
+                    # 3. Recalculo estrito dos totais orçamentários mesclados
+                    p_final["Rec_Plan_Total"] = float(p_final["Rec_Plan_Diarias"]) + float(p_final["Rec_Plan_Passagens"]) + float(p_final["Rec_Plan_Outras_Despesas"])
+                    p_final["Rec_Exec_Total"] = float(p_final["Rec_Exec_Diarias"]) + float(p_final["Rec_Exec_Passagens"]) + float(p_final["Rec_Exec_Outras_Despesas"])
                     
                     payloads_envio_final.append(p_final)
                 
-                # Despacha o lote seguro e mesclado sem quebras de tipagem
+                # Despacha o lote com o contrato JSON 100% idêntico ao esperado pelo Power Automate
                 executar_envio_sharepoint(payloads_envio_final)
                 st.session_state["selecoes_macro"] = {}
 
