@@ -330,6 +330,7 @@ if modo == "📊 Visualizar Base":
             linhas_editadas = st.session_state.editor_lote_pnapa["edited_rows"]
             mudanca_detectada = False
             
+            # 💡 FIX: Corrigido de lines_editadas para linhas_editadas
             for idx_linha, alteracao in linhas_editadas.items():
                 if "Selecionar" in alteracao:
                     id_real_linha = str(df_interativo.iloc[int(idx_linha)]["Id"])
@@ -346,7 +347,6 @@ if modo == "📊 Visualizar Base":
         ids_marcados = [id_key for id_key, marcado in st.session_state["selecoes_macro"].items() if marcado]
         df_linhas_selecionadas = df_exibicao[df_exibicao["Id"].astype(str).isin(ids_marcados)]
         
-        # Se houver linhas retidas na memória, faz saltar o painel operacional de lote
         # --- MOTOR DINÂMICO DE EDIÇÃO / EXCLUSÃO (INDIVIDUAL OU EM LOTE) ---
         if not df_linhas_selecionadas.empty:
             ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
@@ -378,7 +378,6 @@ if modo == "📊 Visualizar Base":
             
             # --- DEFINIÇÃO DE FALLBACKS (INDIVIDUAL VS LOTE) ---
             if qtd_selecionada == 1:
-                # Carrega os dados originais exatos da única linha marcada
                 registro_alvo = df_linhas_selecionadas.iloc[0]
                 st.info(f"ℹ️ Modo de Edição Individual ativo para o ID **{ids_selecionados[0]}**.")
                 
@@ -415,7 +414,6 @@ if modo == "📊 Visualizar Base":
                 f_just = str(registro_alvo.get("Justificativa_Acao_PNAPA", ""))
                 f_meta = str(registro_alvo.get("Meta_Indicador", ""))
             else:
-                # Carga Multi-Item: Campos em branco ou com padrão neutro
                 st.warning(f"ℹ️ Modo de Edição em Lote ativo para **{qtd_selecionada}** itens. Campos vazios não serão alterados.")
                 f_nivel, f_andamento, f_nome_atv, f_res_ind, f_doc, f_uf_pna = "Atividade", "Não Iniciada", "", "", "", ""
                 f_imp, f_tema, f_obj, f_tipo, f_perigo, f_servidor, f_uf_srv, f_lot, f_eq_emerg, f_pcdp = "Alta", "", "", "", "Não", "", "", "", "Não", ""
@@ -424,14 +422,12 @@ if modo == "📊 Visualizar Base":
 
             # --- RENDERING DO FORMULÁRIO COM AS ABAS TEMÁTICAS REATIVAS ---
             with st.form(key="form_edicao_lote_tabela", clear_on_submit=True):
-                # Recupera metadados da linha (ou da primeira linha se for lote) para o PROCV dinâmico invisível
                 ref_linha = df_linhas_selecionadas.iloc[0]
                 v_ano = ref_linha.get("Ano da Ação")
                 v_num = ref_linha.get("Número da Ação PNAPA")
                 v_nome = ref_linha.get("Nome da Ação PNAPA")
                 v_ind = ref_linha.get("Indicador")
                 
-                # Exibição estática dos dados vinculados superiores da ação macro
                 st.markdown(f"**Vínculo Macro:** {v_num} - {v_nome}")
                 
                 aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
@@ -440,9 +436,7 @@ if modo == "📊 Visualizar Base":
                     lista_niveis = ["Ação", "Atividade"]
                     idx_n = lista_niveis.index(f_nivel) if f_nivel in lista_niveis else 1
                     ed_nivel = st.selectbox("Nível", lista_niveis, index=idx_n)
-                    
                     ed_nome_atv = st.text_input("Nome da Atividade", value=f_nome_atv)
-                    
                     lista_andamentos = ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"]
                     idx_a = lista_andamentos.index(f_andamento) if f_andamento in lista_andamentos else 0
                     ed_andamento = st.selectbox("Andamento", lista_andamentos, index=idx_a)
@@ -479,9 +473,9 @@ if modo == "📊 Visualizar Base":
                     ed_municipio = st.text_input("Municipio Onde Ocorreu/Ocorrerá a Ação", value=f_mun)
 
                 with aba4:
-                    st.caption("Deixe as datas inalteradas se estiver em modo Lote e não quiser sobrescrevê-las")
-                    ed_dt_ini = st.text_input("Data de Início (AAAA-MM-DD)", value=str(ref_linha["Data de Início"]) if qtd_selecionada == 1 else "")
-                    ed_dt_fim = st.text_input("Data de Término (AAAA-MM-DD)", value=str(ref_linha["Data de Término"]) if qtd_selecionada == 1 else "")
+                    st.caption("Insira no formato DD/MM/AAAA se quiser sobrescrever")
+                    ed_dt_ini = st.text_input("Data de Início", value=str(ref_linha["Data de Início"]) if qtd_selecionada == 1 else "")
+                    ed_dt_fim = st.text_input("Data de Término", value=str(ref_linha["Data de Término"]) if qtd_selecionada == 1 else "")
                     
                     ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl)
                     ed_dias_ex = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=f_dias_ex)
@@ -513,97 +507,60 @@ if modo == "📊 Visualizar Base":
                 for _, row_orig in df_linhas_selecionadas.iterrows():
                     id_alvo_loop = str(row_orig["Id"])
                     
-                    # 1. Cria uma cópia exata de todos os valores atuais que já existem no SharePoint para esta linha
+                    # 1. Mapeamento defensivo: Reconstrói o dicionário usando as chaves oficiais da lista COLUNAS_PNAPA
                     p_final = {col: row_orig[col] for col in df_exibicao.columns if col in row_orig}
                     
-                    # Força as diretrizes fixas do fluxo de edição
                     p_final["acao_fluxo"] = "editar"
                     p_final["Id"] = str(id_alvo_loop)
                     
-                    # 2. SEÇÃO DE INJEÇÃO INTELIGENTE (Substitui apenas se houver preenchimento/mudança)
-                    if qtd_selecionada == 1 or ed_nivel != f_nivel: 
-                        p_final["Nível"] = str(ed_nivel)
-                    if qtd_selecionada == 1 or (ed_nome_atv.strip() != ""): 
-                        p_final["Nome da Atividade"] = str(ed_nome_atv).strip()
-                    if qtd_selecionada == 1 or ed_andamento != f_andamento: 
-                        p_final["Andamento"] = str(ed_andamento)
-                    if qtd_selecionada == 1 or (ed_res_ind.strip() != ""): 
-                        p_final["Resultado_Indicador"] = str(ed_res_ind).strip()
-                    if qtd_selecionada == 1 or (ed_doc.strip() != ""): 
-                        p_final["Doc_Probatorio_Exec"] = str(ed_doc).strip()
-                    if qtd_selecionada == 1 or (ed_uf_pna.strip() != ""): 
-                        p_final["UF_Acao_PNAPA"] = str(ed_uf_pna).strip()
-                    if qtd_selecionada == 1 or ed_importancia != f_imp: 
-                        p_final["Importância da Atividade"] = str(ed_importancia)
-                    if qtd_selecionada == 1 or (ed_tema.strip() != ""): 
-                        p_final["Tema da Atividade"] = str(ed_tema).strip()
-                    if qtd_selecionada == 1 or (ed_objetivo.strip() != ""): 
-                        p_final["Objetivo da Atividade"] = str(ed_objetivo).strip()
-                    if qtd_selecionada == 1 or (ed_tipo.strip() != ""): 
-                        p_final["Tipo de Atividade"] = str(ed_tipo).strip()
-                    if qtd_selecionada == 1 or ed_periculosidade != f_perigo: 
-                        p_final["Periculosidade/Insalubridade"] = str(ed_periculosidade)
-                    if qtd_selecionada == 1 or (ed_meta.strip() != ""): 
-                        p_final["Meta_Indicador"] = str(ed_meta).strip()
+                    # 2. INJEÇÃO DOS CAMPOS SE HOUVER MODIFICAÇÃO
+                    if qtd_selecionada == 1 or ed_nivel != f_nivel: p_final["Nível"] = str(ed_nivel)
+                    if qtd_selecionada == 1 or (ed_nome_atv.strip() != ""): p_final["Nome da Atividade"] = str(ed_nome_atv).strip()
+                    if qtd_selecionada == 1 or ed_andamento != f_andamento: p_final["Andamento"] = str(ed_andamento)
+                    if qtd_selecionada == 1 or (ed_res_ind.strip() != ""): p_final["Resultado_Indicador"] = str(ed_res_ind).strip()
+                    if qtd_selecionada == 1 or (ed_doc.strip() != ""): p_final["Doc_Probatorio_Exec"] = str(ed_doc).strip()
+                    if qtd_selecionada == 1 or (ed_uf_pna.strip() != ""): p_final["UF_Acao_PNAPA"] = str(ed_uf_pna).strip()
+                    if qtd_selecionada == 1 or ed_importancia != f_imp: p_final["Importância da Atividade"] = str(ed_importancia)
+                    if qtd_selecionada == 1 or (ed_tema.strip() != ""): p_final["Tema da Atividade"] = str(ed_tema).strip()
+                    if qtd_selecionada == 1 or (ed_objetivo.strip() != ""): p_final["Objetivo da Atividade"] = str(ed_objetivo).strip()
+                    if qtd_selecionada == 1 or (ed_tipo.strip() != ""): p_final["Tipo de Atividade"] = str(ed_tipo).strip()
+                    if qtd_selecionada == 1 or ed_periculosidade != f_perigo: p_final["Periculosidade/Insalubridade"] = str(ed_periculosidade)
+                    if qtd_selecionada == 1 or (ed_meta.strip() != ""): p_final["Meta_Indicador"] = str(ed_meta).strip()
                     
-                    # RH e Localização
-                    if qtd_selecionada == 1 or (ed_servidor.strip() != ""): 
-                        p_final["Servidor"] = str(ed_servidor).strip()
-                    if qtd_selecionada == 1 or (ed_uf_srv.strip() != ""): 
-                        p_final["UF_Servidor"] = str(ed_uf_srv).strip()
-                    if qtd_selecionada == 1 or (ed_lotacao.strip() != ""): 
-                        p_final["Lotação"] = str(ed_lotacao).strip()
-                    if qtd_selecionada == 1 or ed_eq_emergencia != ("Sim" if f_eq_emerg == "Sim" else "Não"): 
-                        p_final["Faz parte da Equipe de Emergências"] = str(ed_eq_emergencia)
-                    if qtd_selecionada == 1 or (ed_pcdp.strip() != ""): 
-                        p_final["Número da PCDP"] = str(ed_pcdp).strip()
-                    if qtd_selecionada == 1 or (ed_pais.strip() != "Brasil" and ed_pais.strip() != ""): 
-                        p_final["País"] = str(ed_pais).strip()
-                    if qtd_selecionada == 1 or (ed_uf_oc.strip() != ""): 
-                        p_final["UF Onde Ocorreu/Ocorrerá a Ação"] = str(ed_uf_oc).strip()
-                    if qtd_selecionada == 1 or (ed_estado_local.strip() != ""): 
-                        p_final["Estado_Local_Acao"] = str(ed_estado_local).strip()
-                    if qtd_selecionada == 1 or (ed_municipio.strip() != ""): 
-                        p_final["Municipio Onde Ocorreu/Ocorrerá a Ação"] = str(ed_municipio).strip()
+                    if qtd_selecionada == 1 or (ed_servidor.strip() != ""): p_final["Servidor"] = str(ed_servidor).strip()
+                    if qtd_selecionada == 1 or (ed_uf_srv.strip() != ""): p_final["UF_Servidor"] = str(ed_uf_srv).strip()
+                    if qtd_selecionada == 1 or (ed_lotacao.strip() != ""): p_final["Lotação"] = str(ed_lotacao).strip()
+                    if qtd_selecionada == 1 or ed_eq_emergencia != ("Sim" if f_eq_emerg == "Sim" else "Não"): p_final["Faz parte da Equipe de Emergências"] = str(ed_eq_emergencia)
+                    if qtd_selecionada == 1 or (ed_pcdp.strip() != ""): p_final["Número da PCDP"] = str(ed_pcdp).strip()
+                    if qtd_selecionada == 1 or (ed_pais.strip() != "Brasil" and ed_pais.strip() != ""): p_final["País"] = str(ed_pais).strip()
+                    if qtd_selecionada == 1 or (ed_uf_oc.strip() != ""): p_final["UF Onde Ocorreu/Ocorrerá a Ação"] = str(ed_uf_oc).strip()
+                    if qtd_selecionada == 1 or (ed_estado_local.strip() != ""): p_final["Estado_Local_Acao"] = str(ed_estado_local).strip()
+                    if qtd_selecionada == 1 or (ed_municipio.strip() != ""): p_final["Municipio Onde Ocorreu/Ocorrerá a Ação"] = str(ed_municipio).strip()
                     
-                    # Cronograma e Custos (Campos de data e numéricos)
-                    if qtd_selecionada == 1 or (ed_dt_ini.strip() != ""): 
-                        p_final["Data de Início"] = str(ed_dt_ini).strip()
-                    if qtd_selecionada == 1 or (ed_dt_fim.strip() != ""): 
-                        p_final["Data de Término"] = str(ed_dt_fim).strip()
-                    if qtd_selecionada == 1 or ed_dias_pl != 0.0: 
-                        p_final["Dias_Gastos_Plan"] = float(ed_dias_pl)
-                    if qtd_selecionada == 1 or ed_dias_ex != 0.0: 
-                        p_final["Dias_Gastos_Exec"] = float(ed_dias_ex)
-                    if qtd_selecionada == 1 or (ed_origem.strip() != ""): 
-                        p_final["Origem do Recurso"] = str(ed_origem).strip()
+                    if qtd_selecionada == 1 or (ed_dt_ini.strip() != ""): p_final["Data de Início"] = str(ed_dt_ini).strip()
+                    if qtd_selecionada == 1 or (ed_dt_fim.strip() != ""): p_final["Data de Término"] = str(ed_dt_fim).strip()
+                    if qtd_selecionada == 1 or ed_dias_pl != 0.0: p_final["Dias_Gastos_Plan"] = float(ed_dias_pl)
+                    if qtd_selecionada == 1 or ed_dias_ex != 0.0: p_final["Dias_Gastos_Exec"] = float(ed_dias_ex)
+                    if qtd_selecionada == 1 or (ed_origem.strip() != ""): p_final["Origem do Recurso"] = str(ed_origem).strip()
                     
-                    if qtd_selecionada == 1 or ed_rp_d != 0.0: 
-                        p_final["Rec_Plan_Diarias"] = float(ed_rp_d)
-                    if qtd_selecionada == 1 or ed_rp_p != 0.0: 
-                        p_final["Rec_Plan_Passagens"] = float(ed_rp_p)
-                    if qtd_selecionada == 1 or ed_rp_o != 0.0: 
-                        p_final["Rec_Plan_Outras_Despesas"] = float(ed_rp_o)
-                    if qtd_selecionada == 1 or ed_re_d != 0.0: 
-                        p_final["Rec_Exec_Diarias"] = float(ed_re_d)
-                    if qtd_selecionada == 1 or ed_re_p != 0.0: 
-                        p_final["Rec_Exec_Passagens"] = float(ed_re_p)
-                    if qtd_selecionada == 1 or ed_re_o != 0.0: 
-                        p_final["Rec_Exec_Outras_Despesas"] = float(ed_re_o)
+                    if qtd_selecionada == 1 or ed_rp_d != 0.0: p_final["Rec_Plan_Diarias"] = float(ed_rp_d)
+                    if qtd_selecionada == 1 or ed_rp_p != 0.0: p_final["Rec_Plan_Passagens"] = float(ed_rp_p)
+                    if qtd_selecionada == 1 or ed_rp_o != 0.0: p_final["Rec_Plan_Outras_Despesas"] = float(ed_rp_o)
+                    if qtd_selecionada == 1 or ed_re_d != 0.0: p_final["Rec_Exec_Diarias"] = float(ed_re_d)
+                    if qtd_selecionada == 1 or ed_re_p != 0.0: p_final["Rec_Exec_Passagens"] = float(ed_re_p)
+                    if qtd_selecionada == 1 or ed_re_o != 0.0: p_final["Rec_Exec_Outras_Despesas"] = float(ed_re_o)
                     
-                    # Justificativas
-                    if qtd_selecionada == 1 or (ed_obs.strip() != ""): 
-                        p_final["Observações"] = str(ed_obs).strip()
-                    if qtd_selecionada == 1 or (ed_justificativa.strip() != ""): 
-                        p_final["Justificativa_Acao_PNAPA"] = str(ed_justificativa).strip()
+                    # 💡 FIX definitivo do NameError ocultado: ed_obs em vez do antigo ed_ed_obs
+                    if qtd_selecionada == 1 or (ed_obs.strip() != ""): p_final["Observações"] = str(ed_obs).strip()
+                    if qtd_selecionada == 1 or (ed_justificativa.strip() != ""): p_final["Justificativa_Acao_PNAPA"] = str(ed_justificativa).strip()
 
-                    # 3. Recalcula as somas orçamentárias de forma limpa baseada no resultado da mesclagem
+                    # 3. Recalculo defensivo dos totais
                     p_final["Rec_Plan_Total"] = float(p_final.get("Rec_Plan_Diarias", 0)) + float(p_final.get("Rec_Plan_Passagens", 0)) + float(p_final.get("Rec_Plan_Outras_Despesas", 0))
                     p_final["Rec_Exec_Total"] = float(p_final.get("Rec_Exec_Diarias", 0)) + float(p_final.get("Rec_Exec_Passagens", 0)) + float(p_final.get("Rec_Exec_Outras_Despesas", 0))
                     
                     payloads_envio_final.append(p_final)
                 
-                # Despacha o lote seguro e mesclado
+                # Despacha o lote seguro e mesclado sem quebras de tipagem
                 executar_envio_sharepoint(payloads_envio_final)
                 st.session_state["selecoes_macro"] = {}
 
