@@ -306,21 +306,19 @@ if modo == "📊 Visualizar Base":
             st.session_state["version_editor"] = 0
 
         # --- 🎛️ BOTÃO DINÂMICO PARA DESMARCAR TODOS ---
-        # Só mostra o botão se houver de fato algum item marcado na memória
         ids_marcados_check = [k for k, v in st.session_state["selecoes_macro"].items() if v]
         if ids_marcados_check:
-            if st.button("✕ Desmarcar Todos os Itens", type="secondary", use_container_width=False):
+            if st.button("✕ Desmarcar Todos os Itens", type="secondary"):
                 st.session_state["selecoes_macro"] = {}
                 st.session_state["version_editor"] += 1  # Força o reset visual do data_editor
                 st.rerun()
 
         # --- 📊 ORDENAÇÃO DECRESCENTE POR ID ---
         df_interativo = df_exibicao.copy()
-        # Converte temporariamente para numérico para ordenar matematicamente (ex: 100 acima de 99)
         df_interativo["Id_Numeric"] = pd.to_numeric(df_interativo["Id"], errors='coerce').fillna(0)
         df_interativo = df_interativo.sort_values(by="Id_Numeric", ascending=False).drop(columns=["Id_Numeric"]).reset_index(drop=True)
         
-        # Injeta os estados booleanos gravados na coluna visível do editor
+        # Injeta os estados booleanos gravados na coluna visível do editor único
         df_interativo.insert(
             0, 
             "Selecionar", 
@@ -329,7 +327,7 @@ if modo == "📊 Visualizar Base":
         
         colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
         
-        # Renderiza a tabela única interativa com a key dinâmica da versão
+        # RENDERIZAÇÃO DA TABELA ÚNICA CORPORATIVA
         key_dinamica = f"editor_lote_pnapa_v{st.session_state['version_editor']}"
         tabela_editavel = st.data_editor(
             df_interativo,
@@ -338,42 +336,19 @@ if modo == "📊 Visualizar Base":
             column_config=colunas_travadas,
             key=key_dinamica
         )
-        df_interativo = df_exibicao.copy()
-        
-        # Injeta os estados booleanos gravados diretamente na coluna invisível do editor
-        df_interativo.insert(
-            0, 
-            "Selecionar", 
-            [st.session_state["selecoes_macro"].get(str(row_id), False) for row_id in df_interativo["Id"]]
-        )
-        
-        # Bloqueia a edição de todas as colunas de dados, liberando apenas o checkbox amigável
-        colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
-        
-        # Renderiza a tabela única interativa (Desativamos o rerun direto para quebrar o loop)
-        tabela_editavel = st.data_editor(
-            df_interativo,
-            hide_index=True,
-            use_container_width=True,
-            column_config=colunas_travadas,
-            key="editor_lote_pnapa"
-        )
         
         # --- 💾 CAPTURA AS ALTERAÇÕES SEM ENTRAR EM LOOP ---
-        # Se houver mudanças nos checkboxes, atualizamos a memória silenciosamente no back-end
-        if st.session_state.editor_lote_pnapa and "edited_rows" in st.session_state.editor_lote_pnapa:
-            linhas_editadas = st.session_state.editor_lote_pnapa["edited_rows"]
+        if st.session_state[key_dinamica] and "edited_rows" in st.session_state[key_dinamica]:
+            linhas_editadas = st.session_state[key_dinamica]["edited_rows"]
             mudanca_detectada = False
             
             for idx_linha, alteracao in linhas_editadas.items():
                 if "Selecionar" in alteracao:
                     id_real_linha = str(df_interativo.iloc[int(idx_linha)]["Id"])
-                    # Só atualiza e marca para reiniciar se o valor realmente mudou
                     if st.session_state["selecoes_macro"].get(id_real_linha, False) != alteracao["Selecionar"]:
                         st.session_state["selecoes_macro"][id_real_linha] = alteracao["Selecionar"]
                         mudanca_detectada = True
             
-            # O rerun só é chamado UMA VEZ no clique para fixar o "X" visualmente na tela
             if mudanca_detectada:
                 st.rerun()
 
