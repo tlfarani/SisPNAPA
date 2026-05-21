@@ -298,30 +298,26 @@ if modo == "📊 Visualizar Base":
         
         st.markdown("<br>", unsafe_allow_html=True)
         def estilar_linhas_zebradas(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
+        
+        # --- TELA 1: RENDERIZAÇÃO INTERATIVA COM PERSISTÊNCIA DE MEMÓRIA ---
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Ativa a seleção múltipla de linhas com checkboxes nativos
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # 1. Injeta uma coluna temporária de checkbox no início do DataFrame
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # --- 🧠 MEMÓRIA DE SELEÇÃO: INICIALIZA O ESTADO NO SESSION STATE ---
+        # Inicializa o dicionário de estado se ele não existir
         if "selecoes_macro" not in st.session_state:
             st.session_state["selecoes_macro"] = {}
 
         df_interativo = df_exibicao.copy()
         
-        # Mapeia e preenche a coluna "Selecionar" com base no que o usuário já clicou antes do rerun
+        # Injeta os booleanos salvos diretamente na coluna invisível do editor
         df_interativo.insert(
             0, 
             "Selecionar", 
             [st.session_state["selecoes_macro"].get(str(row_id), False) for row_id in df_interativo["Id"]]
         )
         
+        # Bloqueia a edição de todas as colunas de dados, liberando apenas o checkbox
         colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
         
-        # Renderiza o editor de dados estável
         tabela_editavel = st.data_editor(
             df_interativo,
             hide_index=True,
@@ -330,32 +326,22 @@ if modo == "📊 Visualizar Base":
             key="editor_lote_pnapa"
         )
         
-        # --- 💾 CAPTURA E SALVA AS ALTERAÇÕES EM TEMPO REAL ---
-        # Se o usuário marcou ou desmarcou algo, atualizamos o dicionário de sessão antes que o dado se perca
+        # Grava os novos cliques do usuário na sessão global antes do rerun automático do Streamlit
         if st.session_state.editor_lote_pnapa and "edited_rows" in st.session_state.editor_lote_pnapa:
             linhas_editadas = st.session_state.editor_lote_pnapa["edited_rows"]
             
-            # --- CORRIGIDO AQUI: de lines_editadas para linhas_editadas ---
             for idx_linha, alteracao in linhas_editadas.items():
                 if "Selecionar" in alteracao:
-                    # Captura o ID real da linha alterada usando o índice do DataFrame interativo
                     id_real_linha = str(df_interativo.iloc[int(idx_linha)]["Id"])
-                    # Grava o novo estado (True ou False) na memória global da sessão
                     st.session_state["selecoes_macro"][id_real_linha] = alteracao["Selecionar"]
             
-            # Se houve clique, força o rerun com a memória já atualizada para fixar o visual do checkbox
             st.rerun()
 
-        # O filtro de linhas selecionadas agora consome os dados que estão com True na memória gravada
+        # O FILTRO DEFINITIVO: Captura os IDs que estão marcados como True na memória estável
         ids_marcados = [id_key for id_key, marcado in st.session_state["selecoes_macro"].items() if marcado]
         df_linhas_selecionadas = df_exibicao[df_exibicao["Id"].astype(str).isin(ids_marcados)]
         
-        if not df_linhas_selecionadas.empty:
-            ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
-        
-        # 3. Captura quais linhas o usuário marcou como True
-        df_linhas_selecionadas = tabela_editavel[tabela_editavel["Selecionar"] == True]
-        
+        # Se houver linhas retidas na memória, faz saltar na tela o painel operacional de lote
         if not df_linhas_selecionadas.empty:
             ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
             
@@ -380,8 +366,7 @@ if modo == "📊 Visualizar Base":
                             st.cache_data.clear()
                             if "df" in st.session_state: del st.session_state.df
                             st.success(f"🎉 {sucessos_del} registros removidos com sucesso!")
-                            # Limpa a memória de checkboxes selecionados para a próxima operação
-                            st.session_state["selecoes_macro"] = {}
+                            st.session_state["selecoes_macro"] = {}  # Limpa os X marcados
                             time.sleep(1.5)
                             st.rerun()
 
@@ -405,7 +390,6 @@ if modo == "📊 Visualizar Base":
                         payloads_edit_lote = []
                         
                         for _, row_original in df_linhas_selecionadas.iterrows():
-                            # Limpa a coluna 'Selecionar' para o payload ir idêntico ao SharePoint
                             p_edit = {col: row_original[col] for col in df_exibicao.columns if col in row_original}
                             p_edit["acao_fluxo"] = "editar"
                             p_edit["Id"] = str(row_original["Id"])
@@ -421,8 +405,7 @@ if modo == "📊 Visualizar Base":
                             st.cache_data.clear()
                             if "df" in st.session_state: del st.session_state.df
                             st.success(f"🎉 {sucessos_edit} registros atualizados com sucesso!")
-                            # Limpa a memória de checkboxes selecionados para a próxima operação
-                            st.session_state["selecoes_macro"] = {}
+                            st.session_state["selecoes_macro"] = {}  # Limpa os X marcados
                             time.sleep(1.5)
                             st.rerun()
 
