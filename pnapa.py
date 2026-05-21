@@ -37,40 +37,26 @@ COLUNAS_PNAPA = [
 # =================================================================
 def executar_envio_sharepoint(lista_payloads):
     sucessos = 0
-    total_requisicoes = len(lista_payloads)
-    
-    with st.spinner(f"Processando e sincronizando {total_requisicoes} requisições com o IBAMA..."):
-        for idx, p in enumerate(lista_payloads):
+    with st.spinner(f"Processando e sincronizando {len(lista_payloads)} requisições com o IBAMA..."):
+        for p in lista_payloads:
             try:
-                # Se for um lote (mais de 1 item), mostra em qual linha o motor está trabalhando
-                if total_requisicoes > 1:
-                    st.caption(f"⏳ Sincronizando registro {idx + 1} de {total_requisicoes} (ID: {p.get('Id')})...")
-                
-                resposta = requests.post(URL_GRAVAR, json=p, timeout=30) # Aumentado timeout para 30s
-                
+                resposta = requests.post(URL_GRAVAR, json=p, timeout=20)
                 if resposta.status_code in [200, 202]: 
                     sucessos += 1
-                
-                # 🚀 O SEGREDO DO LOTE: Se houver mais linhas para enviar, força um respiro de 3 segundos
-                # Isso dá tempo para o Power Automate liberar o arquivo Excel no SharePoint evitando o bloqueio por concorrência
-                if total_requisicoes > 1 and idx < (total_requisicoes - 1):
-                    time.sleep(3.0)
-                    
-            except Exception as e:
+            except: 
                 pass
             
     if sucessos > 0:
         with st.spinner("Consolidando alterações no banco do SharePoint..."):
-            # Dá um respiro final maior para o cache da nuvem assentar
-            time.sleep(4.0 if total_requisicoes > 1 else 2.0) 
+            time.sleep(1.5)  # Respiro mínimo padrão apenas para o banco assentar
             st.cache_data.clear()
             if "df" in st.session_state: 
                 del st.session_state.df
-        st.success(f"🎉 🎉 Sucesso! {sucessos} de {total_requisicoes} registros foram processados e indexados com sucesso!")
-        time.sleep(1.5)
+        st.success(f"🎉 🎉 Sucesso! {sucessos} registro(s) processado(s) e indexado(s) no SharePoint!")
+        time.sleep(1)
         st.rerun()
     else:
-        st.error("❌ Falha crítica: O SharePoint rejeitou a rajada de carga ou o arquivo estava bloqueado para edição.")
+        st.error("❌ Falha crítica: O Power Automate rejeitou a carga.")
 
 def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, importancia, tema, objective, tipo_atividade, periculosidade, servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual):
     id_final = str(int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1)) if modo == "➕ Inserir Nova Linha" else id_atual
@@ -315,38 +301,30 @@ if modo == "📊 Visualizar Base":
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- 🧠 MEMÓRIA DE SELEÇÃO E CONTROLE DE RESET ---
+        # --- 🧠 MEMÓRIA DE SELEÇÃO E CONTROLE DE VERSÃO DO WIDGET ---
         if "selecoes_macro" not in st.session_state:
             st.session_state["selecoes_macro"] = {}
-        # Contador dinâmico para forçar o reset visual do st.data_editor após submissões
         if "version_editor" not in st.session_state:
             st.session_state["version_editor"] = 0
 
         df_interativo = df_exibicao.copy()
         
-        # 1. ORDENAÇÃO DECRESCENTE PADRÃO POR ID
-        # Converte temporariamente para numérico para garantir a ordenação matemática correta (ex: 10 vem antes de 9)
+        # 1. GARANTE A ORDENAÇÃO DECRESCENTE POR ID NA EXIBIÇÃO
+        # Convertemos temporariamente para numérico para ordenar de forma matemática correta
         df_interativo["Id_Numeric"] = pd.to_numeric(df_interativo["Id"], errors='coerce').fillna(0)
         df_interativo = df_interativo.sort_values(by="Id_Numeric", ascending=False).drop(columns=["Id_Numeric"])
         
-        # 2. INTELIGÊNCIA DE FOCO: Se houver registro editado recentemente, joga ele para o topo do grid
-        if "ids_editados_recentemente" in st.session_state and st.session_state["ids_editados_recentemente"]:
-            lista_foco = [str(i) for i in st.session_state["ids_editados_recentemente"]]
-            df_prioritario = df_interativo[df_interativo["Id"].astype(str).isin(lista_foco)]
-            df_resto = df_interativo[~df_interativo["Id"].astype(str).isin(lista_foco)]
-            df_interativo = pd.concat([df_prioritario, df_resto])
-            st.caption("💡 Linhas editadas recentemente foram destacadas no topo do grid.")
-        
-        # Injeta os estados booleanos gravados na coluna invisível do editor
+        # Injeta os estados booleanos gravados diretamente na coluna do editor
         df_interativo.insert(
             0, 
             "Selecionar", 
             [st.session_state["selecoes_macro"].get(str(row_id), False) for row_id in df_interativo["Id"]]
         )
         
+        # Bloqueia a edição de todas as colunas de dados, liberando apenas o checkbox
         colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
         
-        # Renderiza o editor usando uma chave dinâmica (key + version) para permitir zerar os checks
+        # Renderiza a tabela com a chave dinâmica que permite resetar os checks pós-submissão
         key_dinamica = f"editor_lote_pnapa_v{st.session_state['version_editor']}"
         tabela_editavel = st.data_editor(
             df_interativo,
@@ -371,10 +349,11 @@ if modo == "📊 Visualizar Base":
             if mudanca_detectada:
                 st.rerun()
 
-        # Filtra os IDs marcados
+        # O FILTRO DEFINITIVO: Mapeia quais IDs estão marcados como True na memória persistente
         ids_marcados = [id_key for id_key, marcado in st.session_state["selecoes_macro"].items() if marcado]
         df_linhas_selecionadas = df_exibicao[df_exibicao["Id"].astype(str).isin(ids_marcados)]
         
+        # --- MOTOR DINÂMICO DE EDIÇÃO / EXCLUSÃO (RETORNADO AO PONTO ESTÁVEL) ---
         if not df_linhas_selecionadas.empty:
             ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
             qtd_selecionada = len(ids_selecionados)
@@ -383,9 +362,9 @@ if modo == "📊 Visualizar Base":
             st.markdown(f"### 🛠️ Central de Operações Dinâmicas ({qtd_selecionada} item(ns) selecionado(s))")
             st.caption(f"IDs detectados: {', '.join(ids_selecionados)}")
             
-            # --- POP OVER: REMOVER ---
+            # Botão de Exclusão unificado no topo do painel operacional
             with st.popover("🗑️ Remover Registro(s) Selecionado(s)", use_container_width=True):
-                st.markdown(f"<p style='color:#03170a;'>⚠️ <b>CRÍTICO:</b> Deseja apagar o(s) registro(s) de ID: <b>{', '.join(ids_selecionados)}</b>?</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='color:#03170a;'>⚠️ <b>CRÍTICO:</b> Deseja apagar de forma definitiva o(s) registro(s) de ID: <b>{', '.join(ids_selecionados)}</b> no SharePoint?</p>", unsafe_allow_html=True)
                 if st.button("Sim, confirmar destruição permanente!", type="primary", key="btn_del_lote_tabela_final"):
                     payloads_del = [{"Id": str(id_del)} for id_del in ids_selecionados]
                     sucessos_del = 0
@@ -398,19 +377,19 @@ if modo == "📊 Visualizar Base":
                         if "df" in st.session_state: del st.session_state.df
                         st.success(f"💥 {sucessos_del} registro(s) removido(s) com sucesso!")
                         
-                        # RESET TOTAL DO ESTADO DOS CHECKBOXES
+                        # Limpeza completa dos estados para a próxima rodada
                         st.session_state["selecoes_macro"] = {}
-                        st.session_state["ids_editados_recentemente"] = [] # Limpa foco se deletou
                         st.session_state["version_editor"] += 1
                         time.sleep(1.5)
                         st.rerun()
 
             st.markdown("#### 📝 Formulário Adaptativo de Atualização")
             
+            # --- DEFINIÇÃO DE FALLBACKS (INDIVIDUAL VS LOTE) ---
             if qtd_selecionada == 1:
                 registro_alvo = df_linhas_selecionadas.iloc[0]
                 st.info(f"ℹ️ Modo de Edição Individual ativo para o ID **{ids_selecionados[0]}**.")
-                # [As variáveis de fallback de f_nivel até f_meta continuam idênticas aqui...]
+                
                 f_nivel = str(registro_alvo.get("Nível", "Atividade"))
                 f_andamento = str(registro_alvo.get("Andamento", "Não Iniciada"))
                 f_nome_atv = str(registro_alvo.get("Nome da Atividade", ""))
@@ -450,7 +429,7 @@ if modo == "📊 Visualizar Base":
                 f_pais, f_uf_oc, f_est, f_mun, f_dias_pl, f_dias_ex, f_origem = "Brasil", "", "", "", 0.0, 0.0, ""
                 f_rp_d, f_rp_p, f_rp_o, f_re_d, f_re_p, f_re_o, f_obs, f_just, f_meta = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", ""
 
-            # [O bloco intermediário static st.form e as abas continuam exatamente o mesmo...]
+            # --- RENDERING DO FORMULÁRIO COM AS ABAS TEMÁTICAS REATIVAS ---
             with st.form(key="form_edicao_lote_tabela", clear_on_submit=True):
                 ref_linha = df_linhas_selecionadas.iloc[0]
                 v_ano = ref_linha.get("Ano da Ação")
@@ -458,6 +437,7 @@ if modo == "📊 Visualizar Base":
                 v_nome = ref_linha.get("Nome da Ação PNAPA")
                 v_ind = ref_linha.get("Indicador")
                 st.markdown(f"**Vínculo Macro:** {v_num} - {v_nome}")
+                
                 aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
                 with aba1:
                     lista_niveis = ["Ação", "Atividade"]
@@ -516,29 +496,21 @@ if modo == "📊 Visualizar Base":
                     ed_justificativa = st.text_area("Justificativa_Acao_PNAPA", value=f_just)
                 submeter_alteracao = st.form_submit_button(label="💾 Gravar Alterações no SharePoint")
 
-            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PRESERVAÇÃO E FOCO) ---
+            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PONTO REVERTIDO ESTÁVEL) ---
             if submeter_alteracao:
                 payloads_envio_final = []
-                ids_salvos_fluxo = []  # Guarda os IDs afetados para dar o zoom visual posterior
                 
                 for _, row_orig in df_linhas_selecionadas.iterrows():
                     id_alvo_loop = str(row_orig["Id"])
-                    ids_salvos_fluxo.append(id_alvo_loop)
                     
-                    # Reconstrói a base do payload garantindo tipos primitivos limpos
                     p_final = {col: row_orig[col] for col in df_exibicao.columns if col in row_orig}
                     p_final["acao_fluxo"] = "editar"
                     p_final["Id"] = str(id_alvo_loop)
-                    p_final["Ano da Ação"] = int(v_ano) if v_ano else int(pd.to_numeric(row_orig.get("Ano da Ação"), errors='coerce') or 2026)
-                    p_final["Número da Ação PNAPA"] = str(v_num) if v_num else str(row_orig.get("Número da Ação PNAPA", ""))
-                    p_final["Nome da Ação PNAPA"] = str(v_nome) if v_nome else str(row_orig.get("Nome da Ação PNAPA", ""))
-                    p_final["Indicador"] = str(v_ind) if v_ind else str(row_orig.get("Indicador", ""))
                     
-                    # Injeção condicional adaptativa inteligente
                     if qtd_selecionada == 1 or ed_nivel != f_nivel: p_final["Nível"] = str(ed_nivel)
                     if qtd_selecionada == 1 or (ed_nome_atv.strip() != ""): p_final["Nome da Atividade"] = str(ed_nome_atv).strip()
                     if qtd_selecionada == 1 or ed_andamento != f_andamento: p_final["Andamento"] = str(ed_andamento)
-                    if qtd_selecionada == 1 or (ed_res_ind.strip() != ""): p_final["Result_Indicador"] = str(ed_res_ind).strip()
+                    if qtd_selecionada == 1 or (ed_res_ind.strip() != ""): p_final["Resultado_Indicador"] = str(ed_res_ind).strip()
                     if qtd_selecionada == 1 or (ed_doc.strip() != ""): p_final["Doc_Probatorio_Exec"] = str(ed_doc).strip()
                     if qtd_selecionada == 1 or (ed_uf_pna.strip() != ""): p_final["UF_Acao_PNAPA"] = str(ed_uf_pna).strip()
                     if qtd_selecionada == 1 or ed_importancia != f_imp: p_final["Importância da Atividade"] = str(ed_importancia)
@@ -547,7 +519,6 @@ if modo == "📊 Visualizar Base":
                     if qtd_selecionada == 1 or (ed_tipo.strip() != ""): p_final["Tipo de Atividade"] = str(ed_tipo).strip()
                     if qtd_selecionada == 1 or ed_periculosidade != f_perigo: p_final["Periculosidade/Insalubridade"] = str(ed_periculosidade)
                     if qtd_selecionada == 1 or (ed_meta.strip() != ""): p_final["Meta_Indicador"] = str(ed_meta).strip()
-                    
                     if qtd_selecionada == 1 or (ed_servidor.strip() != ""): p_final["Servidor"] = str(ed_servidor).strip()
                     if qtd_selecionada == 1 or (ed_uf_srv.strip() != ""): p_final["UF_Servidor"] = str(ed_uf_srv).strip()
                     if qtd_selecionada == 1 or (ed_lotacao.strip() != ""): p_final["Lotação"] = str(ed_lotacao).strip()
@@ -558,6 +529,8 @@ if modo == "📊 Visualizar Base":
                     if qtd_selecionada == 1 or (ed_estado_local.strip() != ""): p_final["Estado_Local_Acao"] = str(ed_estado_local).strip()
                     if qtd_selecionada == 1 or (ed_municipio.strip() != ""): p_final["Municipio Onde Ocorreu/Ocorrerá a Ação"] = str(ed_municipio).strip()
                     
+                    if qtd_selecionada == 1 or (ed_dt_ini.strip() != ""): p_final["Data de Início"] = str(ed_dt_ini).strip()
+                    if qtd_selecionada == 1 or (ed_dt_fim.strip() != ""): p_final["Data de Término"] = str(ed_dt_fim).strip()
                     if qtd_selecionada == 1 or ed_dias_pl != 0.0: p_final["Dias_Gastos_Plan"] = float(ed_dias_pl)
                     if qtd_selecionada == 1 or ed_dias_ex != 0.0: p_final["Dias_Gastos_Exec"] = float(ed_dias_ex)
                     if qtd_selecionada == 1 or (ed_origem.strip() != ""): p_final["Origem do Recurso"] = str(ed_origem).strip()
@@ -568,64 +541,40 @@ if modo == "📊 Visualizar Base":
                     if qtd_selecionada == 1 or ed_re_p != 0.0: p_final["Rec_Exec_Passagens"] = float(ed_re_p)
                     if qtd_selecionada == 1 or ed_re_o != 0.0: p_final["Rec_Exec_Outras_Despesas"] = float(ed_re_o)
                     
-                    # 🚀 INTERPRETADOR E CONVERSOR SEGURO DE DATAS (Brasil DD/MM/AAAA -> ISO AAAA-MM-DD)
                     raw_ini = ed_dt_ini.strip() if (qtd_selecionada == 1 or ed_dt_ini.strip() != "") else str(row_orig.get("Data de Início", ""))
                     raw_fim = ed_dt_fim.strip() if (qtd_selecionada == 1 or ed_dt_fim.strip() != "") else str(row_orig.get("Data de Término", ""))
                     
-                    def converter_para_iso_estrito(data_str):
-                        limpa = str(data_str).strip()
-                        if "/" in limpa:
+                    def normalizar_padrao_iso(data_str):
+                        data_limpa = data_str.strip()
+                        if "/" in data_limpa:
                             try:
-                                partes = limpa.split("/")
-                                if len(partes) == 3:
-                                    # Se veio como DD/MM/AAAA converte para AAAA-MM-DD
-                                    if len(partes[2]) == 4: return f"{partes[2]}-{partes[1]}-{partes[0]}"
-                                    # Se veio como AAAA/MM/DD ajusta o separador
-                                    if len(partes[0]) == 4: return f"{partes[0]}-{partes[1]}-{partes[2]}"
+                                d, m, a = data_limpa.split("/")
+                                return f"{a}-{m}-{d}"
                             except: pass
-                        return limpa
+                        return data_limpa
                     
-                    p_final["Data de Início"] = converter_para_iso_estrito(raw_ini)
-                    p_final["Data de Término"] = converter_para_iso_estrito(raw_fim)
+                    p_final["Data de Início"] = normalizar_padrao_iso(raw_ini)
+                    p_final["Data de Término"] = normalizar_padrao_iso(raw_fim)
                     
-                    # 💡 FIX definitivo do NameError ocultado: ed_obs em vez do antigo ed_ed_obs
                     if qtd_selecionada == 1 or (ed_obs.strip() != ""): p_final["Observações"] = str(ed_obs).strip()
                     if qtd_selecionada == 1 or (ed_justificativa.strip() != ""): p_final["Justificativa_Acao_PNAPA"] = str(ed_justificativa).strip()
 
-                    # Recálculo matemático transparente dos totais orçamentários mesclados
                     p_final["Rec_Plan_Total"] = float(p_final.get("Rec_Plan_Diarias", 0)) + float(p_final.get("Rec_Plan_Passagens", 0)) + float(p_final.get("Rec_Plan_Outras_Despesas", 0))
                     p_final["Rec_Exec_Total"] = float(p_final.get("Rec_Exec_Diarias", 0)) + float(p_final.get("Rec_Exec_Passagens", 0)) + float(p_final.get("Rec_Exec_Outras_Despesas", 0))
                     
-                    # 🚀 BLINDAGEM ANTI-REJEIÇÃO: Varre o payload e limpa qualquer NaN invisível do Pandas
-                    # Transforma NaNs numéricos em 0.0 e NaNs de texto em string vazia ""
+                    # Limpeza rápida de NaN residual numérico antes do append
                     payload_sanitizado = {}
-                    for chave, valor in p_final.items():
-                        if pd.isna(valor):
-                            if "Rec_" in chave or "Dias_" in chave or "Ano" in chave:
-                                payload_sanitizado[chave] = 0.0
-                            else:
-                                payload_sanitizado[chave] = ""
-                        else:
-                            payload_sanitizado[chave] = valor
-
+                    for k, v in p_final.items():
+                        payload_sanitizado[k] = 0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)
+                    
                     payloads_envio_final.append(payload_sanitizado)
                 
-                # Despacha o lote higienizado sem nenhuma contaminação de NaN para a API
+                # Envia usando a esteira estável e veloz original
                 executar_envio_sharepoint(payloads_envio_final)
                 
-                # --- MEMÓRIA PÓS-SUBMISSÃO ATIVA ---
+                # Zera os checkboxes e mata o cache visual mudando a versão do editor
                 st.session_state["selecoes_macro"] = {}
-                st.session_state["ids_editados_recentemente"] = ids_salvos_fluxo
                 st.session_state["version_editor"] += 1
-                st.rerun()
-                
-                # Despacha o lote higienizado com a tipagem aceita pelo Power Automate
-                executar_envio_sharepoint(payloads_envio_final)
-                
-                # --- MEMÓRIA PÓS-SUBMISSÃO ATIVA ---
-                st.session_state["selecoes_macro"] = {}  # Reseta os checkboxes marcados
-                st.session_state["ids_editados_recentemente"] = ids_salvos_fluxo  # Fixa os itens salvos no topo
-                st.session_state["version_editor"] += 1  # Destrói o estado visual antigo do st.data_editor
                 st.rerun()
 
 # --- TELA 2 E 3: FORMULÁRIO DA PLANILHA MACRO (INSERIR OU EDITAR) ---
