@@ -301,30 +301,26 @@ if modo == "📊 Visualizar Base":
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- 🧠 MEMÓRIA DE SELEÇÃO E CONTROLE DE VERSÃO DO WIDGET ---
+        # --- 🧠 MEMÓRIA DE SELEÇÃO E CONTROLE DE RESET ---
         if "selecoes_macro" not in st.session_state:
             st.session_state["selecoes_macro"] = {}
         if "version_editor" not in st.session_state:
             st.session_state["version_editor"] = 0
 
+        # Aplica a ordenação matemática decrescente estrita por ID antes de renderizar
         df_interativo = df_exibicao.copy()
-        
-        # 1. GARANTE A ORDENAÇÃO DECRESCENTE POR ID NA EXIBIÇÃO
-        # Convertemos temporariamente para numérico para ordenar de forma matemática correta
         df_interativo["Id_Numeric"] = pd.to_numeric(df_interativo["Id"], errors='coerce').fillna(0)
-        df_interativo = df_interativo.sort_values(by="Id_Numeric", ascending=False).drop(columns=["Id_Numeric"])
+        df_interativo = df_interativo.sort_values(by="Id_Numeric", ascending=False).drop(columns=["Id_Numeric"]).reset_index(drop=True)
         
-        # Injeta os estados booleanos gravados diretamente na coluna do editor
+        # Injeta os estados booleanos gravados diretamente na coluna do editor estruturado
         df_interativo.insert(
             0, 
             "Selecionar", 
             [st.session_state["selecoes_macro"].get(str(row_id), False) for row_id in df_interativo["Id"]]
         )
         
-        # Bloqueia a edição de todas as colunas de dados, liberando apenas o checkbox
         colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
         
-        # Renderiza a tabela com a chave dinâmica que permite resetar os checks pós-submissão
         key_dinamica = f"editor_lote_pnapa_v{st.session_state['version_editor']}"
         tabela_editavel = st.data_editor(
             df_interativo,
@@ -334,7 +330,7 @@ if modo == "📊 Visualizar Base":
             key=key_dinamica
         )
         
-        # --- 💾 CAPTURA AS ALTERAÇÕES SEM ENTRAR EM LOOP ---
+        # --- 💾 CAPTURA E MAPEA MUDANÇAS POR ÍNDICE RESETADO ---
         if st.session_state[key_dinamica] and "edited_rows" in st.session_state[key_dinamica]:
             linhas_editadas = st.session_state[key_dinamica]["edited_rows"]
             mudanca_detectada = False
@@ -349,11 +345,11 @@ if modo == "📊 Visualizar Base":
             if mudanca_detectada:
                 st.rerun()
 
-        # O FILTRO DEFINITIVO: Mapeia quais IDs estão marcados como True na memória persistente
+        # O FILTRO DEFINITIVO: Busca na base macro crua de cache direto para não herdar colunas renomeadas do grid
         ids_marcados = [id_key for id_key, marcado in st.session_state["selecoes_macro"].items() if marcado]
-        df_linhas_selecionadas = df_exibicao[df_exibicao["Id"].astype(str).isin(ids_marcados)]
+        df_linhas_selecionadas = df_atual[df_atual["Id"].astype(str).isin(ids_marcados)]
         
-        # --- MOTOR DINÂMICO DE EDIÇÃO / EXCLUSÃO (RETORNADO AO PONTO ESTÁVEL) ---
+        # --- Central de Operações Operacionais Dinâmicas ---
         if not df_linhas_selecionadas.empty:
             ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
             qtd_selecionada = len(ids_selecionados)
@@ -362,22 +358,20 @@ if modo == "📊 Visualizar Base":
             st.markdown(f"### 🛠️ Central de Operações Dinâmicas ({qtd_selecionada} item(ns) selecionado(s))")
             st.caption(f"IDs detectados: {', '.join(ids_selecionados)}")
             
-            # Botão de Exclusão unificado no topo do painel operacional
+            # --- POP OVER: REMOVER ---
             with st.popover("🗑️ Remover Registro(s) Selecionado(s)", use_container_width=True):
-                st.markdown(f"<p style='color:#03170a;'>⚠️ <b>CRÍTICO:</b> Deseja apagar de forma definitiva o(s) registro(s) de ID: <b>{', '.join(ids_selecionados)}</b> no SharePoint?</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='color:#03170a;'>⚠️ <b>CRÍTICO:</b> Deseja apagar o(s) registro(s) de ID: <b>{', '.join(ids_selecionados)}</b>?</p>", unsafe_allow_html=True)
                 if st.button("Sim, confirmar destruição permanente!", type="primary", key="btn_del_lote_tabela_final"):
                     payloads_del = [{"Id": str(id_del)} for id_del in ids_selecionados]
                     sucessos_del = 0
                     with st.spinner("Removendo dados..."):
                         for p_del in payloads_del:
                             r = requests.post(URL_DELETAR, json=p_del, timeout=20)
-                            if r.status_code in [200, 202]: sucessos_del += 1
+                            if r.status_code in [200, 202]: successes_del += 1
                     if sucessos_del > 0:
                         st.cache_data.clear()
                         if "df" in st.session_state: del st.session_state.df
                         st.success(f"💥 {sucessos_del} registro(s) removido(s) com sucesso!")
-                        
-                        # Limpeza completa dos estados para a próxima rodada
                         st.session_state["selecoes_macro"] = {}
                         st.session_state["version_editor"] += 1
                         time.sleep(1.5)
@@ -385,7 +379,6 @@ if modo == "📊 Visualizar Base":
 
             st.markdown("#### 📝 Formulário Adaptativo de Atualização")
             
-            # --- DEFINIÇÃO DE FALLBACKS (INDIVIDUAL VS LOTE) ---
             if qtd_selecionada == 1:
                 registro_alvo = df_linhas_selecionadas.iloc[0]
                 st.info(f"ℹ️ Modo de Edição Individual ativo para o ID **{ids_selecionados[0]}**.")
@@ -429,7 +422,6 @@ if modo == "📊 Visualizar Base":
                 f_pais, f_uf_oc, f_est, f_mun, f_dias_pl, f_dias_ex, f_origem = "Brasil", "", "", "", 0.0, 0.0, ""
                 f_rp_d, f_rp_p, f_rp_o, f_re_d, f_re_p, f_re_o, f_obs, f_just, f_meta = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", ""
 
-            # --- RENDERING DO FORMULÁRIO COM AS ABAS TEMÁTICAS REATIVAS ---
             with st.form(key="form_edicao_lote_tabela", clear_on_submit=True):
                 ref_linha = df_linhas_selecionadas.iloc[0]
                 v_ano = ref_linha.get("Ano da Ação")
@@ -474,8 +466,8 @@ if modo == "📊 Visualizar Base":
                     ed_municipio = st.text_input("Municipio Onde Ocorreu/Ocorrerá a Ação", value=f_mun)
                 with aba4:
                     st.caption("Insira no formato DD/MM/AAAA se quiser sobrescrever")
-                    ed_dt_ini = st.text_input("Data de Início", value=str(ref_linha["Data de Início"]) if qtd_selecionada == 1 else "")
-                    ed_dt_fim = st.text_input("Data de Término", value=str(ref_linha["Data de Término"]) if qtd_selecionada == 1 else "")
+                    ed_dt_ini = st.text_input("Data de Início", value=str(ref_linha.get("Data de Início", "")) if qtd_selecionada == 1 else "")
+                    ed_dt_fim = st.text_input("Data de Término", value=str(ref_linha.get("Data de Término", "")) if qtd_selecionada == 1 else "")
                     ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl)
                     ed_dias_ex = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=f_dias_ex)
                     ed_origem = st.text_input("Origem do Recurso", value=f_origem)
@@ -496,14 +488,15 @@ if modo == "📊 Visualizar Base":
                     ed_justificativa = st.text_area("Justificativa_Acao_PNAPA", value=f_just)
                 submeter_alteracao = st.form_submit_button(label="💾 Gravar Alterações no SharePoint")
 
-            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PONTO REVERTIDO ESTÁVEL) ---
+            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PRESERVAÇÃO E PARSER ISO) ---
             if submeter_alteracao:
                 payloads_envio_final = []
                 
                 for _, row_orig in df_linhas_selecionadas.iterrows():
                     id_alvo_loop = str(row_orig["Id"])
                     
-                    p_final = {col: row_orig[col] for col in df_exibicao.columns if col in row_orig}
+                    # 🚀 CORE DE PRESERVAÇÃO: Monta o payload inicial a partir dos dados do Cache Puro (df_atual)
+                    p_final = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
                     p_final["acao_fluxo"] = "editar"
                     p_final["Id"] = str(id_alvo_loop)
                     
@@ -545,7 +538,7 @@ if modo == "📊 Visualizar Base":
                     raw_fim = ed_dt_fim.strip() if (qtd_selecionada == 1 or ed_dt_fim.strip() != "") else str(row_orig.get("Data de Término", ""))
                     
                     def normalizar_padrao_iso(data_str):
-                        data_limpa = data_str.strip()
+                        data_limpa = str(data_str).strip()
                         if "/" in data_limpa:
                             try:
                                 d, m, a = data_limpa.split("/")
@@ -562,17 +555,15 @@ if modo == "📊 Visualizar Base":
                     p_final["Rec_Plan_Total"] = float(p_final.get("Rec_Plan_Diarias", 0)) + float(p_final.get("Rec_Plan_Passagens", 0)) + float(p_final.get("Rec_Plan_Outras_Despesas", 0))
                     p_final["Rec_Exec_Total"] = float(p_final.get("Rec_Exec_Diarias", 0)) + float(p_final.get("Rec_Exec_Passagens", 0)) + float(p_final.get("Rec_Exec_Outras_Despesas", 0))
                     
-                    # Limpeza rápida de NaN residual numérico antes do append
+                    # Limpeza rápida de nulos flutuantes do Pandas
                     payload_sanitizado = {}
                     for k, v in p_final.items():
                         payload_sanitizado[k] = 0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)
                     
                     payloads_envio_final.append(payload_sanitizado)
                 
-                # Envia usando a esteira estável e veloz original
                 executar_envio_sharepoint(payloads_envio_final)
                 
-                # Zera os checkboxes e mata o cache visual mudando a versão do editor
                 st.session_state["selecoes_macro"] = {}
                 st.session_state["version_editor"] += 1
                 st.rerun()
