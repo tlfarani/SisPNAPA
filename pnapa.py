@@ -299,25 +299,23 @@ if modo == "📊 Visualizar Base":
         st.markdown("<br>", unsafe_allow_html=True)
         def estilar_linhas_zebradas(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
         
-        # --- TELA 1: RENDERIZAÇÃO INTERATIVA COM PERSISTÊNCIA DE MEMÓRIA ---
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Inicializa o dicionário de estado se ele não existir
+        # --- 🧠 MEMÓRIA DE SELEÇÃO E CONTROLE DE LOOP ---
         if "selecoes_macro" not in st.session_state:
             st.session_state["selecoes_macro"] = {}
 
         df_interativo = df_exibicao.copy()
         
-        # Injeta os booleanos salvos diretamente na coluna invisível do editor
+        # Injeta os estados booleanos gravados diretamente na coluna invisível do editor
         df_interativo.insert(
             0, 
             "Selecionar", 
             [st.session_state["selecoes_macro"].get(str(row_id), False) for row_id in df_interativo["Id"]]
         )
         
-        # Bloqueia a edição de todas as colunas de dados, liberando apenas o checkbox
+        # Bloqueia a edição de todas as colunas de dados, liberando apenas o checkbox amigável
         colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
         
+        # Renderiza a tabela única interativa (Desativamos o rerun direto para quebrar o loop)
         tabela_editavel = st.data_editor(
             df_interativo,
             hide_index=True,
@@ -326,22 +324,29 @@ if modo == "📊 Visualizar Base":
             key="editor_lote_pnapa"
         )
         
-        # Grava os novos cliques do usuário na sessão global antes do rerun automático do Streamlit
+        # --- 💾 CAPTURA AS ALTERAÇÕES SEM ENTRAR EM LOOP ---
+        # Se houver mudanças nos checkboxes, atualizamos a memória silenciosamente no back-end
         if st.session_state.editor_lote_pnapa and "edited_rows" in st.session_state.editor_lote_pnapa:
             linhas_editadas = st.session_state.editor_lote_pnapa["edited_rows"]
+            mudanca_detectada = False
             
             for idx_linha, alteracao in linhas_editadas.items():
                 if "Selecionar" in alteracao:
                     id_real_linha = str(df_interativo.iloc[int(idx_linha)]["Id"])
-                    st.session_state["selecoes_macro"][id_real_linha] = alteracao["Selecionar"]
+                    # Só atualiza e marca para reiniciar se o valor realmente mudou
+                    if st.session_state["selecoes_macro"].get(id_real_linha, False) != alteracao["Selecionar"]:
+                        st.session_state["selecoes_macro"][id_real_linha] = alteracao["Selecionar"]
+                        mudanca_detectada = True
             
-            st.rerun()
+            # O rerun só é chamado UMA VEZ no clique para fixar o "X" visualmente na tela
+            if mudanca_detectada:
+                st.rerun()
 
-        # O FILTRO DEFINITIVO: Captura os IDs que estão marcados como True na memória estável
+        # O FILTRO DEFINITIVO: Mapeia quais IDs estão marcados como True na memória persistente
         ids_marcados = [id_key for id_key, marcado in st.session_state["selecoes_macro"].items() if marcado]
         df_linhas_selecionadas = df_exibicao[df_exibicao["Id"].astype(str).isin(ids_marcados)]
         
-        # Se houver linhas retidas na memória, faz saltar na tela o painel operacional de lote
+        # Se houver linhas retidas na memória, faz saltar o painel operacional de lote
         if not df_linhas_selecionadas.empty:
             ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
             
@@ -366,7 +371,7 @@ if modo == "📊 Visualizar Base":
                             st.cache_data.clear()
                             if "df" in st.session_state: del st.session_state.df
                             st.success(f"🎉 {sucessos_del} registros removidos com sucesso!")
-                            st.session_state["selecoes_macro"] = {}  # Limpa os X marcados
+                            st.session_state["selecoes_macro"] = {}  # Limpa os X da memória
                             time.sleep(1.5)
                             st.rerun()
 
@@ -405,7 +410,7 @@ if modo == "📊 Visualizar Base":
                             st.cache_data.clear()
                             if "df" in st.session_state: del st.session_state.df
                             st.success(f"🎉 {sucessos_edit} registros atualizados com sucesso!")
-                            st.session_state["selecoes_macro"] = {}  # Limpa os X marcados
+                            st.session_state["selecoes_macro"] = {}  # Limpa os X da memória
                             time.sleep(1.5)
                             st.rerun()
 
