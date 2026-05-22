@@ -789,6 +789,14 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
                 except: idx_and = 0
                 andamento = st.selectbox("Andamento da Ação", lista_andamentos_acao, index=idx_and)
 
+                # BOTÃO DE REFRESH INTERNO (Recálculo)
+                if st.button("🔄 Atualizar Campos Dependentes"):
+                    # Ao clicar aqui, o Streamlit faz um rerunn completo da página.
+                    # Como os valores que você digitou já estão no st.session_state 
+                    # ou nos widgets, ele irá reprocessar as lógicas de "PROCV" 
+                    # (Servidor -> Lotação, Nível -> Andamento, etc.)
+                    st.rerun()
+
             with aba2:
                 st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
                 meta_indicador = st.text_input("Meta do Indicador", value=str(registro_selecionado["Meta_Indicador"]) if registro_selecionado is not None else "")
