@@ -480,7 +480,7 @@ if modo == "📊 Visualizar Base":
                 f_rp_d, f_rp_p, f_rp_o, f_re_d, f_re_p, f_re_o, f_obs, f_just, f_meta = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", ""
 
             # --- RENDERING DO FORMULÁRIO COM AS ABAS TEMÁTICAS REATIVAS ---
-            with st.form(key="form_edicao_lote_tabela", clear_on_submit=True):
+            # with st.form(key="form_edicao_lote_tabela", clear_on_submit=True):
                 # Recupera metadados da linha (ou da primeira linha se for lote) para o PROCV dinâmico invisível
                 ref_linha = df_linhas_selecionadas.iloc[0]
                 v_ano = ref_linha.get("Ano da Ação")
@@ -601,7 +601,7 @@ if modo == "📊 Visualizar Base":
                         ed_justificativa = ""
                         st.info("ℹ️ Justificativa disponível apenas para Ações com andamento restritivo.")
 
-                submeter_alteracao = st.form_submit_button(label="💾 Gravar Alterações no SharePoint")
+                submeter_alteracao = st.button("💾 Gravar Alterações no SharePoint", type="primary")
 
             # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PRESERVAÇÃO E PARSER ISO) ---
             if submeter_alteracao:
