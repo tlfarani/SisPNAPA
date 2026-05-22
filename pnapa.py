@@ -268,6 +268,19 @@ if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
 st.sidebar.markdown("## 🕹️ Painel de Controle")
 modo = st.sidebar.radio("Operação:", opcoes_menu)
 
+# --- INSERIR O BOTÃO DE REFRESH AQUI ---
+st.sidebar.markdown("---")
+if st.sidebar.button("🔄 Atualizar Base (Refresh)"):
+    # 1. Limpa o cache das tabelas auxiliares (Unidades, Servidores, PNAPA)
+    st.cache_data.clear()
+    
+    # 2. Apaga o dataframe da sessão para forçar a busca nova no SharePoint
+    if "df" in st.session_state:
+        del st.session_state.df
+        
+    # 3. Recarrega a página mantendo o usuário na mesma aba
+    st.rerun()
+    
 # Variáveis de controle de contexto para a Planilha Macro
 registro_selecionado = None
 id_atual = ""
