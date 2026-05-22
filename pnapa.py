@@ -686,7 +686,8 @@ if modo == "📊 Visualizar Base":
                 
                 # Despacha a rajada mapeada e higienizada
                 executar_envio_sharepoint(payloads_envio_final)
-                
+    
+                # Reset final
                 st.session_state["selecoes_macro"] = {}
                 st.session_state["version_editor"] += 1
                 st.rerun()
