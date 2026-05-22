@@ -547,7 +547,11 @@ if modo == "📊 Visualizar Base":
                     if not df_serv_painel.empty:
                         lista_srv_painel = sorted(df_serv_painel["Servidor"].dropna().unique().tolist())
                         ed_servidor = st.selectbox("Servidor", lista_srv_painel, index=lista_srv_painel.index(f_servidor) if f_servidor in lista_srv_painel else 0)
-                        
+
+                        # --- BOTÃO DE ATUALIZACAO DE DADOS DOS SERVIDORES ---
+                        if st.button("🔄 Recarregar Dados do Servidor"):
+                            st.rerun() # Isso força o reprocessamento da lógica de Lotação abaixo
+                                               
                         # Gatilhos automáticos do PROCV
                         dados_painel_srv = df_serv_painel[df_serv_painel["Servidor"] == ed_servidor].iloc[0]
                         ed_uf_srv = str(dados_painel_srv.get("UF_Servidor", uf_trava_painel))
@@ -789,14 +793,7 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
                 except: idx_and = 0
                 andamento = st.selectbox("Andamento da Ação", lista_andamentos_acao, index=idx_and)
 
-                # BOTÃO DE REFRESH INTERNO (Recálculo)
-                if st.button("🔄 Atualizar Campos Dependentes"):
-                    # Ao clicar aqui, o Streamlit faz um rerunn completo da página.
-                    # Como os valores que você digitou já estão no st.session_state 
-                    # ou nos widgets, ele irá reprocessar as lógicas de "PROCV" 
-                    # (Servidor -> Lotação, Nível -> Andamento, etc.)
-                    st.rerun()
-
+                
             with aba2:
                 st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
                 meta_indicador = st.text_input("Meta do Indicador", value=str(registro_selecionado["Meta_Indicador"]) if registro_selecionado is not None else "")
