@@ -496,7 +496,7 @@ if modo == "📊 Visualizar Base":
                 with aba1:
                     lista_niveis = ["Ação", "Atividade"]
                     idx_n = lista_niveis.index(f_nivel) if f_nivel in lista_niveis else 1
-                    ed_nivel = st.selectbox("Nível", lista_niveis, index=idx_n)
+                    ed_nivel = st.selectbox("Nível", lista_niveis, index=idx_n, on_change=st.rerun)
                     
                     ed_nome_atv = st.text_input("Nome da Atividade", value=f_nome_atv)
                     
@@ -508,15 +508,18 @@ if modo == "📊 Visualizar Base":
                         
                     try: idx_a = lista_andamentos_painel.index(f_andamento)
                     except: idx_a = 0
-                    ed_andamento = st.selectbox("Andamento", lista_andamentos_painel, index=idx_a)
+                    ed_andamento = st.selectbox("Andamento", lista_andamentos_painel, index=idx_a, on_change=st.rerun)
 
                 with aba2:
                     ed_res_ind = st.text_input("Resultado do Indicador", value=f_res_ind)
                     ed_doc = st.text_input("Doc_Probatorio_Exec (SEI)", value=f_doc)
                     
                     # A UF da ação herda automaticamente do Ibama logado
-                    uf_trava_painel = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
-                    ed_uf_pna = st.text_input("UF da Ação PNAPA", value=uf_trava_painel, disabled=True)
+                    # Se for ADM, libera o seletor. Se for Regional, mantém o text_input travado.
+                    if perfil_usuario == "Administrador":
+                        ed_uf_pna = st.selectbox("UF da Ação PNAPA", LISTA_UFS_COMPLETA, index=LISTA_UFS_COMPLETA.index(f_uf_pna) if f_uf_pna in LISTA_UFS_COMPLETA else 0)
+                    else:
+                        ed_uf_pna = st.text_input("UF da Ação PNAPA", value=uf_usuario, disabled=True)
                     
                     # Importância puxada de forma fixa da ação selecionada
                     val_importancia_automatica = str(ref_linha.get("Importância da Atividade", "Baixa"))
@@ -533,13 +536,17 @@ if modo == "📊 Visualizar Base":
                     df_serv_painel = df_servidores[df_servidores["UF_Servidor"] == uf_trava_painel]
                     if not df_serv_painel.empty:
                         lista_srv_painel = sorted(df_serv_painel["Servidor"].dropna().unique().tolist())
-                        ed_servidor = st.selectbox("Servidor", lista_srv_painel, index=lista_srv_painel.index(f_servidor) if f_servidor in lista_srv_painel else 0)
+                        ed_servidor = st.selectbox("Servidor", lista_nomes_servidores, index=lista_nomes_servidores.index(f_servidor) if f_servidor in lista_nomes_servidores else 0, on_change=st.rerun)
                         
-                        # Gatilhos automáticos do PROCV
-                        dados_painel_srv = df_serv_painel[df_serv_painel["Servidor"] == ed_servidor].iloc[0]
-                        ed_uf_srv = str(dados_painel_srv.get("UF_Servidor", uf_trava_painel))
-                        ed_lotacao = str(dados_painel_srv.get("Lotacao", "Sede Superintendência"))
-                        ed_eq_emergencia = str(dados_painel_srv.get("Equipe_Emergencias", "Não"))
+                        # PROCV Automático pós-mudança de servidor
+                        if ed_servidor:
+                            dados_painel_srv = df_servidores[df_servidores["Servidor"] == ed_servidor].iloc[0]
+                            ed_uf_srv = str(dados_painel_srv.get("UF_Servidor", ""))
+                            ed_lotacao = str(dados_painel_srv.get("Lotacao", ""))
+                            ed_eq_emergencia = str(dados_painel_srv.get("Equipe_Emergencias", "Não"))
+                        else:
+                            ed_uf_srv, ed_lotacao, ed_eq_emergencia = "", "", "Não"
+                            
                     else:
                         ed_servidor = st.text_input("Servidor", value=f_servidor)
                         ed_uf_srv = uf_trava_painel
@@ -587,12 +594,12 @@ if modo == "📊 Visualizar Base":
                 with aba5:
                     ed_obs = st.text_area("Observações", value=f_obs)
                     
-                    # Justificativa condicional reativa para o painel de grid
+                    # Validação reativa: Só aparece se for Ação E Andamento for negativo
                     if ed_nivel == "Ação" and ed_andamento in ["Cancelada", "Não Demandada", "Não Executada"]:
-                        ed_justificativa = st.selectbox("Justificativa_Acao_PNAPA", LISTA_JUSTIFICATIVAS_ACAO, index=LISTA_JUSTIFICATIVAS_ACAO.index(f_just) if f_just in LISTA_JUSTIFICATIVAS_ACAO else 0)
+                        ed_justificativa = st.selectbox("Justificativa_Acao_PNAPA", LISTA_JUSTIFICATIVAS_ACAO)
                     else:
                         ed_justificativa = ""
-                        st.info("ℹ️ Campo Justificativa desabilitado para o nível e andamento atuais.")
+                        st.info("ℹ️ Justificativa disponível apenas para Ações com andamento restritivo.")
 
                 submeter_alteracao = st.form_submit_button(label="💾 Gravar Alterações no SharePoint")
 
