@@ -547,11 +547,7 @@ if modo == "📊 Visualizar Base":
                     if not df_serv_painel.empty:
                         lista_srv_painel = sorted(df_serv_painel["Servidor"].dropna().unique().tolist())
                         ed_servidor = st.selectbox("Servidor", lista_srv_painel, index=lista_srv_painel.index(f_servidor) if f_servidor in lista_srv_painel else 0)
-
-                        # --- BOTÃO DE ATUALIZACAO DE DADOS DOS SERVIDORES ---
-                        if st.button("🔄 Recarregar Dados do Servidor"):
-                            st.rerun() # Isso força o reprocessamento da lógica de Lotação abaixo
-                                               
+                                                                       
                         # Gatilhos automáticos do PROCV
                         dados_painel_srv = df_serv_painel[df_serv_painel["Servidor"] == ed_servidor].iloc[0]
                         ed_uf_srv = str(dados_painel_srv.get("UF_Servidor", uf_trava_painel))
