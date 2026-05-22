@@ -601,7 +601,16 @@ if modo == "📊 Visualizar Base":
                         ed_justificativa = ""
                         st.info("ℹ️ Justificativa disponível apenas para Ações com andamento restritivo.")
 
-                submeter_alteracao = st.button("💾 Gravar Alterações no SharePoint", type="primary")
+                    # --- BOTÃO E PROCESSAMENTO DIRETO ---
+                    if st.button("💾 Gravar Alterações no SharePoint", type="primary"):
+                        payloads_envio_final = []
+                        
+                        for _, row_orig in df_linhas_selecionadas.iterrows():
+                            # ... (Todo o seu código de montagem de p_final continua IDÊNTICO aqui) ...
+                            id_alvo_loop = str(row_orig["Id"])
+                            p_final = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                            p_final["acao_fluxo"] = "editar"
+                            p_final["Id"] = str(id_alvo_loop)
 
             # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PRESERVAÇÃO E PARSER ISO) ---
             if submeter_alteracao:
@@ -687,7 +696,7 @@ if modo == "📊 Visualizar Base":
                 # Despacha a rajada mapeada e higienizada
                 executar_envio_sharepoint(payloads_envio_final)
     
-                # Reset final
+                # Reset visual
                 st.session_state["selecoes_macro"] = {}
                 st.session_state["version_editor"] += 1
                 st.rerun()
