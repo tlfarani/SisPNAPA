@@ -19,6 +19,53 @@ URL_LER = st.secrets["power_automate"]["URL_LER"]
 URL_GRAVAR = st.secrets["power_automate"]["URL_GRAVAR"]
 URL_DELETAR = st.secrets["power_automate"]["URL_DELETAR"]
 
+# =================================================================
+# LISTAS OFICIAIS DE VALIDAÇÃO E MAPEAMENTO GEOGRÁFICO
+# =================================================================
+LISTA_UFS_COMPLETA = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"]
+
+MAPEAMENTO_ESTADOS_COMPLETO = {
+    "AC": "Acre", "AL": "Alagoas", "AM": "Amazonas", "AP": "Amapá", "BA": "Bahia", "CE": "Ceará",
+    "DF": "Distrito Federal", "ES": "Espírito Santo", "GO": "Goiás", "MA": "Maranhão", "MG": "Minas Gerais",
+    "MS": "Mato Grosso do Sul", "MT": "Mato Grosso", "PA": "Pará", "PB": "Paraíba", "PE": "Pernambuco",
+    "PI": "Piauí", "PR": "Paraná", "RJ": "Rio de Janeiro", "RN": "Rio Grande do Norte", "RO": "Rondônia",
+    "RR": "Roraima", "RS": "Rio Grande do Sul", "SC": "Santa Catarina", "SE": "Sergipe", "SP": "São Paulo", "TO": "Tocantins"
+}
+
+LISTA_TEMAS = ["Dutos", "Emergências Climáticas", "Fauna", "Ferrovias", "Nuclear", "Outros temas", "Planejamento", "Plataformas", "Portos", "Rodovias", "SCI"]
+LISTA_OBJETIVOS = ["Atendimento a Acidentes", "Prevenção e Gestão de Riscos", "Preparação"]
+LISTA_TIPOS_ATIVIDADE = ["Capacitação", "Coleta de Amostras", "Desenvolvimento de Ferramentas", "Documentos de Análise", "Elaboração de Normativas", "Fiscalização", "Operação", "Outros tipos", "Reunião", "Simulados", "Vistoria"]
+LISTA_PERIGOS = ["Periculosidade", "Insalubridade", "Não se Aplica"]
+LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Ceneac", "Não se aplica", "Outras fontes"]
+
+LISTA_JUSTIFICATIVAS_ACAO = [
+    "Indisponibilidade de meios orçamentários/financeiros para a execução da Ação",
+    "Alteração nas condições para a realização da Ação",
+    "Condições pré-existentes não atendidas",
+    "Falta de estrutura rodoviária/transporte na região de execução da Ação",
+    "Indisponibilidade de meios materiais e/ou humanos para execução da Ação",
+    "Mobilização de servidores (paralisação)",
+    "Período planejado inexequivel para a execução da Ação",
+    "Programação não aprovada pela CEDUC/CGGP",
+    "Programação não aprovada por proponente/autoridade superior/ordenador de despesas",
+    "Riscos de doenças infecto/contagiosas na região de execução da Ação",
+    "Outras justificativas"
+]
+
+# Função performática com cache para puxar municípios do IBGE em tempo real por UF
+@st.cache_data(ttl=3600)
+def obter_municipios_ibge(sigla_uf):
+    if not sigla_uf or sigla_uf not in MAPEAMENTO_ESTADOS_COMPLETO:
+        return []
+    try:
+        url = f"https://servicodados.ibge.gov.br/api/v1/localidades/estados/{sigla_uf}/municipios"
+        resposta = requests.get(url, timeout=5)
+        if resposta.status_code == 200:
+            return sorted([m["nome"] for m in resposta.json()])
+    except:
+        pass
+    return []
+
 COLUNAS_PNAPA = [
     "Id", "Ano da Ação", "Número da Ação PNAPA", "Nome da Ação PNAPA", "Nível", 
     "Nome da Atividade", "Andamento", "Indicador", "Meta_Indicador", "Resultado_Indicador", 
@@ -453,49 +500,76 @@ if modo == "📊 Visualizar Base":
                     
                     ed_nome_atv = st.text_input("Nome da Atividade", value=f_nome_atv)
                     
-                    lista_andamentos = ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"]
-                    idx_a = lista_andamentos.index(f_andamento) if f_andamento in lista_andamentos else 0
-                    ed_andamento = st.selectbox("Andamento", lista_andamentos, index=idx_a)
+                    # Validação de Andamento reativa baseada no nível escolhido no formulário
+                    if ed_nivel == "Ação":
+                        lista_andamentos_painel = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
+                    else:
+                        lista_andamentos_painel = ["Prevista", "Concluída"]
+                        
+                    try: idx_a = lista_andamentos_painel.index(f_andamento)
+                    except: idx_a = 0
+                    ed_andamento = st.selectbox("Andamento", lista_andamentos_painel, index=idx_a)
 
                 with aba2:
                     ed_res_ind = st.text_input("Resultado do Indicador", value=f_res_ind)
                     ed_doc = st.text_input("Doc_Probatorio_Exec (SEI)", value=f_doc)
-                    ed_uf_pna = st.text_input("UF da Ação PNAPA", value=f_uf_pna, max_chars=2)
                     
-                    lista_importancias = ["Alta", "Média", "Baixa"]
-                    idx_i = lista_importancias.index(f_imp) if f_imp in lista_importancias else 0
-                    ed_importancia = st.selectbox("Importância da Atividade", lista_importancias, index=idx_i)
+                    # A UF da ação herda automaticamente do Ibama logado
+                    uf_trava_painel = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
+                    ed_uf_pna = st.text_input("UF da Ação PNAPA", value=uf_trava_painel, disabled=True)
                     
-                    ed_tema = st.text_input("Tema da Atividade", value=f_tema)
-                    ed_objetivo = st.text_area("Objetivo da Atividade", value=f_obj)
-                    ed_tipo = st.text_input("Tipo de Atividade", value=f_tipo)
+                    # Importância puxada de forma fixa da ação selecionada
+                    val_importancia_automatica = str(ref_linha.get("Importância da Atividade", "Baixa"))
+                    ed_importancia = st.text_input("Importância da Atividade (Herdada)", value=val_importancia_automatica, disabled=True)
                     
-                    lista_perigos = ["Não", "Insalubridade", "Periculosidade", "Ambos"]
-                    idx_p = lista_perigos.index(f_perigo) if f_perigo in lista_perigos else 0
-                    ed_periculosidade = st.selectbox("Periculosidade/Insalubridade", lista_perigos, index=idx_p)
+                    ed_tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, index=LISTA_TEMAS.index(f_tema) if f_tema in LISTA_TEMAS else 0)
+                    ed_objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(f_obj) if f_obj in LISTA_OBJETIVOS else 0)
+                    ed_tipo = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(f_tipo) if f_tipo in LISTA_TIPOS_ATIVIDADE else 0)
+                    ed_periculosidade = st.selectbox("Periculosidade/Insalubridade", LISTA_PERIGOS, index=LISTA_PERIGOS.index(f_perigo) if f_perigo in LISTA_PERIGOS else 0)
                     ed_meta = st.text_input("Meta do Indicador (Apenas para Nível Ação)", value=f_meta)
 
                 with aba3:
-                    ed_servidor = st.text_input("Servidor", value=f_servidor)
-                    ed_uf_srv = st.text_input("UF_Servidor", value=f_uf_srv, max_chars=2)
-                    ed_lotacao = st.text_input("Lotação", value=f_lot)
-                    ed_eq_emergencia = st.selectbox("Faz parte da Equipe de Emergências", ["Não", "Sim"], index=1 if f_eq_emerg == "Sim" else 0)
+                    # Dropdown de servidores filtrado dinamicamente pela UF logada
+                    df_serv_painel = df_servidores[df_servidores["UF_Servidor"] == uf_trava_painel]
+                    if not df_serv_painel.empty:
+                        lista_srv_painel = sorted(df_serv_painel["Servidor"].dropna().unique().tolist())
+                        ed_servidor = st.selectbox("Servidor", lista_srv_painel, index=lista_srv_painel.index(f_servidor) if f_servidor in lista_srv_painel else 0)
+                        
+                        # Gatilhos automáticos do PROCV
+                        dados_painel_srv = df_serv_painel[df_serv_painel["Servidor"] == ed_servidor].iloc[0]
+                        ed_uf_srv = str(dados_painel_srv.get("UF_Servidor", uf_trava_painel))
+                        ed_lotacao = str(dados_painel_srv.get("Lotacao", "Sede Superintendência"))
+                        ed_eq_emergencia = str(dados_painel_srv.get("Equipe_Emergencias", "Não"))
+                    else:
+                        ed_servidor = st.text_input("Servidor", value=f_servidor)
+                        ed_uf_srv = uf_trava_painel
+                        ed_lotacao = "Sede Superintendência"
+                        ed_eq_emergencia = "Não"
+
+                    st.text_input("UF_Servidor (Automático)", value=ed_uf_srv, disabled=True)
+                    st.text_input("Lotação (Automático)", value=ed_lotacao, disabled=True)
+                    st.text_input("Faz parte da Equipe de Emergências (Automático)", value=ed_eq_emergencia, disabled=True)
                     ed_pcdp = st.text_input("Número da PCDP", value=f_pcdp)
                     
                     st.markdown("##### 📍 Geolocalização")
-                    ed_pais = st.text_input("País", value=f_pais)
-                    ed_uf_oc = st.text_input("UF Onde Ocorreu/Ocorrerá a Ação", value=f_uf_oc, max_chars=2)
-                    ed_estado_local = st.text_input("Estado_Local_Acao", value=f_est)
-                    ed_municipio = st.text_input("Municipio Onde Ocorreu/Ocorrerá a Ação", value=f_mun)
+                    ed_pais = st.text_input("País", value="Brasil", disabled=True)
+                    ed_uf_oc = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA, index=LISTA_UFS_COMPLETA.index(f_uf_oc) if f_uf_oc in LISTA_UFS_COMPLETA else 0)
+                    
+                    ed_estado_local = MAPEAMENTO_ESTADOS_COMPLETO[ed_uf_oc]
+                    st.text_input("Estado_Local_Acao (Automático)", value=ed_estado_local, disabled=True)
+                    
+                    # API IBGE acoplada de forma fluida no painel
+                    lista_mun_painel = obter_municipios_ibge(ed_uf_oc)
+                    ed_municipio = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação", lista_mun_painel if lista_mun_painel else ["Superintendência Sede"])
 
                 with aba4:
-                    st.caption("Deixe as datas inalteradas se estiver em modo Lote e não quiser sobrescrevê-las")
-                    ed_dt_ini = st.text_input("Data de Início (AAAA-MM-DD)", value=str(ref_linha["Data de Início"]) if qtd_selecionada == 1 else "")
-                    ed_dt_fim = st.text_input("Data de Término (AAAA-MM-DD)", value=str(ref_linha["Data de Término"]) if qtd_selecionada == 1 else "")
+                    st.caption("Insira no formato DD/MM/AAAA se quiser sobrescrever")
+                    ed_dt_ini = st.text_input("Data de Início", value=str(ref_linha.get("Data de Início", "")) if qtd_selecionada == 1 else "")
+                    ed_dt_fim = st.text_input("Data de Término", value=str(ref_linha.get("Data de Término", "")) if qtd_selecionada == 1 else "")
                     
                     ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl)
                     ed_dias_ex = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=f_dias_ex)
-                    ed_origem = st.text_input("Origem do Recurso", value=f_origem)
+                    ed_origem = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(f_origem) if f_origem in LISTA_ORIGENS_RECURSO else 0)
                     
                     st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>Valores Orçamentários</p>", unsafe_allow_html=True)
                     c_p, c_e = st.columns(2)
@@ -512,68 +586,68 @@ if modo == "📊 Visualizar Base":
 
                 with aba5:
                     ed_obs = st.text_area("Observações", value=f_obs)
-                    ed_justificativa = st.text_area("Justificativa_Acao_PNAPA", value=f_just)
+                    
+                    # Justificativa condicional reativa para o painel de grid
+                    if ed_nivel == "Ação" and ed_andamento in ["Cancelada", "Não Demandada", "Não Executada"]:
+                        ed_justificativa = st.selectbox("Justificativa_Acao_PNAPA", LISTA_JUSTIFICATIVAS_ACAO, index=LISTA_JUSTIFICATIVAS_ACAO.index(f_just) if f_just in LISTA_JUSTIFICATIVAS_ACAO else 0)
+                    else:
+                        ed_justificativa = ""
+                        st.info("ℹ️ Campo Justificativa desabilitado para o nível e andamento atuais.")
 
                 submeter_alteracao = st.form_submit_button(label="💾 Gravar Alterações no SharePoint")
 
-            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (CORRIGIDO E TRADUZIDO) ---
+            # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PRESERVAÇÃO E PARSER ISO) ---
             if submeter_alteracao:
                 payloads_envio_final = []
                 
                 for _, row_orig in df_linhas_selecionadas.iterrows():
                     id_alvo_loop = str(row_orig["Id"])
                     
-                    # 1. Montagem defensiva usando estritamente as nomenclaturas oficiais esperadas pelo Power Automate
-                    p_final = {
-                        "acao_fluxo": "editar",
-                        "Id": str(id_alvo_loop),
-                        "Ano da Ação": int(v_ano) if v_ano else int(pd.to_numeric(row_orig.get("Ano da Ação"), errors='coerce') or 2026),
-                        "Número da Ação PNAPA": str(v_num) if v_num else str(row_orig.get("Número da Ação PNAPA", "")),
-                        "Nome da Ação PNAPA": str(v_nome) if v_nome else str(row_orig.get("Nome da Ação PNAPA", "")),
-                        "Indicador": str(v_ind) if v_ind else str(row_orig.get("Indicador", "")),
-                        
-                        "Nível": str(ed_nivel) if (qtd_selecionada == 1 or ed_nivel != f_nivel) else str(row_orig.get("Nível", "Atividade")),
-                        "Nome da Atividade": str(ed_nome_atv).strip() if (qtd_selecionada == 1 or ed_nome_atv.strip() != "") else str(row_orig.get("Nome da Atividade", "")),
-                        "Andamento": str(ed_andamento) if (qtd_selecionada == 1 or ed_andamento != f_andamento) else str(row_orig.get("Andamento", "Não Iniciada")),
-                        "Resultado_Indicador": str(ed_res_ind).strip() if (qtd_selecionada == 1 or ed_res_ind.strip() != "") else str(row_orig.get("Resultado_Indicador", "")),
-                        "Doc_Probatorio_Exec": str(ed_doc).strip() if (qtd_selecionada == 1 or ed_doc.strip() != "") else str(row_orig.get("Doc_Probatorio_Exec", "")),
-                        "UF_Acao_PNAPA": str(ed_uf_pna).strip() if (qtd_selecionada == 1 or ed_uf_pna.strip() != "") else str(row_orig.get("UF_Acao_PNAPA", "")),
-                        "Importância da Atividade": str(ed_importancia) if (qtd_selecionada == 1 or ed_importancia != f_imp) else str(row_orig.get("Importância da Atividade", "Alta")),
-                        "Tema da Atividade": str(ed_tema).strip() if (qtd_selecionada == 1 or ed_tema.strip() != "") else str(row_orig.get("Tema da Atividade", "")),
-                        "Objetivo da Atividade": str(ed_objetivo).strip() if (qtd_selecionada == 1 or ed_objetivo.strip() != "") else str(row_orig.get("Objetivo da Atividade", "")),
-                        "Tipo de Atividade": str(ed_tipo).strip() if (qtd_selecionada == 1 or ed_tipo.strip() != "") else str(row_orig.get("Tipo de Atividade", "")),
-                        "Periculosidade/Insalubridade": str(ed_periculosidade) if (qtd_selecionada == 1 or ed_periculosidade != f_perigo) else str(row_orig.get("Periculosidade/Insalubridade", "Não")),
-                        "Meta_Indicador": str(ed_meta).strip() if (qtd_selecionada == 1 or ed_meta.strip() != "") else str(row_orig.get("Meta_Indicador", "")),
-                        
-                        # RH e Localização
-                        "Servidor": str(ed_servidor).strip() if (qtd_selecionada == 1 or ed_servidor.strip() != "") else str(row_orig.get("Servidor", "")),
-                        "UF_Servidor": str(ed_uf_srv).strip() if (qtd_selecionada == 1 or ed_uf_srv.strip() != "") else str(row_orig.get("UF_Servidor", "")),
-                        "Lotação": str(ed_lotacao).strip() if (qtd_selecionada == 1 or ed_lotacao.strip() != "") else str(row_orig.get("Lotação", "")),
-                        "Faz parte da Equipe de Emergências": str(ed_eq_emergencia) if (qtd_selecionada == 1 or ed_eq_emergencia != f_eq_emerg) else str(row_orig.get("Faz parte da Equipe de Emergências", "Não")),
-                        "Número da PCDP": str(ed_pcdp).strip() if (qtd_selecionada == 1 or ed_pcdp.strip() != "") else str(row_orig.get("Número da PCDP", "")),
-                        "País": str(ed_pais).strip() if (qtd_selecionada == 1 or ed_pais.strip() != "Brasil") else str(row_orig.get("País", "Brasil")),
-                        "UF Onde Ocorreu/Ocorrerá a Ação": str(ed_uf_oc).strip() if (qtd_selecionada == 1 or ed_uf_oc.strip() != "") else str(row_orig.get("UF Onde Ocorreu/Ocorrerá a Ação", "")),
-                        "Estado_Local_Acao": str(ed_estado_local).strip() if (qtd_selecionada == 1 or ed_estado_local.strip() != "") else str(row_orig.get("Estado_Local_Acao", "")),
-                        "Municipio Onde Ocorreu/Ocorrerá a Ação": str(ed_municipio).strip() if (qtd_selecionada == 1 or ed_municipio.strip() != "") else str(row_orig.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")),
-                        
-                        # Valores Numéricos e Orçamentários
-                        "Dias_Gastos_Plan": float(ed_dias_pl) if (qtd_selecionada == 1 or ed_dias_pl != 0.0) else float(pd.to_numeric(row_orig.get("Dias_Gastos_Plan"), errors='coerce') or 0.0),
-                        "Dias_Gastos_Exec": float(ed_dias_ex) if (qtd_selecionada == 1 or ed_dias_ex != 0.0) else float(pd.to_numeric(row_orig.get("Dias_Gastos_Exec"), errors='coerce') or 0.0),
-                        "Origem do Recurso": str(ed_origem).strip() if (qtd_selecionada == 1 or ed_origem.strip() != "") else str(row_orig.get("Origem do Recurso", "")),
-                        
-                        "Rec_Plan_Diarias": float(ed_rp_d) if (qtd_selecionada == 1 or ed_rp_d != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Plan_Diarias"), errors='coerce') or 0.0),
-                        "Rec_Plan_Passagens": float(ed_rp_p) if (qtd_selecionada == 1 or ed_rp_p != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Plan_Passagens"), errors='coerce') or 0.0),
-                        "Rec_Plan_Outras_Despesas": float(ed_rp_o) if (qtd_selecionada == 1 or ed_rp_o != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Plan_Outras_Despesas"), errors='coerce') or 0.0),
-                        "Rec_Exec_Diarias": float(ed_re_d) if (qtd_selecionada == 1 or ed_re_d != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Exec_Diarias"), errors='coerce') or 0.0),
-                        "Rec_Exec_Passagens": float(ed_re_p) if (qtd_selecionada == 1 or ed_re_p != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Exec_Passagens"), errors='coerce') or 0.0),
-                        "Rec_Exec_Outras_Despesas": float(ed_re_o) if (qtd_selecionada == 1 or ed_re_o != 0.0) else float(pd.to_numeric(row_orig.get("Rec_Exec_Outras_Despesas"), errors='coerce') or 0.0),
-                        
-                        # 💡 FIX: Correção de ed_ed_obs para ed_obs
-                        "Observações": str(ed_obs).strip() if (qtd_selecionada == 1 or ed_obs.strip() != "") else str(row_orig.get("Observações", "")),
-                        "Justificativa_Acao_PNAPA": str(ed_justificativa).strip() if (qtd_selecionada == 1 or ed_justificativa.strip() != "") else str(row_orig.get("Justificativa_Acao_PNAPA", ""))
-                    }
+                    # CORE DE PRESERVAÇÃO: Monta o payload inicial a partir dos dados do Cache Puro (df_atual)
+                    p_final = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                    p_final["acao_fluxo"] = "editar"
+                    p_final["Id"] = str(id_alvo_loop)
                     
-                    # 2. Conversor Inteligente de Datas (Evita strings vazias e força o formato internacional ISO)
+                    if qtd_selecionada == 1 or ed_nivel != f_nivel: p_final["Nível"] = str(ed_nivel)
+                    if qtd_selecionada == 1 or (ed_nome_atv.strip() != ""): p_final["Nome da Atividade"] = str(ed_nome_atv).strip()
+                    if qtd_selecionada == 1 or ed_andamento != f_andamento: p_final["Andamento"] = str(ed_andamento)
+                    if qtd_selecionada == 1 or (ed_res_ind.strip() != ""): p_final["Resultado_Indicador"] = str(ed_res_ind).strip()
+                    if qtd_selecionada == 1 or (ed_doc.strip() != ""): p_final["Doc_Probatorio_Exec"] = str(ed_doc).strip()
+                    if qtd_selecionada == 1 or (ed_uf_pna.strip() != ""): p_final["UF_Acao_PNAPA"] = str(ed_uf_pna).strip()
+                    
+                    # 🚀 ENCAIXE DAS NOVAS VALIDAÇÕES DE CAMPOS (Mapeamento Cirúrgico)
+                    p_final["Importância da Atividade"] = str(ed_importancia) if ed_importancia else str(row_orig.get("Importância da Atividade", "Baixa"))
+                    if qtd_selecionada == 1 or (ed_tema != ""): p_final["Tema da Atividade"] = str(ed_tema)
+                    if qtd_selecionada == 1 or (ed_objetivo != ""): p_final["Objetivo da Atividade"] = str(ed_objetivo)
+                    if qtd_selecionada == 1 or (ed_tipo != ""): p_final["Tipo de Atividade"] = str(ed_tipo)
+                    if qtd_selecionada == 1 or ed_periculosidade != f_perigo: p_final["Periculosidade/Insalubridade"] = str(ed_periculosidade)
+                    if qtd_selecionada == 1 or (ed_meta.strip() != ""): p_final["Meta_Indicador"] = str(ed_meta).strip()
+                    
+                    # Recursos Humanos e Localização (Herança Automática das Tabelas Auxiliares)
+                    if qtd_selecionada == 1 or (ed_servidor != ""): p_final["Servidor"] = str(ed_servidor)
+                    p_final["UF_Servidor"] = str(ed_uf_srv) if ed_uf_srv else str(row_orig.get("UF_Servidor", ""))
+                    p_final["Lotação"] = str(ed_lotacao) if ed_lotacao else str(row_orig.get("Lotação", ""))
+                    p_final["Faz parte da Equipe de Emergências"] = str(ed_eq_emergencia) if ed_eq_emergencia else str(row_orig.get("Faz parte da Equipe de Emergências", "Não"))
+                    if qtd_selecionada == 1 or (ed_pcdp.strip() != ""): p_final["Número da PCDP"] = str(ed_pcdp).strip()
+                    p_final["País"] = "Brasil"
+                    if qtd_selecionada == 1 or (ed_uf_oc != ""): p_final["UF Onde Ocorreu/Ocorrerá a Ação"] = str(ed_uf_oc)
+                    p_final["Estado_Local_Acao"] = str(ed_estado_local) if ed_estado_local else str(row_orig.get("Estado_Local_Acao", ""))
+                    p_final["Municipio Onde Ocorreu/Ocorrerá a Ação"] = str(ed_municipio) if ed_municipio else str(row_orig.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
+                    
+                    # Cronograma e Custos
+                    if qtd_selecionada == 1 or (ed_dt_ini.strip() != ""): p_final["Data de Início"] = str(ed_dt_ini).strip()
+                    if qtd_selecionada == 1 or (ed_dt_fim.strip() != ""): p_final["Data de Término"] = str(ed_dt_fim).strip()
+                    if qtd_selecionada == 1 or ed_dias_pl != 0.0: p_final["Dias_Gastos_Plan"] = float(ed_dias_pl)
+                    if qtd_selecionada == 1 or ed_dias_ex != 0.0: p_final["Dias_Gastos_Exec"] = float(ed_dias_ex)
+                    if qtd_selecionada == 1 or (ed_origem != ""): p_final["Origem do Recurso"] = str(ed_origem)
+                    if qtd_selecionada == 1 or ed_rp_d != 0.0: p_final["Rec_Plan_Diarias"] = float(ed_rp_d)
+                    if qtd_selecionada == 1 or ed_rp_p != 0.0: p_final["Rec_Plan_Passagens"] = float(ed_rp_p)
+                    if qtd_selecionada == 1 or ed_rp_o != 0.0: p_final["Rec_Plan_Outras_Despesas"] = float(ed_rp_o)
+                    if qtd_selecionada == 1 or ed_re_d != 0.0: p_final["Rec_Exec_Diarias"] = float(ed_re_d)
+                    if qtd_selecionada == 1 or ed_re_p != 0.0: p_final["Rec_Exec_Passagens"] = float(ed_re_p)
+                    if qtd_selecionada == 1 or ed_re_o != 0.0: p_final["Rec_Exec_Outras_Despesas"] = float(ed_re_o)
+                    
+                    # Parser de Datas Padrão ISO
                     raw_ini = ed_dt_ini.strip() if (qtd_selecionada == 1 or ed_dt_ini.strip() != "") else str(row_orig.get("Data de Início", ""))
                     raw_fim = ed_dt_fim.strip() if (qtd_selecionada == 1 or ed_dt_fim.strip() != "") else str(row_orig.get("Data de Término", ""))
                     
@@ -588,19 +662,22 @@ if modo == "📊 Visualizar Base":
                     
                     p_final["Data de Início"] = normalizar_padrao_iso(raw_ini)
                     p_final["Data de Término"] = normalizar_padrao_iso(raw_fim)
-
-                    # 3. Recálculo das somas orçamentárias totais livres de nulos
-                    p_final["Rec_Plan_Total"] = float(p_final["Rec_Plan_Diarias"]) + float(p_final["Rec_Plan_Passagens"]) + float(p_final["Rec_Plan_Outras_Despesas"])
-                    p_final["Rec_Exec_Total"] = float(p_final["Rec_Exec_Diarias"]) + float(p_final["Rec_Exec_Passagens"]) + float(p_final["Rec_Exec_Outras_Despesas"])
                     
-                    # Sanitização final contra NaNs residuais do Pandas
+                    if qtd_selecionada == 1 or (ed_obs.strip() != ""): p_final["Observações"] = str(ed_obs).strip()
+                    p_final["Justificativa_Acao_PNAPA"] = str(ed_justificativa) if ed_justificativa else str(row_orig.get("Justificativa_Acao_PNAPA", ""))
+
+                    # Recalcula Totais
+                    p_final["Rec_Plan_Total"] = float(p_final.get("Rec_Plan_Diarias", 0)) + float(p_final.get("Rec_Plan_Passagens", 0)) + float(p_final.get("Rec_Plan_Outras_Despesas", 0))
+                    p_final["Rec_Exec_Total"] = float(p_final.get("Rec_Exec_Diarias", 0)) + float(p_final.get("Rec_Exec_Passagens", 0)) + float(p_final.get("Rec_Exec_Outras_Despesas", 0))
+                    
+                    # Sanitização final contra NaNs residuais do Pandas antes de anexar à lista de envios
                     payload_sanitizado = {}
                     for k, v in p_final.items():
                         payload_sanitizado[k] = 0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)
                     
                     payloads_envio_final.append(payload_sanitizado)
                 
-                # Despacha o lote higienizado com as chaves oficiais limpas
+                # Despacha a rajada mapeada e higienizada
                 executar_envio_sharepoint(payloads_envio_final)
                 
                 st.session_state["selecoes_macro"] = {}
@@ -677,6 +754,15 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
         # CONDICIONAL VISUAL: SE FOR AÇÃO
         # =================================================================
         if nivel_selecionado == "Ação":
+            # REFEITO CONFORME DIRETRIZ: Importância da Atividade herdada do Catálogo Auxiliar da Ação selecionada
+            val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária"))
+            if val_importancia_automatica == "Ordinária":
+                importancia = "Baixa"
+            elif val_importancia_automatica == "Estratégica":
+                importancia = "Alta"
+            else:
+                importancia = "Média"
+
             aba1, aba2, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "4. Cronograma & Custos", "5. Justificativas"])
             
             with aba1:
@@ -684,28 +770,29 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
                 st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
                 st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
                 
-                lista_andamentos = ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"]
-                idx_and = lista_andamentos.index(registro_selecionado["Andamento"]) if registro_selecionado is not None and registro_selecionado["Andamento"] in lista_andamentos else 0
-                andamento = st.selectbox("Andamento", lista_andamentos, index=idx_and)
+                # REFEITO CONFORME DIRETRIZ: Andamento restrito para Ação
+                lista_andamentos_acao = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
+                try: idx_and = lista_andamentos_acao.index(registro_selecionado["Andamento"])
+                except: idx_and = 0
+                andamento = st.selectbox("Andamento da Ação", lista_andamentos_acao, index=idx_and)
 
             with aba2:
                 st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
                 meta_indicador = st.text_input("Meta do Indicador", value=str(registro_selecionado["Meta_Indicador"]) if registro_selecionado is not None else "")
-                uf_acao = st.text_input("UF da Ação PNAPA", value=str(registro_selecionado["UF_Acao_PNAPA"]) if registro_selecionado is not None else "", max_chars=2)
                 
-                lista_importancias = ["Alta", "Média", "Baixa"]
-                idx_imp = lista_importancias.index(registro_selecionado["Importância da Atividade"]) if registro_selecionado is not None and registro_selecionado["Importância da Atividade"] in lista_importancias else 0
-                importancia = st.selectbox("Importância da Atividade", lista_importancias, index=idx_imp)
+                # Trava a UF da ação com base no usuário logado ou SP padrão administrativo Ibama
+                uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
+                st.text_input("Importância da Atividade (Herdada do Catálogo)", value=importancia, disabled=True)
                 
-                tema = st.text_input("Tema da Atividade", value=str(registro_selecionado["Tema da Atividade"]) if registro_selecionado is not None else "")
-                objetivo = st.text_area("Objetivo da Atividade", value=str(registro_selecionado["Objetivo da Atividade"]) if registro_selecionado is not None else "")
-                tipo_atividade = st.text_input("Tipo de Atividade", value=str(registro_selecionado["Tipo de Atividade"]) if registro_selecionado is not None else "")
+                tema = st.selectbox("Tema da Atividade", LISTA_TEMAS)
+                objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS)
+                tipo_atividade = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE)
 
             with aba4:
                 dt_inicio = st.date_input("Data de Início", value=val_dt_inicio)
                 dt_termino = st.date_input("Data de Término", value=val_dt_termino)
                 dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
-                origem_recurso = st.text_input("Origem do Recurso", value=str(registro_selecionado["Origem do Recurso"]) if registro_selecionado is not None else "")
+                origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO)
                 
                 st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
                 rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f")
@@ -714,14 +801,19 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
 
             with aba5:
                 obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "")
-                justificativa = st.text_area("Justificativa_Acao_PNAPA", value=str(registro_selecionado["Justificativa_Acao_PNAPA"]) if registro_selecionado is not None else "")
                 
-            # Inicializa nulos de Atividade para o payload
-            nome_atividade, resultado_indicador, doc_probatorio, periculosidade = "", "", "", "Não"
+                # REFEITO CONFORME DIRETRIZ: Justificativa condicional reativa para andamentos restritivos de Ação
+                if andamento in ["Cancelada", "Não Demandada", "Não Executada"]:
+                    justificativa = st.selectbox("Justificativa_Acao_PNAPA", LISTA_JUSTIFICATIVAS_ACAO)
+                else:
+                    justificativa = ""
+                    st.info("ℹ️ Justificativa habilitada apenas para ações com andamento Cancelada, Não Demandada ou Não Executada.")
+
+            # Inicializa nulos regulamentares de Atividade para o construtor do payload
+            nome_atividade, resultado_indicador, doc_probatorio, periculosidade = "", "", "", "Não se Aplica"
             servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp = "", "", "", "Não", ""
             pais, uf_ocorrencia, estado_local, municipio, dias_exec = "Brasil", "", "", "", 0.0
             rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
-            meta_indicador = ""
 
         # =================================================================
         # CONDICIONAL VISUAL: SE FOR ATIVIDADE
@@ -736,47 +828,72 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
                 
                 nome_atividade = st.text_input("Nome da Atividade", value=str(registro_selecionado["Nome da Atividade"]) if registro_selecionado is not None else "")
                 
-                lista_andamentos = ["Não Iniciada", "Em Planejamento", "Em Execução", "Concluída", "Cancelada"]
-                idx_and = lista_andamentos.index(registro_selecionado["Andamento"]) if registro_selecionado is not None and registro_selecionado["Andamento"] in lista_andamentos else 0
-                andamento = st.selectbox("Andamento", lista_andamentos, index=idx_and)
+                # REFEITO CONFORME DIRETRIZ: Andamento restrito para Atividade
+                lista_andamentos_atividade = ["Prevista", "Concluída"]
+                try: idx_and_atv = lista_andamentos_atividade.index(registro_selecionado["Andamento"])
+                except: idx_and_atv = 0
+                andamento = st.selectbox("Andamento da Atividade", lista_andamentos_atividade, index=idx_and_atv)
 
             with aba2:
                 st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
                 resultado_indicador = st.text_input("Resultado do Indicador", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "")
                 doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI)", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "")
-                uf_acao = st.text_input("UF da Ação PNAPA", value=str(registro_selecionado["UF_Acao_PNAPA"]) if registro_selecionado is not None else "", max_chars=2)
+                uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
                 
-                lista_importancias = ["Alta", "Média", "Baixa"]
-                idx_imp = lista_importancias.index(registro_selecionado["Importância da Atividade"]) if registro_selecionado is not None and registro_selecionado["Importância da Atividade"] in lista_importancias else 0
-                importancia = st.selectbox("Importância da Atividade", lista_importancias, index=idx_imp)
+                # Importância herdada do catálogo macro
+                val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária"))
+                importancia = "Alta" if val_importancia_automatica == "Estratégica" else ("Baixa" if val_importancia_automatica == "Ordinária" else "Média")
+                st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
                 
-                tema = st.text_input("Tema da Atividade", value=str(registro_selecionado["Tema da Atividade"]) if registro_selecionado is not None else "")
-                objetivo = st.text_area("Objetivo da Atividade", value=str(registro_selecionado["Objetivo da Atividade"]) if registro_selecionado is not None else "")
-                tipo_atividade = st.text_input("Tipo de Atividade", value=str(registro_selecionado["Tipo de Atividade"]) if registro_selecionado is not None else "")
-                
-                lista_perigos = ["Não", "Insalubridade", "Periculosidade", "Ambos"]
-                idx_per = lista_perigos.index(registro_selecionado["Periculosidade/Insalubridade"]) if registro_selecionado is not None and registro_selecionado["Periculosidade/Insalubridade"] in lista_perigos else 0
-                periculosidade = st.selectbox("Periculosidade/Insalubridade", lista_perigos, index=idx_per)
+                tema = st.selectbox("Tema da Atividade", LISTA_TEMAS)
+                objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS)
+                tipo_atividade = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE)
+                periculosidade = st.selectbox("Periculosidade/Insalubridade", LISTA_PERIGOS)
 
             with aba3:
-                servidor = st.text_input("Servidor", value=str(registro_selecionado["Servidor"]) if registro_selecionado is not None else "")
-                uf_servidor = st.text_input("UF_Servidor", value=str(registro_selecionado["UF_Servidor"]) if registro_selecionado is not None else "", max_chars=2)
-                lotacao = st.text_input("Lotação", value=str(registro_selecionado["Lotação"]) if registro_selecionado is not None else "")
-                equipe_emergencia = st.selectbox("Faz parte da Equipe de Emergências", ["Não", "Sim"], index=1 if registro_selecionado is not None and registro_selecionado["Faz parte da Equipe de Emergências"] == "Sim" else 0)
+                # REFEITO CONFORME DIRETRIZ: Dropdown de servidores filtrado dinamicamente pela UF da Ação (uf_usuario do SSO)
+                uf_filtro_servidor = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
+                df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_servidor]
+                
+                if not df_servidores_filtrados.empty:
+                    lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist())
+                    servidor = st.selectbox("Servidor Responsável", lista_nomes_servidores)
+                    
+                    # PROCV AUTOMÁTICO DA EQUIPE AUXILIAR
+                    dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
+                    uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_servidor))
+                    lotacao = str(dados_serv_linha.get("Lotacao", "Sede Superintendência"))
+                    equipe_emergencia = str(dados_serv_linha.get("Equipe_Emergencias", "Não"))
+                else:
+                    st.warning(f"⚠️ Nenhum servidor localizado no catálogo auxiliar para a UF: {uf_filtro_servidor}")
+                    servidor = st.text_input("Servidor (Entrada Manual Emergencial)", value="")
+                    uf_servidor = uf_filtro_servidor
+                    lotacao = "Sede Superintendência"
+                    equipe_emergencia = "Não"
+
+                st.text_input("UF do Servidor (Automático)", value=uf_servidor, disabled=True)
+                st.text_input("Lotação (Automático)", value=lotacao, disabled=True)
+                st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=equipe_emergencia, disabled=True)
                 num_pcdp = st.text_input("Número da PCDP", value=str(registro_selecionado["Número da PCDP"]) if registro_selecionado is not None else "")
                 
                 st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
-                pais = st.text_input("País", value=str(registro_selecionado["País"]) if registro_selecionado is not None else "Brasil")
-                uf_ocorrencia = st.text_input("UF Onde Ocorreu/Ocorrerá a Ação", value=str(registro_selecionado["UF Onde Ocorreu/Ocorrerá a Ação"]) if registro_selecionado is not None else "", max_chars=2)
-                estado_local = st.text_input("Estado_Local_Acao", value=str(registro_selecionado["Estado_Local_Acao"]) if registro_selecionado is not None else "")
-                municipio = st.text_input("Municipio Onde Ocorreu/Ocorrerá a Ação", value=str(registro_selecionado["Municipio Onde Ocorreu/Ocorrerá a Ação"]) if registro_selecionado is not None else "")
+                pais = st.text_input("País", value="Brasil", disabled=True)
+                
+                # REFEITO CONFORME DIRETRIZ: Caixa de seleção de UFs e preenchimento automático do Estado por Extenso
+                uf_ocorrencia = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA)
+                estado_local = MAPEAMENTO_ESTADOS_COMPLETO[uf_ocorrencia]
+                st.text_input("Estado_Local_Acao (Automático)", value=estado_local, disabled=True)
+                
+                # REFEITO CONFORME DIRETRIZ: Municípios reativos com busca e escrita via API do IBGE
+                lista_municipios_uf = obter_municipios_ibge(uf_ocorrencia)
+                municipio = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação", lista_municipios_uf if lista_municipios_uf else ["Superintendência Sede"])
 
             with aba4:
                 dt_inicio = st.date_input("Data de Início", value=val_dt_inicio)
                 dt_termino = st.date_input("Data de Término", value=val_dt_termino)
                 dias_plan = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
                 dias_exec = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"))
-                origem_recurso = st.text_input("Origem do Recurso", value=str(registro_selecionado["Origem do Recurso"]) if registro_selecionado is not None else "")
+                origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO)
                 
                 st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
                 c_pl, c_ex = st.columns(2)
@@ -791,9 +908,10 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
 
             with aba5:
                 obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "")
-                justificativa = st.text_area("Justificativa_Acao_PNAPA", value=str(registro_selecionado["Justificativa_Acao_PNAPA"]) if registro_selecionado is not None else "")
-                
-                meta_indicador = ""
+                justificativa = "" # Atividade nunca possui justificativa PNAPA
+                st.info("ℹ️ Campo Justificativa ocultado. Regra aplicada: Habilitado apenas para cadastro de Ações.")
+
+            meta_indicador = ""
 
         submetido = st.form_submit_button(label="🚀 Disparar Atualização para o SharePoint")
 
