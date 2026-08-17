@@ -801,7 +801,7 @@ if modo == "📊 Visualizar Base":
 elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
     st.markdown(f"<h3 style='color: #03170a;'>Formulário de Dados PNAPA — Modo: {modo}</h3>", unsafe_allow_html=True)
     
-    # 🌟 PASSO 1: CONTROLES FORA DO FORMULÁRIO PARA GARANTIR REATIVIDADE EM TEMPO REAL
+    # 🌟 CONTROLES DE ESCOPO COM REATIVIDADE INSTANTÂNEA
     idx_nivel_padrao = 0 if registro_selecionado is None or str(registro_selecionado.get("Nível", "")) == "Ação" else 1
     nivel_selecionado = st.selectbox("O que deseja cadastrar/editar?", ["Ação", "Atividade"], index=idx_nivel_padrao, key="main_txt_nivel")
     
@@ -847,7 +847,7 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
 
     st.markdown("---")
     
-    # Fallbacks de Configuração Geral de Dados
+    # Fallbacks de Configuração Geral de Datas
     dt_inicio_convertida = pd.to_datetime(registro_selecionado["Data de Início"], errors='coerce') if registro_selecionado is not None else pd.NaT
     val_dt_inicio = dt_inicio_convertida.date() if pd.notna(dt_inicio_convertida) else date.today()
     dt_termino_convertida = pd.to_datetime(registro_selecionado["Data de Término"], errors='coerce') if registro_selecionado is not None else pd.NaT
@@ -859,7 +859,6 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
             return float(val) if pd.notna(val) else 0.0
         return 0.0
 
-    # 🌟 PASSO 2: CAMPOS LIVRES FORA DE CONTAINER FORM (REATIVIDADE TOTAL)
     st.text_input("ID do Registro", value=id_atual if id_atual else "Definido no envio", disabled=True)
     
     # =================================================================
@@ -923,106 +922,104 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
         pais, uf_ocorrencia, estado_local, municipio, dias_exec = "Brasil", "", "", "", 0.0
         rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
 
-        # =================================================================
-        # CONDICIONAL VISUAL: SE FOR ATIVIDADE
-        # =================================================================
-        elif nivel_selecionado == "Atividade":
-            aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
+    # =================================================================
+    # CONDICIONAL VISUAL: SE FOR ATIVIDADE (100% REATIVO)
+    # =================================================================
+    elif nivel_selecionado == "Atividade":
+        aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
+        
+        with aba1:
+            st.text_input("Ano da Ação (Automático)", value=str(val_ano if val_ano else ""), disabled=True)
+            st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
+            st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
             
-            with aba1:
-                st.text_input("Ano da Ação (Automático)", value=str(val_ano if val_ano else ""), disabled=True)
-                st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
-                st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
-                
-                nome_atividade = st.text_input("Nome da Atividade", value=str(registro_selecionado["Nome da Atividade"]) if registro_selecionado is not None else "")
-                
-                # REFEITO CONFORME DIRETRIZ: Andamento restrito para Atividade
-                lista_andamentos_atividade = ["Prevista", "Concluída"]
-                try: idx_and_atv = lista_andamentos_atividade.index(registro_selecionado["Andamento"])
-                except: idx_and_atv = 0
-                andamento = st.selectbox("Andamento da Atividade", lista_andamentos_atividade, index=idx_and_atv)
+            nome_atividade = st.text_input("Nome da Atividade", value=str(registro_selecionado["Nome da Atividade"]) if registro_selecionado is not None else "", key="atv_nome")
+            
+            lista_andamentos_atividade = ["Prevista", "Concluída"]
+            try: idx_and_atv = lista_andamentos_atividade.index(registro_selecionado["Andamento"]) if registro_selecionado is not None else 0
+            except: idx_and_atv = 0
+            andamento = st.selectbox("Andamento da Atividade", lista_andamentos_atividade, index=idx_and_atv, key="atv_sel_andamento")
 
-            with aba2:
-                st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
-                resultado_indicador = st.text_input("Resultado do Indicador", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "")
-                doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI)", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "")
-                uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
-                
-                # Importância herdada do catálogo macro
-                val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária"))
-                importancia = "Alta" if val_importancia_automatica == "Estratégica" else ("Baixa" if val_importancia_automatica == "Ordinária" else "Média")
-                st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
-                
-                tema = st.selectbox("Tema da Atividade", LISTA_TEMAS)
-                objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS)
-                tipo_atividade = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE)
-                periculosidade = st.selectbox("Periculosidade/Insalubridade", LISTA_PERIGOS)
+        with aba2:
+            st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
+            resultado_indicador = st.text_input("Resultado do Indicador", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "", key="atv_res_ind")
+            doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI)", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "", key="atv_doc_sei")
+            uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
+            
+            val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária")) if 'dados_aux_linha' in locals() else "Ordinária"
+            importancia = "Alta" if val_importancia_automatica == "Estratégica" else ("Baixa" if val_importancia_automatica == "Ordinária" else "Média")
+            st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
+            
+            tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="atv_sel_tema")
+            objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS, key="atv_sel_obj")
+            tipo_atividade = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE, key="atv_sel_tipo")
+            periculosidade = st.selectbox("Periculosidade/Insalubridade", LISTA_PERIGOS, key="atv_sel_perigo")
 
-            with aba3:
-                # REFEITO CONFORME DIRETRIZ: Dropdown de servidores filtrado dinamicamente pela UF da Ação (uf_usuario do SSO)
-                uf_filtro_servidor = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
-                df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_servidor]
+        with aba3:
+            uf_filtro_servidor = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
+            df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_servidor]
+            
+            if not df_servidores_filtrados.empty:
+                lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist())
+                servidor = st.selectbox("Servidor Responsável", lista_nomes_servidores, key="atv_sel_servidor")
                 
-                if not df_servidores_filtrados.empty:
-                    lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist())
-                    servidor = st.selectbox("Servidor Responsável", lista_nomes_servidores)
-                    
-                    # PROCV AUTOMÁTICO DA EQUIPE AUXILIAR
-                    dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
-                    uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_servidor))
-                    lotacao = str(dados_serv_linha.get("Lotacao", "Sede Superintendência"))
-                    equipe_emergencia = str(dados_serv_linha.get("Equipe_Emergencias", "Não"))
-                else:
-                    st.warning(f"⚠️ Nenhum servidor localizado no catálogo auxiliar para a UF: {uf_filtro_servidor}")
-                    servidor = st.text_input("Servidor (Entrada Manual Emergencial)", value="")
-                    uf_servidor = uf_filtro_servidor
-                    lotacao = "Sede Superintendência"
-                    equipe_emergencia = "Não"
+                # 🚀 ATUALIZAÇÃO INSTANTÂNEA AO TROCAR O SERVIDOR:
+                dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
+                uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_servidor))
+                lotacao = str(dados_serv_linha.get("Lotacao", "Sede Superintendência"))
+                equipe_emergencia = str(dados_serv_linha.get("Equipe_Emergencias", "Não"))
+            else:
+                st.warning(f"⚠️ Nenhum servidor localizado no catálogo auxiliar para a UF: {uf_filtro_servidor}")
+                servidor = st.text_input("Servidor (Entrada Manual Emergencial)", value="", key="atv_txt_servidor_manual")
+                uf_servidor = uf_filtro_servidor
+                lotacao = "Sede Superintendência"
+                equipe_emergencia = "Não"
 
-                st.text_input("UF do Servidor (Automático)", value=uf_servidor, disabled=True)
-                st.text_input("Lotação (Automático)", value=lotacao, disabled=True)
-                st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=equipe_emergencia, disabled=True)
-                num_pcdp = st.text_input("Número da PCDP", value=str(registro_selecionado["Número da PCDP"]) if registro_selecionado is not None else "")
-                
-                st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
-                pais = st.text_input("País", value="Brasil", disabled=True)
-                
-                # REFEITO CONFORME DIRETRIZ: Caixa de seleção de UFs e preenchimento automático do Estado por Extenso
-                uf_ocorrencia = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA)
-                estado_local = MAPEAMENTO_ESTADOS_COMPLETO[uf_ocorrencia]
-                st.text_input("Estado_Local_Acao (Automático)", value=estado_local, disabled=True)
-                
-                # REFEITO CONFORME DIRETRIZ: Municípios reativos com busca e escrita via API do IBGE
-                lista_municipios_uf = obter_municipios_ibge(uf_ocorrencia)
-                municipio = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação", lista_municipios_uf if lista_municipios_uf else ["Superintendência Sede"])
+            st.text_input("UF do Servidor (Automático)", value=uf_servidor, disabled=True)
+            st.text_input("Lotação (Automático)", value=lotacao, disabled=True)
+            st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=equipe_emergencia, disabled=True)
+            num_pcdp = st.text_input("Número da PCDP", value=str(registro_selecionado["Número da PCDP"]) if registro_selecionado is not None else "", key="atv_num_pcdp")
+            
+            st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
+            pais = st.text_input("País", value="Brasil", disabled=True)
+            
+            # 🚀 ATUALIZAÇÃO INSTANTÂNEA DA UF E MUNICÍPIOS IBGE:
+            uf_ocorrencia = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA, key="atv_sel_uf_ocorrencia")
+            estado_local = MAPEAMENTO_ESTADOS_COMPLETO[uf_ocorrencia]
+            st.text_input("Estado_Local_Acao (Automático)", value=estado_local, disabled=True)
+            
+            lista_municipios_uf = obter_municipios_ibge(uf_ocorrencia)
+            municipio = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação", lista_municipios_uf if lista_municipios_uf else ["Superintendência Sede"], key="atv_sel_municipio")
 
-            with aba4:
-                dt_inicio = st.date_input("Data de Início", value=val_dt_inicio)
-                dt_termino = st.date_input("Data de Término", value=val_dt_termino)
-                dias_plan = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
-                dias_exec = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"))
-                origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO)
-                
-                st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
-                c_pl, c_ex = st.columns(2)
-                with c_pl:
-                    rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f")
-                    rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f")
-                    rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), format="%.2f")
-                with c_ex:
-                    rec_e_diarias = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Diarias"), format="%.2f")
-                    rec_e_passagens = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Passagens"), format="%.2f")
-                    rec_e_outras = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Outras_Despesas"), format="%.2f")
+        with aba4:
+            dt_inicio = st.date_input("Data de Início", value=val_dt_inicio, key="atv_dt_ini")
+            dt_termino = st.date_input("Data de Término", value=val_dt_termino, key="atv_dt_fim")
+            dias_plan = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), key="atv_dias_pl")
+            dias_exec = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"), key="atv_dias_ex")
+            origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, key="atv_sel_origem")
+            
+            st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
+            c_pl, c_ex = st.columns(2)
+            with c_pl:
+                rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f", key="atv_rpd")
+                rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f", key="atv_rpp")
+                rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), format="%.2f", key="atv_rpo")
+            with c_ex:
+                rec_e_diarias = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Diarias"), format="%.2f", key="atv_red")
+                rec_e_passagens = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Passagens"), format="%.2f", key="atv_rep")
+                rec_e_outras = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Outras_Despesas"), format="%.2f", key="atv_reo")
 
-            with aba5:
-                obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "")
-                justificativa = "" # Atividade nunca possui justificativa PNAPA
-                st.info("ℹ️ Campo Justificativa ocultado. Regra aplicada: Habilitado apenas para cadastro de Ações.")
+        with aba5:
+            obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "", key="atv_obs")
+            justificativa = ""
+            st.info("ℹ️ Campo Justificativa ocultado. Regra aplicada: Habilitado apenas para cadastro de Ações.")
 
-            meta_indicador = ""
+        meta_indicador = ""
 
-        # Botão principal de envio individual dentro do formulário
-        btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", key="btn_gravar_individual_reativo")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 🚀 BOTÃO PRINCIPAL DIRETO (Sem st.form)
+    btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", key="btn_gravar_individual_reativo")
 
     # =================================================================
     # PROCESSAMENTO DO ENVIO: INDIVIDUAL OU EM LOTE
@@ -1062,21 +1059,21 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
             
             col_c1, col_c2 = st.columns(2)
             with col_c1:
-                if st.button("✓ Marcar Todos"): 
+                if st.button("✓ Marcar Todos", key="btn_lote_marcar_todos"): 
                     st.session_state["chk_lote_all"] = True
             with col_c2:
-                if st.button("✕ Desmarcar Todos"): 
+                if st.button("✕ Desmarcar Todos", key="btn_lote_desmarcar_todos"): 
                     st.session_state["chk_lote_all"] = False
             
             status_padrao = st.session_state.get("chk_lote_all", True)
             
-            espelhar_detalhes = st.checkbox("Espelhar Detalhes da Atividade e Documentos SEI", value=status_padrao)
-            espelhar_local = st.checkbox("Espelhar Localidade (País, UF, Estado, Município)", value=status_padrao)
-            espelhar_crono = st.checkbox("Espelhar Cronograma (Datas e Dias Gastos)", value=status_padrao)
-            espelhar_custos = st.checkbox("Espelhar Custos (Valores Planejados e Executados)", value=status_padrao)
-            espelhar_just = st.checkbox("Espelhar Justificativas e Observações", value=status_padrao)
+            espelhar_detalhes = st.checkbox("Espelhar Detalhes da Atividade e Documentos SEI", value=status_padrao, key="lote_chk_detalhes")
+            espelhar_local = st.checkbox("Espelhar Localidade (País, UF, Estado, Município)", value=status_padrao, key="lote_chk_local")
+            espelhar_crono = st.checkbox("Espelhar Cronograma (Datas e Dias Gastos)", value=status_padrao, key="lote_chk_crono")
+            espelhar_custos = st.checkbox("Espelhar Custos (Valores Planejados e Executados)", value=status_padrao, key="lote_chk_custos")
+            espelhar_just = st.checkbox("Espelhar Justificativas e Observações", value=status_padrao, key="lote_chk_just")
             
-            if st.button("🔥 Disparar Carga em Lote para o SharePoint", type="primary", use_container_width=True):
+            if st.button("🔥 Disparar Carga em Lote para o SharePoint", type="primary", use_container_width=True, key="btn_disparar_lote_final"):
                 payloads_lote = []
                 id_base_calculado = int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1) if not df_atual.empty else 1
                 
