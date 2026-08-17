@@ -346,19 +346,6 @@ if st.sidebar.button("🔄 Atualizar Base (Refresh)"):
 registro_selecionado = None
 id_atual = ""
 
-if modo == "📝 Editar Linha Existente" and not df_atual.empty:
-    ids_disponiveis = df_atual["Id"].dropna().astype(str).unique().tolist()
-    st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: 5px;'>Selecione o ID para Editar:</p>", unsafe_allow_html=True)
-    id_para_editar = st.sidebar.selectbox("", ids_disponiveis, label_visibility="collapsed")
-    registro_selecionado = df_atual[df_atual["Id"].astype(str) == str(id_para_editar)].iloc[0]
-    id_atual = str(registro_selecionado["Id"])
-
-elif modo == "🗑️ Deletar Linha (ID)" and not df_atual.empty:
-    ids_disponiveis = df_atual["Id"].dropna().astype(str).unique().tolist()
-    st.sidebar.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: 5px;'>Selecione o ID para Deletar:</p>", unsafe_allow_html=True)
-    id_para_deletar = st.sidebar.selectbox("", ids_disponiveis, label_visibility="collapsed")
-    id_atual = str(id_para_deletar)
-
 # =================================================================
 # V. NÚCLEO OPERACIONAL DAS TELAS
 # =================================================================
@@ -798,7 +785,7 @@ if modo == "📊 Visualizar Base":
                 st.rerun()
 
 # --- TELA 2 E 3: FORMULÁRIO DA PLANILHA MACRO (INSERIR OU EDITAR) ---
-elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
+elif modo == "➕ Inserir Nova Linha":
     st.markdown(f"<h3 style='color: #03170a;'>Formulário de Dados PNAPA — Modo: {modo}</h3>", unsafe_allow_html=True)
     
     # 🌟 CONTROLES DE ESCOPO COM REATIVIDADE INSTANTÂNEA
@@ -1153,29 +1140,6 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
                     payloads_lote.append(payload_linha)
                 
                 executar_envio_sharepoint(payloads_lote)
-
-# --- TELA 4: EXCLUSÃO DE LINHA DA PLANILHA MACRO ---
-elif modo == "🗑️ Deletar Linha (ID)":
-    st.markdown("<h3 style='color: #03170a;'>🗑️ Excluir Registro Existente</h3>", unsafe_allow_html=True)
-    st.markdown("<div style='padding:12px; border-radius:5px; background-color:#2a1b15; color:#fdba74; border:1px solid #c2410c; margin-bottom:20px;'>⚠️ Atenção: A remoção de registros da base do PNAPA é uma operação definitiva dentro do SharePoint.</div>", unsafe_allow_html=True)
-    st.text_input("ID Marcado para Exclusão", value=id_atual, disabled=True)
-    
-    with st.popover("🚨 Confirmar Exclusão Permanente", use_container_width=True):
-        st.markdown(f"<p>Tem certeza absoluta de que deseja destruir permanentemente o registro de <b>ID {id_atual}</b>?</p>", unsafe_allow_html=True)
-        if st.button("Sim, deletar agora!", type="primary", use_container_width=True):
-            with st.spinner("Removendo linha no SharePoint..."):
-                try:
-                    resposta_del = requests.post(URL_FLOW_PRINCIPAL, json={"Acao": "Excluir", "Id": str(id_atual)}, timeout=20)
-                    if resposta_del.status_code in [200, 202]:
-                        st.success(f"💥 Registro {id_atual} excluído da base macro!")
-                        time.sleep(2)
-                        st.cache_data.clear()
-                        if "df" in st.session_state: del st.session_state.df
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Erro no Power Automate: Status {resposta_del.status_code}")
-                except Exception as e:
-                    st.error(f"❌ Falha de comunicação: {e}")
 
 # --- TELA 5: GERENCIAR UNIDADES ---
 elif modo == "🏢 Gerenciar Unidades":
