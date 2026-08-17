@@ -4,7 +4,7 @@ import requests
 import time
 from datetime import date
 
-st.set_page_config(page_title="PNAPA via Power Automate", layout="wide")
+st.set_page_config(page_title="SisPNAPA - Emergências Ambientais e Climáticas", layout="wide")
 
 # =================================================================
 # 1. ENDPOINTS DO POWER AUTOMATE & CREDENCIAIS (SHAREPOINT)
