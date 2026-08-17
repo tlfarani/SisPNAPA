@@ -574,122 +574,121 @@ if modo == "📊 Visualizar Base":
                 f_pais, f_uf_oc, f_est, f_mun, f_dias_pl, f_dias_ex, f_origem = "Brasil", "", "", "", 0.0, 0.0, ""
                 f_rp_d, f_rp_p, f_rp_o, f_re_d, f_re_p, f_re_o, f_obs, f_just, f_meta = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", ""
 
-            # --- RENDERING DO FORMULÁRIO COM AS ABAS TEMÁTICAS REATIVAS ---
-            with st.form(key="form_edicao_lote_tabela", clear_on_submit=True):
-                # Recupera metadados da linha (ou da primeira linha se for lote) para o PROCV dinâmico invisível
-                ref_linha = df_linhas_selecionadas.iloc[0]
-                v_ano = ref_linha.get("Ano da Ação")
-                v_num = ref_linha.get("Número da Ação PNAPA")
-                v_nome = ref_linha.get("Nome da Ação PNAPA")
-                v_ind = ref_linha.get("Indicador")
+            # --- RENDERING DO FORMULÁRIO COM AS ABAS TEMÁTICAS REATIVAS (SEM ST.FORM) ---
+            ref_linha = df_linhas_selecionadas.iloc[0]
+            v_ano = ref_linha.get("Ano da Ação")
+            v_num = ref_linha.get("Número da Ação PNAPA")
+            v_nome = ref_linha.get("Nome da Ação PNAPA")
+            v_ind = ref_linha.get("Indicador")
+            
+            st.markdown(f"**Vínculo Macro:** {v_num} - {v_nome}")
+            
+            aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
+            
+            with aba1:
+                lista_niveis = ["Ação", "Atividade"]
+                idx_n = lista_niveis.index(f_nivel) if f_nivel in lista_niveis else 1
+                ed_nivel = st.selectbox("Nível", lista_niveis, index=idx_n, key=f"t1_nivel_{ids_selecionados[0]}")
                 
-                # Exibição estática dos dados vinculados superiores da ação macro
-                st.markdown(f"**Vínculo Macro:** {v_num} - {v_nome}")
+                ed_nome_atv = st.text_input("Nome da Atividade", value=f_nome_atv, key=f"t1_nome_{ids_selecionados[0]}")
                 
-                aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
+                if ed_nivel == "Ação":
+                    lista_andamentos_painel = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
+                else:
+                    lista_andamentos_painel = ["Prevista", "Concluída"]
+                    
+                try: idx_a = lista_andamentos_painel.index(f_andamento)
+                except: idx_a = 0
+                ed_andamento = st.selectbox("Andamento", lista_andamentos_painel, index=idx_a, key=f"t1_andamento_{ids_selecionados[0]}")
+
+            with aba2:
+                ed_res_ind = st.text_input("Resultado do Indicador", value=f_res_ind, key=f"t1_res_ind_{ids_selecionados[0]}")
+                ed_doc = st.text_input("Doc_Probatorio_Exec (SEI)", value=f_doc, key=f"t1_doc_{ids_selecionados[0]}")
                 
-                with aba1:
-                    lista_niveis = ["Ação", "Atividade"]
-                    idx_n = lista_niveis.index(f_nivel) if f_nivel in lista_niveis else 1
-                    ed_nivel = st.selectbox("Nível", lista_niveis, index=idx_n)
-                    
-                    ed_nome_atv = st.text_input("Nome da Atividade", value=f_nome_atv)
-                    
-                    # Validação de Andamento reativa baseada no nível escolhido no formulário
-                    if ed_nivel == "Ação":
-                        lista_andamentos_painel = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
-                    else:
-                        lista_andamentos_painel = ["Prevista", "Concluída"]
-                        
-                    try: idx_a = lista_andamentos_painel.index(f_andamento)
-                    except: idx_a = 0
-                    ed_andamento = st.selectbox("Andamento", lista_andamentos_painel, index=idx_a)
+                uf_trava_painel = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
+                ed_uf_pna = st.text_input("UF da Ação PNAPA", value=uf_trava_painel, disabled=True, key=f"t1_uf_pna_{ids_selecionados[0]}")
+                
+                val_importancia_automatica = str(ref_linha.get("Importância da Atividade", "Baixa"))
+                ed_importancia = st.text_input("Importância da Atividade (Herdada)", value=val_importancia_automatica, disabled=True, key=f"t1_imp_{ids_selecionados[0]}")
+                
+                ed_tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, index=LISTA_TEMAS.index(f_tema) if f_tema in LISTA_TEMAS else 0, key=f"t1_tema_{ids_selecionados[0]}")
+                ed_objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(f_obj) if f_obj in LISTA_OBJETIVOS else 0, key=f"t1_obj_{ids_selecionados[0]}")
+                ed_tipo = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(f_tipo) if f_tipo in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_tipo_{ids_selecionados[0]}")
+                ed_periculosidade = st.selectbox("Periculosidade/Insalubridade", LISTA_PERIGOS, index=LISTA_PERIGOS.index(f_perigo) if f_perigo in LISTA_PERIGOS else 0, key=f"t1_perigo_{ids_selecionados[0]}")
+                ed_meta = st.text_input("Meta do Indicador (Apenas para Nível Ação)", value=f_meta, key=f"t1_meta_{ids_selecionados[0]}")
 
-                with aba2:
-                    ed_res_ind = st.text_input("Resultado do Indicador", value=f_res_ind)
-                    ed_doc = st.text_input("Doc_Probatorio_Exec (SEI)", value=f_doc)
+            with aba3:
+                df_serv_painel = df_servidores[df_servidores["UF_Servidor"] == uf_trava_painel]
+                if not df_serv_painel.empty:
+                    lista_srv_painel = sorted(df_serv_painel["Servidor"].dropna().unique().tolist())
+                    idx_srv_p = lista_srv_painel.index(f_servidor) if f_servidor in lista_srv_painel else 0
+                    ed_servidor = st.selectbox("Servidor", lista_srv_painel, index=idx_srv_p, key=f"t1_srv_{ids_selecionados[0]}")
                     
-                    # A UF da ação herda automaticamente do Ibama logado
-                    uf_trava_painel = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
-                    ed_uf_pna = st.text_input("UF da Ação PNAPA", value=uf_trava_painel, disabled=True)
-                    
-                    # Importância puxada de forma fixa da ação selecionada
-                    val_importancia_automatica = str(ref_linha.get("Importância da Atividade", "Baixa"))
-                    ed_importancia = st.text_input("Importância da Atividade (Herdada)", value=val_importancia_automatica, disabled=True)
-                    
-                    ed_tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, index=LISTA_TEMAS.index(f_tema) if f_tema in LISTA_TEMAS else 0)
-                    ed_objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(f_obj) if f_obj in LISTA_OBJETIVOS else 0)
-                    ed_tipo = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(f_tipo) if f_tipo in LISTA_TIPOS_ATIVIDADE else 0)
-                    ed_periculosidade = st.selectbox("Periculosidade/Insalubridade", LISTA_PERIGOS, index=LISTA_PERIGOS.index(f_perigo) if f_perigo in LISTA_PERIGOS else 0)
-                    ed_meta = st.text_input("Meta do Indicador (Apenas para Nível Ação)", value=f_meta)
+                    # 🚀 PROCV Reativo Instantâneo
+                    dados_painel_srv = df_serv_painel[df_serv_painel["Servidor"] == ed_servidor].iloc[0]
+                    ed_uf_srv = str(dados_painel_srv.get("UF_Servidor", uf_trava_painel))
+                    ed_lotacao = str(dados_painel_srv.get("Lotacao", "Sede Superintendência"))
+                    ed_eq_emergencia = str(dados_painel_srv.get("Equipe_Emergencias", "Não"))
+                else:
+                    ed_servidor = st.text_input("Servidor", value=f_servidor, key=f"t1_srv_manual_{ids_selecionados[0]}")
+                    ed_uf_srv = uf_trava_painel
+                    ed_lotacao = "Sede Superintendência"
+                    ed_eq_emergencia = "Não"
 
-                with aba3:
-                    # Dropdown de servidores filtrado dinamicamente pela UF logada
-                    df_serv_painel = df_servidores[df_servidores["UF_Servidor"] == uf_trava_painel]
-                    if not df_serv_painel.empty:
-                        lista_srv_painel = sorted(df_serv_painel["Servidor"].dropna().unique().tolist())
-                        ed_servidor = st.selectbox("Servidor", lista_srv_painel, index=lista_srv_painel.index(f_servidor) if f_servidor in lista_srv_painel else 0)
-                                                                       
-                        # Gatilhos automáticos do PROCV
-                        dados_painel_srv = df_serv_painel[df_serv_painel["Servidor"] == ed_servidor].iloc[0]
-                        ed_uf_srv = str(dados_painel_srv.get("UF_Servidor", uf_trava_painel))
-                        ed_lotacao = str(dados_painel_srv.get("Lotacao", "Sede Superintendência"))
-                        ed_eq_emergencia = str(dados_painel_srv.get("Equipe_Emergencias", "Não"))
-                    else:
-                        ed_servidor = st.text_input("Servidor", value=f_servidor)
-                        ed_uf_srv = uf_trava_painel
-                        ed_lotacao = "Sede Superintendência"
-                        ed_eq_emergencia = "Não"
+                st.text_input("UF_Servidor (Automático)", value=ed_uf_srv, disabled=True, key=f"t1_uf_srv_{ids_selecionados[0]}")
+                st.text_input("Lotação (Automático)", value=ed_lotacao, disabled=True, key=f"t1_lot_{ids_selecionados[0]}")
+                st.text_input("Faz parte da Equipe de Emergências (Automático)", value=ed_eq_emergencia, disabled=True, key=f"t1_eq_emerg_{ids_selecionados[0]}")
+                ed_pcdp = st.text_input("Número da PCDP", value=f_pcdp, key=f"t1_pcdp_{ids_selecionados[0]}")
+                
+                st.markdown("##### 📍 Geolocalização")
+                ed_pais = st.text_input("País", value="Brasil", disabled=True, key=f"t1_pais_{ids_selecionados[0]}")
+                
+                idx_uf_oc = LISTA_UFS_COMPLETA.index(f_uf_oc) if f_uf_oc in LISTA_UFS_COMPLETA else 0
+                ed_uf_oc = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA, index=idx_uf_oc, key=f"t1_uf_oc_{ids_selecionados[0]}")
+                
+                ed_estado_local = MAPEAMENTO_ESTADOS_COMPLETO[ed_uf_oc]
+                st.text_input("Estado_Local_Acao (Automático)", value=ed_estado_local, disabled=True, key=f"t1_est_local_{ids_selecionados[0]}")
+                
+                # 🚀 API IBGE Reativa Instantânea
+                lista_mun_painel = obter_municipios_ibge(ed_uf_oc)
+                idx_mun_p = lista_mun_painel.index(f_mun) if f_mun in lista_mun_painel else 0
+                ed_municipio = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação", lista_mun_painel if lista_mun_painel else ["Superintendência Sede"], index=idx_mun_p, key=f"t1_mun_{ids_selecionados[0]}")
 
-                    st.text_input("UF_Servidor (Automático)", value=ed_uf_srv, disabled=True)
-                    st.text_input("Lotação (Automático)", value=ed_lotacao, disabled=True)
-                    st.text_input("Faz parte da Equipe de Emergências (Automático)", value=ed_eq_emergencia, disabled=True)
-                    ed_pcdp = st.text_input("Número da PCDP", value=f_pcdp)
-                    
-                    st.markdown("##### 📍 Geolocalização")
-                    ed_pais = st.text_input("País", value="Brasil", disabled=True)
-                    ed_uf_oc = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA, index=LISTA_UFS_COMPLETA.index(f_uf_oc) if f_uf_oc in LISTA_UFS_COMPLETA else 0)
-                    
-                    ed_estado_local = MAPEAMENTO_ESTADOS_COMPLETO[ed_uf_oc]
-                    st.text_input("Estado_Local_Acao (Automático)", value=ed_estado_local, disabled=True)
-                    
-                    # API IBGE acoplada de forma fluida no painel
-                    lista_mun_painel = obter_municipios_ibge(ed_uf_oc)
-                    ed_municipio = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação", lista_mun_painel if lista_mun_painel else ["Superintendência Sede"])
+            with aba4:
+                st.caption("Insira no formato DD/MM/AAAA se quiser sobrescrever")
+                ed_dt_ini = st.text_input("Data de Início", value=str(ref_linha.get("Data de Início", "")) if qtd_selecionada == 1 else "", key=f"t1_dt_ini_{ids_selecionados[0]}")
+                ed_dt_fim = st.text_input("Data de Término", value=str(ref_linha.get("Data de Término", "")) if qtd_selecionada == 1 else "", key=f"t1_dt_fim_{ids_selecionados[0]}")
+                
+                ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl, key=f"t1_dias_pl_{ids_selecionados[0]}")
+                ed_dias_ex = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=f_dias_ex, key=f"t1_dias_ex_{ids_selecionados[0]}")
+                ed_origem = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(f_origem) if f_origem in LISTA_ORIGENS_RECURSO else 0, key=f"t1_orig_{ids_selecionados[0]}")
+                
+                st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>Valores Orçamentários</p>", unsafe_allow_html=True)
+                c_p, c_e = st.columns(2)
+                with c_p:
+                    st.caption("Planejado")
+                    ed_rp_d = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=f_rp_d, format="%.2f", key=f"t1_rpd_{ids_selecionados[0]}")
+                    ed_rp_p = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=f_rp_p, format="%.2f", key=f"t1_rpp_{ids_selecionados[0]}")
+                    ed_rp_o = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=f_rp_o, format="%.2f", key=f"t1_rpo_{ids_selecionados[0]}")
+                with c_e:
+                    st.caption("Executado")
+                    ed_re_d = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=f_re_d, format="%.2f", key=f"t1_red_{ids_selecionados[0]}")
+                    ed_re_p = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=f_re_p, format="%.2f", key=f"t1_rep_{ids_selecionados[0]}")
+                    ed_re_o = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=f_re_o, format="%.2f", key=f"t1_reo_{ids_selecionados[0]}")
 
-                with aba4:
-                    st.caption("Insira no formato DD/MM/AAAA se quiser sobrescrever")
-                    ed_dt_ini = st.text_input("Data de Início", value=str(ref_linha.get("Data de Início", "")) if qtd_selecionada == 1 else "")
-                    ed_dt_fim = st.text_input("Data de Término", value=str(ref_linha.get("Data de Término", "")) if qtd_selecionada == 1 else "")
-                    
-                    ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl)
-                    ed_dias_ex = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=f_dias_ex)
-                    ed_origem = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(f_origem) if f_origem in LISTA_ORIGENS_RECURSO else 0)
-                    
-                    st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>Valores Orçamentários</p>", unsafe_allow_html=True)
-                    c_p, c_e = st.columns(2)
-                    with c_p:
-                        st.caption("Planejado")
-                        ed_rp_d = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=f_rp_d, format="%.2f")
-                        ed_rp_p = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=f_rp_p, format="%.2f")
-                        ed_rp_o = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=f_rp_o, format="%.2f")
-                    with c_e:
-                        st.caption("Executado")
-                        ed_re_d = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=f_re_d, format="%.2f")
-                        ed_re_p = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=f_re_p, format="%.2f")
-                        ed_re_o = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=f_re_o, format="%.2f")
+            with aba5:
+                ed_obs = st.text_area("Observações", value=f_obs, key=f"t1_obs_{ids_selecionados[0]}")
+                
+                if ed_nivel == "Ação" and ed_andamento in ["Cancelada", "Não Demandada", "Não Executada"]:
+                    idx_j = LISTA_JUSTIFICATIVAS_ACAO.index(f_just) if f_just in LISTA_JUSTIFICATIVAS_ACAO else 0
+                    ed_justificativa = st.selectbox("Justificativa_Acao_PNAPA", LISTA_JUSTIFICATIVAS_ACAO, index=idx_j, key=f"t1_just_{ids_selecionados[0]}")
+                else:
+                    ed_justificativa = ""
+                    st.info("ℹ️ Campo Justificativa desabilitado para o nível e andamento atuais.")
 
-                with aba5:
-                    ed_obs = st.text_area("Observações", value=f_obs)
-                    
-                    # Justificativa condicional reativa para o painel de grid
-                    if ed_nivel == "Ação" and ed_andamento in ["Cancelada", "Não Demandada", "Não Executada"]:
-                        ed_justificativa = st.selectbox("Justificativa_Acao_PNAPA", LISTA_JUSTIFICATIVAS_ACAO, index=LISTA_JUSTIFICATIVAS_ACAO.index(f_just) if f_just in LISTA_JUSTIFICATIVAS_ACAO else 0)
-                    else:
-                        ed_justificativa = ""
-                        st.info("ℹ️ Campo Justificativa desabilitado para o nível e andamento atuais.")
-
-                submeter_alteracao = st.form_submit_button(label="💾 Gravar Alterações no SharePoint")
+            st.markdown("<br>", unsafe_allow_html=True)
+            # 🚀 Botão direto (Sem st.form)
+            submeter_alteracao = st.button("💾 Gravar Alterações no SharePoint", type="primary", key="btn_submeter_edicao_t1")
 
             # --- PROCESSAMENTO LOGÍSTICO COMPILADO DO ENVIO (PRESERVAÇÃO E PARSER ISO) ---
             if submeter_alteracao:
