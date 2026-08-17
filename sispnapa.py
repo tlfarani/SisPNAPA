@@ -455,10 +455,11 @@ if modo == "📊 Visualizar Base":
                 st.session_state["version_editor"] += 1  # Força o reset visual do data_editor
                 st.rerun()
 
-        # --- 📊 ORDENAÇÃO DECRESCENTE POR ID ---
+        # --- 📊 ORDENAÇÃO NUMÉRICA POR ID ---
         df_interativo = df_exibicao.copy()
-        df_interativo["Id_Numeric"] = pd.to_numeric(df_interativo["Id"], errors='coerce').fillna(0)
-        df_interativo = df_interativo.sort_values(by="Id_Numeric", ascending=False).drop(columns=["Id_Numeric"]).reset_index(drop=True)
+        # Converte a própria coluna Id para número inteiro (evita a ordenação alfabética 1, 10, 100)
+        df_interativo["Id"] = pd.to_numeric(df_interativo["Id"], errors='coerce').fillna(0).astype(int)
+        df_interativo = df_interativo.sort_values(by="Id", ascending=False).reset_index(drop=True)
         
         # Injeta os estados booleanos gravados na coluna visível do editor único
         df_interativo.insert(
@@ -468,6 +469,8 @@ if modo == "📊 Visualizar Base":
         )
         
         colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
+        # Configura a coluna Id como NumberColumn sem casas decimais
+        colunas_travadas["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
         
         # RENDERIZAÇÃO DA TABELA ÚNICA CORPORATIVA
         key_dinamica = f"editor_lote_pnapa_v{st.session_state['version_editor']}"
