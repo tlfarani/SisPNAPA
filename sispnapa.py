@@ -139,10 +139,14 @@ def carregar_dados_da_nuvem():
             if dados_json:
                 df = pd.DataFrame(dados_json)
                 
-                # 1. Remove espaços invisíveis (\xa0) e espaços extras dos nomes das colunas
+                # 1. Remove espaços invisíveis e quebras
                 df.columns = [str(col).replace('\xa0', ' ').strip() for col in df.columns]
                 
-                # 2. Reindexa com a lista oficial preenchendo ausentes com vazio
+                # --- 🕵️ MODO DE INVESTIGAÇÃO ---
+                st.warning(f"Colunas que chegaram do Power Automate: {df.columns.tolist()}")
+                # --------------------------------
+                
+                # 2. Reindexa com a lista oficial
                 df = df.reindex(columns=COLUNAS_PNAPA, fill_value="")
                 return df
                 
