@@ -130,20 +130,25 @@ def executar_api_equipes(dados_json):
         return []
     except: return []
 
-# Função de Leitura da Base Macro Principal via Webhook
+# Função de Leitura Blindada contra Chaves Ausentes do Power Automate
 def carregar_dados_da_nuvem():
     try:
-        # Enviando a chave "Acao": "Ler" para o Switch do Power Automate
         resposta = requests.post(URL_LER, json={"Acao": "Ler"}, timeout=20)
         if resposta.status_code == 200:
             dados_json = resposta.json()
             if dados_json:
                 df = pd.DataFrame(dados_json)
-                colunas_existentes = [c for c in COLUNAS_PNAPA if c in df.columns]
-                return df[colunas_existentes]
+                
+                # 1. Remove espaços invisíveis e quebras dos nomes das colunas vindas do Excel
+                df.columns = [str(col).replace('\xa0', ' ').strip() for col in df.columns]
+                
+                # 2. Garante todas as colunas oficiais (preenche com "" as que o Power Automate omitir)
+                df = df.reindex(columns=COLUNAS_PNAPA, fill_value="")
+                return df
+                
         return pd.DataFrame(columns=COLUNAS_PNAPA)
     except Exception as e:
-        st.markdown(f"<div style='padding:10px; border-radius:5px; background-color:#2a1a1a; color:#f87171; border:1px solid #7f1d1d;'>❌ Erro ao conectar ao Power Automate para leitura da base macro: {e}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='padding:10px; border-radius:5px; background-color:#2a1a1a; color:#f87171; border:1px solid #7f1d1d;'>❌ Erro ao conectar ao Power Automate: {e}</div>", unsafe_allow_html=True)
         return pd.DataFrame(columns=COLUNAS_PNAPA)
 
 # Carregamento das tabelas de apoio (Unidades, Servidores e Ações PNAPA)
