@@ -133,12 +133,14 @@ def executar_api_equipes(dados_json):
 # Função de Leitura da Base Macro Principal via Webhook
 def carregar_dados_da_nuvem():
     try:
-        resposta = requests.post(URL_LER, json={}, timeout=20)
+        # Enviando a chave "Acao": "Ler" para o Switch do Power Automate
+        resposta = requests.post(URL_LER, json={"Acao": "Ler"}, timeout=20)
         if resposta.status_code == 200:
             dados_json = resposta.json()
             if dados_json:
                 df = pd.DataFrame(dados_json)
-                return df[COLUNAS_PNAPA]
+                colunas_existentes = [c for c in COLUNAS_PNAPA if c in df.columns]
+                return df[colunas_existentes]
         return pd.DataFrame(columns=COLUNAS_PNAPA)
     except Exception as e:
         st.markdown(f"<div style='padding:10px; border-radius:5px; background-color:#2a1a1a; color:#f87171; border:1px solid #7f1d1d;'>❌ Erro ao conectar ao Power Automate para leitura da base macro: {e}</div>", unsafe_allow_html=True)
