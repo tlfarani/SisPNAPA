@@ -14,10 +14,8 @@ URL_FLOW_UNIDADES = "https://default6ae3f5e7541942a780758c1490c72b.25.environmen
 URL_FLOW_EQUIPES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3d124cc6783845e1b8618cfb3302eca0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ubTQ-LAIsToMOX0CGytlI2YM_WKmC_mRT64ybRLBRSY"
 URL_FLOW_PNAPAS = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/38cc92ea33ba4d6387b924d6eac62d58/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=LlCDUzrETHyXxp_QLte1eGxKR_4LuwRGzPJbgUsHvgk"
 
-# URLs da Planilha Macro Principal (Movidas para o topo para evitar NameError)
-URL_LER = st.secrets["power_automate"]["URL_LER"]
-URL_GRAVAR = st.secrets["power_automate"]["URL_GRAVAR"]
-URL_DELETAR = st.secrets["power_automate"]["URL_DELETAR"]
+# URL da Planilha Macro Principal (Movidas para o topo para evitar NameError)
+URL_FLOW_PRINCIPAL = st.secrets["power_automate"]["URL_PRINCIPAL"]
 
 # =================================================================
 # LISTAS OFICIAIS DE VALIDAÇÃO E MAPEAMENTO GEOGRÁFICO
@@ -87,9 +85,12 @@ def executar_envio_sharepoint(lista_payloads):
     with st.spinner(f"Processando e sincronizando {len(lista_payloads)} requisições com o IBAMA..."):
         for p in lista_payloads:
             try:
-                resposta = requests.post(URL_GRAVAR, json=p, timeout=20)
-                if resposta.status_code in [200, 202]: sucessos += 1
-            except: pass
+                # Dispara para a URL unificada
+                resposta = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
+                if resposta.status_code in [200, 202]: 
+                    sucessos += 1
+            except: 
+                pass
             
     if sucessos > 0:
         with st.spinner("Consolidando alterações no banco do SharePoint..."):
@@ -102,9 +103,67 @@ def executar_envio_sharepoint(lista_payloads):
     else:
         st.error("❌ Falha crítica: O Power Automate rejeitou a carga em lote.")
 
-def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, importancia, tema, objective, tipo_atividade, periculosidade, servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual):
-    id_final = str(int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1)) if modo == "➕ Inserir Nova Linha" else id_atual
-    return {"acao_fluxo": "inserir" if modo == "➕ Inserir Nova Linha" else "editar", "Id": id_final, "Ano da Ação": int(val_ano) if val_ano else 2026, "Número da Ação PNAPA": str(val_num_acao), "Nome da Ação PNAPA": str(val_nome_acao), "Nível": nivel_selecionado, "Nome da Atividade": nome_atividade, "Andamento": andamento, "Indicador": str(val_indicador), "Meta_Indicador": "", "Resultado_Indicador": resultado_indicador, "Doc_Probatorio_Exec": doc_probatorio, "UF_Acao_PNAPA": uf_acao, "Importância da Atividade": importancia, "Tema da Atividade": tema, "Objetivo da Atividade": objective, "Tipo de Atividade": tipo_atividade, "Periculosidade/Insalubridade": periculosidade, "Servidor": servidor, "UF_Servidor": uf_servidor, "Lotação": lotacao, "Faz parte da Equipe de Emergências": equipe_emergencia, "Número da PCDP": num_pcdp, "País": pais, "UF Onde Ocorreu/Ocorrerá a Ação": uf_ocorrencia, "Estado_Local_Acao": estado_local, "Municipio Onde Ocorreu/Ocorrerá a Ação": municipio, "Data de Início": str(dt_inicio), "Data de Término": str(dt_termino), "Dias_Gastos_Plan": dias_plan, "Dias_Gastos_Exec": dias_exec, "Origem do Recurso": origem_recurso, "Rec_Plan_Diarias": rec_p_diarias, "Rec_Plan_Passagens": rec_p_passagens, "Rec_Plan_Outras_Despesas": rec_p_outras, "Rec_Plan_Total": (rec_p_diarias+rec_p_passagens+rec_p_outras), "Rec_Exec_Diarias": rec_e_diarias, "Rec_Exec_Passagens": rec_e_passagens, "Rec_Exec_Outras_Despesas": rec_e_outras, "Rec_Exec_Total": (rec_e_diarias+rec_e_passagens+rec_e_outras), "Observações": obs, "Justificativa_Acao_PNAPA": justificativa}
+def payload_gerador(
+    val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
+    nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
+    importancia, tema, objective, tipo_atividade, periculosidade, servidor, 
+    uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
+    estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
+    origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
+    rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual
+):
+    # Calcula o próximo ID sequencial se for inserção, ou preserva o ID atual se for edição
+    if modo == "➕ Inserir Nova Linha":
+        id_final = str(int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1)) if not df_atual.empty else "1"
+        acao_switch = "Inserir"
+    else:
+        id_final = str(id_atual)
+        acao_switch = "Editar"
+
+    return {
+        "Acao": acao_switch,  # <- Alinhado exatamente ao seu Switch do Power Automate
+        "Id": id_final,
+        "Ano da Ação": int(val_ano) if val_ano else 2026,
+        "Número da Ação PNAPA": str(val_num_acao),
+        "Nome da Ação PNAPA": str(val_nome_acao),
+        "Nível": str(nivel_selecionado),
+        "Nome da Atividade": str(nome_atividade),
+        "Andamento": str(andamento),
+        "Indicador": str(val_indicador),
+        "Meta_Indicador": "",
+        "Resultado_Indicador": str(resultado_indicador),
+        "Doc_Probatorio_Exec": str(doc_probatorio),
+        "UF_Acao_PNAPA": str(uf_acao),
+        "Importância da Atividade": str(importancia),
+        "Tema da Atividade": str(tema),
+        "Objetivo da Atividade": str(objective),
+        "Tipo de Atividade": str(tipo_atividade),
+        "Periculosidade/Insalubridade": str(periculosidade),
+        "Servidor": str(servidor),
+        "UF_Servidor": str(uf_servidor),
+        "Lotação": str(lotacao),
+        "Faz parte da Equipe de Emergências": str(equipe_emergencia),
+        "Número da PCDP": str(num_pcdp),
+        "País": str(pais),
+        "UF Onde Ocorreu/Ocorrerá a Ação": str(uf_ocorrencia),
+        "Estado_Local_Acao": str(estado_local),
+        "Municipio Onde Ocorreu/Ocorrerá a Ação": str(municipio),
+        "Data de Início": str(dt_inicio),
+        "Data de Término": str(dt_termino),
+        "Dias_Gastos_Plan": float(dias_plan),
+        "Dias_Gastos_Exec": float(dias_exec),
+        "Origem do Recurso": str(origem_recurso),
+        "Rec_Plan_Diarias": float(rec_p_diarias),
+        "Rec_Plan_Passagens": float(rec_p_passagens),
+        "Rec_Plan_Outras_Despesas": float(rec_p_outras),
+        "Rec_Plan_Total": float(rec_p_diarias + rec_p_passagens + rec_p_outras),
+        "Rec_Exec_Diarias": float(rec_e_diarias),
+        "Rec_Exec_Passagens": float(rec_e_passagens),
+        "Rec_Exec_Outras_Despesas": float(rec_e_outras),
+        "Rec_Exec_Total": float(rec_e_diarias + rec_e_passagens + rec_e_outras),
+        "Observações": str(obs),
+        "Justificativa_Acao_PNAPA": str(justificativa)
+    }
 
 def verificar_string_limpa(txt):
     return str(txt).replace('\xa0', ' ').strip()
@@ -133,26 +192,17 @@ def executar_api_equipes(dados_json):
 # Função de Leitura Blindada contra Chaves Ausentes do Power Automate
 def carregar_dados_da_nuvem():
     try:
-        resposta = requests.post(URL_LER, json={"Acao": "Ler"}, timeout=20)
+        resposta = requests.post(URL_FLOW_PRINCIPAL, json={"Acao": "Ler"}, timeout=20)
         if resposta.status_code == 200:
             dados_json = resposta.json()
             if dados_json:
                 df = pd.DataFrame(dados_json)
-                
-                # 1. Remove espaços invisíveis e quebras
                 df.columns = [str(col).replace('\xa0', ' ').strip() for col in df.columns]
-                
-                # --- 🕵️ MODO DE INVESTIGAÇÃO ---
-                st.warning(f"Colunas que chegaram do Power Automate: {df.columns.tolist()}")
-                # --------------------------------
-                
-                # 2. Reindexa com a lista oficial
                 df = df.reindex(columns=COLUNAS_PNAPA, fill_value="")
                 return df
-                
         return pd.DataFrame(columns=COLUNAS_PNAPA)
     except Exception as e:
-        st.markdown(f"<div style='padding:10px; border-radius:5px; background-color:#2a1a1a; color:#f87171; border:1px solid #7f1d1d;'>❌ Erro ao conectar ao Power Automate: {e}</div>", unsafe_allow_html=True)
+        st.error(f"❌ Erro ao conectar ao Power Automate: {e}")
         return pd.DataFrame(columns=COLUNAS_PNAPA)
 
 # Carregamento das tabelas de apoio (Unidades, Servidores e Ações PNAPA)
@@ -462,20 +512,30 @@ if modo == "📊 Visualizar Base":
             with st.popover("🗑️ Remover Registro(s) Selecionado(s)", use_container_width=True):
                 st.markdown(f"<p style='color:#03170a;'>⚠️ <b>CRÍTICO:</b> Deseja apagar de forma definitiva o(s) registro(s) de ID: <b>{', '.join(ids_selecionados)}</b> no SharePoint?</p>", unsafe_allow_html=True)
                 if st.button("Sim, confirmar destruição permanente!", type="primary", key="btn_del_lote_tabela_final"):
-                    payloads_del = [{"Id": str(id_del)} for id_del in ids_selecionados]
+                    # Adicionada a chave 'Acao': 'Excluir' para acionar a ramificação correta no Power Automate
+                    payloads_del = [{"Acao": "Excluir", "Id": str(id_del)} for id_del in ids_selecionados]
                     sucessos_del = 0
                     with st.spinner("Removendo dados..."):
                         for p_del in payloads_del:
-                            r = requests.post(URL_DELETAR, json=p_del, timeout=20)
-                            if r.status_code in [200, 202]: sucessos_del += 1
+                            try:
+                                # Enviando para a URL unificada
+                                r = requests.post(URL_FLOW_PRINCIPAL, json=p_del, timeout=20)
+                                if r.status_code in [200, 202]: 
+                                    sucessos_del += 1
+                            except:
+                                pass
+                                
                     if sucessos_del > 0:
                         st.cache_data.clear()
-                        if "df" in st.session_state: del st.session_state.df
+                        if "df" in st.session_state: 
+                            del st.session_state.df
                         st.success(f"💥 {sucessos_del} registro(s) removido(s) com sucesso!")
                         st.session_state["selecoes_macro"] = {}
                         time.sleep(1.5)
                         st.rerun()
-
+                    else:
+                        st.error("❌ Falha ao excluir registros: o Power Automate rejeitou a requisição.")
+                        
             st.markdown("#### 📝 Formulário Adaptativo de Atualização")
             
             # --- DEFINIÇÃO DE FALLBACKS (INDIVIDUAL VS LOTE) ---
@@ -650,7 +710,12 @@ if modo == "📊 Visualizar Base":
                     
                     # CORE DE PRESERVAÇÃO: Monta o payload inicial a partir dos dados do Cache Puro (df_atual)
                     p_final = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
-                    p_final["acao_fluxo"] = "editar"
+                    
+                    # ALTERAÇÃO AQUI: 'Acao' = 'Editar' para o Switch do Power Automate
+                    p_final["Acao"] = "Editar"
+                    if "acao_fluxo" in p_final:
+                        del p_final["acao_fluxo"]
+                        
                     p_final["Id"] = str(id_alvo_loop)
                     
                     if qtd_selecionada == 1 or ed_nivel != f_nivel: p_final["Nível"] = str(ed_nivel)
@@ -1057,7 +1122,7 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
                         
                         # Gera o payload específico desta linha
                         payload_linha = {
-                            "acao_fluxo": "inserir", "Id": id_loop, "Ano da Ação": int(val_ano) if val_ano else 2026,
+                            "Acao": "Inserir", "Id": id_loop, "Ano da Ação": int(val_ano) if val_ano else 2026,
                             "Número da Ação PNAPA": str(val_num_acao), "Nome da Ação PNAPA": str(val_nome_acao),
                             "Nível": nivel_selecionado, "Nome da Atividade": p_nome_atv, "Andamento": p_andamento,
                             "Indicador": str(val_indicador), "Meta_Indicador": "", "Resultado_Indicador": p_res_ind,
@@ -1090,7 +1155,7 @@ elif modo == "🗑️ Deletar Linha (ID)":
         if st.button("Sim, deletar agora!", type="primary", use_container_width=True):
             with st.spinner("Removendo linha no SharePoint..."):
                 try:
-                    resposta_del = requests.post(URL_DELETAR, json={"Id": str(id_atual)}, timeout=20)
+                    resposta_del = requests.post(URL_FLOW_PRINCIPAL, json={"Acao": "Excluir", "Id": str(id_atual)}, timeout=20)
                     if resposta_del.status_code in [200, 202]:
                         st.success(f"💥 Registro {id_atual} excluído da base macro!")
                         time.sleep(2)
