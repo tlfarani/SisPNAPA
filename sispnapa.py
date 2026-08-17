@@ -665,34 +665,36 @@ if modo == "📊 Visualizar Base":
                 ed_dt_ini = st.text_input("Data de Início", value=str(ref_linha.get("Data de Início", "")) if qtd_selecionada == 1 else "", key=f"t1_dt_ini_{id_referencia}")
                 ed_dt_fim = st.text_input("Data de Término", value=str(ref_linha.get("Data de Término", "")) if qtd_selecionada == 1 else "", key=f"t1_dt_fim_{id_referencia}")
                 
-                # 🚀 AJUSTE: Incrementos de 0.5 em 0.5 com format="%.1f"
-                ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl, step=0.5, format="%.1f", key=f"t1_dias_pl_{id_referencia}")
-                ed_dias_ex = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=f_dias_ex, step=0.5, format="%.1f", key=f"t1_dias_ex_{id_referencia}")
+                # 🚀 Incrementos de 0.5 em 0.5
+                c_d1, c_d2 = st.columns(2)
+                with c_d1:
+                    ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl, step=0.5, format="%.1f", key=f"t1_dias_pl_{id_referencia}")
+                with c_d2:
+                    ed_dias_ex = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=f_dias_ex, step=0.5, format="%.1f", key=f"t1_dias_ex_{id_referencia}")
+                    
                 ed_origem = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(f_origem) if f_origem in LISTA_ORIGENS_RECURSO else 0, key=f"t1_orig_{id_referencia}")
                 
-                st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>Valores Orçamentários</p>", unsafe_allow_html=True)
+                st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários</p>", unsafe_allow_html=True)
                 c_p, c_e = st.columns(2)
                 with c_p:
                     st.caption("Planejado")
                     ed_rp_d = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=f_rp_d, step=50.0, format="%.2f", key=f"t1_rpd_{id_referencia}")
                     ed_rp_p = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=f_rp_p, step=50.0, format="%.2f", key=f"t1_rpp_{id_referencia}")
                     ed_rp_o = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=f_rp_o, step=50.0, format="%.2f", key=f"t1_rpo_{id_referencia}")
+                    
+                    # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL (Planejado)
+                    calc_total_plan = float(ed_rp_d + ed_rp_p + ed_rp_o)
+                    st.number_input("Rec_Plan_Total (Soma Automática)", value=calc_total_plan, disabled=True, format="%.2f")
+
                 with c_e:
                     st.caption("Executado")
                     ed_re_d = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=f_re_d, step=50.0, format="%.2f", key=f"t1_red_{id_referencia}")
                     ed_re_p = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=f_re_p, step=50.0, format="%.2f", key=f"t1_rep_{id_referencia}")
                     ed_re_o = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=f_re_o, step=50.0, format="%.2f", key=f"t1_reo_{id_referencia}")
-
-                # 🚀 AJUSTE: Exibição visual e soma dos totais em tempo real
-                calc_total_plan = float(ed_rp_d + ed_rp_p + ed_rp_o)
-                calc_total_exec = float(ed_re_d + ed_re_p + ed_re_o)
-                
-                st.markdown("---")
-                c_tot1, c_tot2 = st.columns(2)
-                with c_tot1:
-                    st.markdown(f"💰 **Rec_Plan_Total (Soma):** `R$ {calc_total_plan:,.2f}`")
-                with c_tot2:
-                    st.markdown(f"💳 **Rec_Exec_Total (Soma):** `R$ {calc_total_exec:,.2f}`")
+                    
+                    # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL (Executado)
+                    calc_total_exec = float(ed_re_d + ed_re_p + ed_re_o)
+                    st.number_input("Rec_Exec_Total (Soma Automática)", value=calc_total_exec, disabled=True, format="%.2f")
 
             with aba5:
                 ed_obs = st.text_area("Observações", value=f_obs, key=f"t1_obs_{id_referencia}")
@@ -896,13 +898,18 @@ elif modo == "➕ Inserir Nova Linha":
         with aba4:
             dt_inicio = st.date_input("Data de Início", value=val_dt_inicio, key="pna_dt_ini_acao")
             dt_termino = st.date_input("Data de Término", value=val_dt_termino, key="pna_dt_fim_acao")
-            dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), key="pna_dias_pl_acao")
+            # 🚀 Incrementos de 0.5
+            dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
             origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, key="pna_orig_acao")
             
             st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
-            rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f", key="pna_rpd_acao")
-            rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f", key="pna_rpp_acao")
-            rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), format="%.2f", key="pna_rpo_acao")
+            rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), step=50.0, format="%.2f", key="pna_rpd_acao")
+            rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), step=50.0, format="%.2f", key="pna_rpp_acao")
+            rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), step=50.0, format="%.2f", key="pna_rpo_acao")
+            
+            # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL
+            calc_plan_acao = float(rec_p_diarias + rec_p_passagens + rec_p_outras)
+            st.number_input("Rec_Plan_Total (Soma Automática)", value=calc_plan_acao, disabled=True, format="%.2f")
 
         with aba5:
             obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "", key="pna_obs_acao")
@@ -991,20 +998,37 @@ elif modo == "➕ Inserir Nova Linha":
         with aba4:
             dt_inicio = st.date_input("Data de Início", value=val_dt_inicio, key="atv_dt_ini")
             dt_termino = st.date_input("Data de Término", value=val_dt_termino, key="atv_dt_fim")
-            dias_plan = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), key="atv_dias_pl")
-            dias_exec = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"), key="atv_dias_ex")
+            
+            # 🚀 Incrementos de 0.5
+            c_d1_ins, c_d2_ins = st.columns(2)
+            with c_d1_ins:
+                dias_plan = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="atv_dias_pl")
+            with c_d2_ins:
+                dias_exec = st.number_input("Dias_Gastos_Exec", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"), step=0.5, format="%.1f", key="atv_dias_ex")
+                
             origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, key="atv_sel_origem")
             
             st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
             c_pl, c_ex = st.columns(2)
             with c_pl:
-                rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f", key="atv_rpd")
-                rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f", key="atv_rpp")
-                rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), format="%.2f", key="atv_rpo")
+                st.caption("Planejado")
+                rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), step=50.0, format="%.2f", key="atv_rpd")
+                rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), step=50.0, format="%.2f", key="atv_rpp")
+                rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), step=50.0, format="%.2f", key="atv_rpo")
+                
+                # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL (Planejado)
+                calc_tot_p_atv = float(rec_p_diarias + rec_p_passagens + rec_p_outras)
+                st.number_input("Rec_Plan_Total (Soma Automática)", value=calc_tot_p_atv, disabled=True, format="%.2f")
+
             with c_ex:
-                rec_e_diarias = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Diarias"), format="%.2f", key="atv_red")
-                rec_e_passagens = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Passagens"), format="%.2f", key="atv_rep")
-                rec_e_outras = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Outras_Despesas"), format="%.2f", key="atv_reo")
+                st.caption("Executado")
+                rec_e_diarias = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Diarias"), step=50.0, format="%.2f", key="atv_red")
+                rec_e_passagens = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Passagens"), step=50.0, format="%.2f", key="atv_rep")
+                rec_e_outras = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Outras_Despesas"), step=50.0, format="%.2f", key="atv_reo")
+                
+                # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL (Executado)
+                calc_tot_e_atv = float(rec_e_diarias + rec_e_passagens + rec_e_outras)
+                st.number_input("Rec_Exec_Total (Soma Automática)", value=calc_tot_e_atv, disabled=True, format="%.2f")
 
         with aba5:
             obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "", key="atv_obs")
