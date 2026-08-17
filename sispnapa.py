@@ -364,7 +364,19 @@ if modo == "📊 Visualizar Base":
         if nivel_sel != "Todos": df_exibicao = df_exibicao[df_exibicao["Nível"].astype(str) == nivel_sel]
         if servidor_sel != "Todos": df_exibicao = df_exibicao[df_exibicao["Servidor"].astype(str) == servidor_sel]
         
-        df_exibicao = df_exibicao[(df_exibicao["Data_Inicio_Datetime"].dt.date >= intervalo_datas[0]) & (df_exibicao["Data_Inicio_Datetime"].dt.date <= intervalo_datas[1])]
+        # --- FILTRAGEM SEGURA POR TIMESTAMP (Sem conflito de tipos) ---
+        ts_inicio = pd.to_datetime(intervalo_datas[0])
+        ts_fim = pd.to_datetime(intervalo_datas[1]) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+
+        mascara_datas = (
+            df_exibicao["Data_Inicio_Datetime"].notna() &
+            (df_exibicao["Data_Inicio_Datetime"] >= ts_inicio) &
+            (df_exibicao["Data_Inicio_Datetime"] <= ts_fim)
+        )
+        # Se quiser exibir também registros cuja data ainda não foi informada:
+        # mascara_datas = mascara_datas | df_exibicao["Data_Inicio_Datetime"].isna()
+
+        df_exibicao = df_exibicao[mascara_datas]
 
         df_exibicao["Data de Início"] = df_exibicao["Data_Inicio_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
         df_exibicao["Data de Término"] = df_exibicao["Data_Termino_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
