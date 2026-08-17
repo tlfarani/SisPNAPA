@@ -665,7 +665,7 @@ if modo == "📊 Visualizar Base":
                 ed_dt_ini = st.text_input("Data de Início", value=str(ref_linha.get("Data de Início", "")) if qtd_selecionada == 1 else "", key=f"t1_dt_ini_{id_referencia}")
                 ed_dt_fim = st.text_input("Data de Término", value=str(ref_linha.get("Data de Término", "")) if qtd_selecionada == 1 else "", key=f"t1_dt_fim_{id_referencia}")
                 
-                # 🚀 Incrementos de 0.5 em 0.5
+                # 🚀 Incrementos de 0.5 em 0.5 para dias
                 c_d1, c_d2 = st.columns(2)
                 with c_d1:
                     ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl, step=0.5, format="%.1f", key=f"t1_dias_pl_{id_referencia}")
@@ -682,9 +682,9 @@ if modo == "📊 Visualizar Base":
                     ed_rp_p = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=f_rp_p, step=50.0, format="%.2f", key=f"t1_rpp_{id_referencia}")
                     ed_rp_o = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=f_rp_o, step=50.0, format="%.2f", key=f"t1_rpo_{id_referencia}")
                     
-                    # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL (Planejado)
+                    # 🚀 SOMA EM TEMPO REAL: sem 'key' para não travar no session_state
                     calc_total_plan = float(ed_rp_d + ed_rp_p + ed_rp_o)
-                    st.number_input("Rec_Plan_Total (Soma Automática)", value=calc_total_plan, disabled=True, format="%.2f")
+                    st.text_input("Rec_Plan_Total (Soma Automática)", value=f"{calc_total_plan:.2f}", disabled=True)
 
                 with c_e:
                     st.caption("Executado")
@@ -692,9 +692,9 @@ if modo == "📊 Visualizar Base":
                     ed_re_p = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=f_re_p, step=50.0, format="%.2f", key=f"t1_rep_{id_referencia}")
                     ed_re_o = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=f_re_o, step=50.0, format="%.2f", key=f"t1_reo_{id_referencia}")
                     
-                    # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL (Executado)
+                    # 🚀 SOMA EM TEMPO REAL: sem 'key' para não travar no session_state
                     calc_total_exec = float(ed_re_d + ed_re_p + ed_re_o)
-                    st.number_input("Rec_Exec_Total (Soma Automática)", value=calc_total_exec, disabled=True, format="%.2f")
+                    st.text_input("Rec_Exec_Total (Soma Automática)", value=f"{calc_total_exec:.2f}", disabled=True)
 
             with aba5:
                 ed_obs = st.text_area("Observações", value=f_obs, key=f"t1_obs_{id_referencia}")
@@ -747,6 +747,7 @@ if modo == "📊 Visualizar Base":
                     p_final["Estado_Local_Acao"] = str(ed_estado_local) if ed_estado_local else str(row_orig.get("Estado_Local_Acao", ""))
                     p_final["Municipio Onde Ocorreu/Ocorrerá a Ação"] = str(ed_municipio) if ed_municipio else str(row_orig.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
                     
+                    # Cronograma e Custos
                     if qtd_selecionada == 1 or (ed_dt_ini.strip() != ""): p_final["Data de Início"] = str(ed_dt_ini).strip()
                     if qtd_selecionada == 1 or (ed_dt_fim.strip() != ""): p_final["Data de Término"] = str(ed_dt_fim).strip()
                     if qtd_selecionada == 1 or ed_dias_pl != 0.0: p_final["Dias_Gastos_Plan"] = float(ed_dias_pl)
@@ -760,9 +761,20 @@ if modo == "📊 Visualizar Base":
                     if qtd_selecionada == 1 or ed_re_p != 0.0: p_final["Rec_Exec_Passagens"] = float(ed_re_p)
                     if qtd_selecionada == 1 or ed_re_o != 0.0: p_final["Rec_Exec_Outras_Despesas"] = float(ed_re_o)
                     
-                    # 🚀 AJUSTE: Gravação garantida das somas totais
-                    p_final["Rec_Plan_Total"] = float(p_final.get("Rec_Plan_Diarias", 0)) + float(p_final.get("Rec_Plan_Passagens", 0)) + float(p_final.get("Rec_Plan_Outras_Despesas", 0))
-                    p_final["Rec_Exec_Total"] = float(p_final.get("Rec_Exec_Diarias", 0)) + float(p_final.get("Rec_Exec_Passagens", 0)) + float(p_final.get("Rec_Exec_Outras_Despesas", 0))
+                    # 🚀 SOMAS TOTAIS BLINDADAS (Usa pd.to_numeric para evitar erro com valores em branco)
+                    tot_plan_calc = (
+                        float(pd.to_numeric(p_final.get("Rec_Plan_Diarias", 0), errors='coerce') or 0.0) +
+                        float(pd.to_numeric(p_final.get("Rec_Plan_Passagens", 0), errors='coerce') or 0.0) +
+                        float(pd.to_numeric(p_final.get("Rec_Plan_Outras_Despesas", 0), errors='coerce') or 0.0)
+                    )
+                    tot_exec_calc = (
+                        float(pd.to_numeric(p_final.get("Rec_Exec_Diarias", 0), errors='coerce') or 0.0) +
+                        float(pd.to_numeric(p_final.get("Rec_Exec_Passagens", 0), errors='coerce') or 0.0) +
+                        float(pd.to_numeric(p_final.get("Rec_Exec_Outras_Despesas", 0), errors='coerce') or 0.0)
+                    )
+                    
+                    p_final["Rec_Plan_Total"] = tot_plan_calc
+                    p_final["Rec_Exec_Total"] = tot_exec_calc
                     
                     # Parser ISO de datas
                     raw_ini = ed_dt_ini.strip() if (qtd_selecionada == 1 or ed_dt_ini.strip() != "") else str(row_orig.get("Data de Início", ""))
