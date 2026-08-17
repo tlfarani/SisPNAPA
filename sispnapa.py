@@ -859,9 +859,8 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
             return float(val) if pd.notna(val) else 0.0
         return 0.0
 
-    # 🌟 PASSO 2: INÍCIO DO FORMULÁRIO ENVELOPANDO AS ABAS TEMÁTICAS DINÂMICAS
-    with st.form(key="form_power_automate", clear_on_submit=True):
-        st.text_input("ID do Registro", value=id_atual if id_atual else "Definido no envio", disabled=True)
+    # 🌟 PASSO 2: CAMPOS LIVRES FORA DE CONTAINER FORM (REATIVIDADE TOTAL)
+    st.text_input("ID do Registro", value=id_atual if id_atual else "Definido no envio", disabled=True)
         
         # =================================================================
         # CONDICIONAL VISUAL: SE FOR AÇÃO
@@ -1028,7 +1027,7 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
             meta_indicador = ""
 
         # Botão principal de envio individual dentro do formulário
-        btn_enviar_individual = st.form_submit_button(label="🚀 Gravar Registro no SharePoint", type="primary")
+        btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", key="btn_gravar_individual_reativo")
 
     # =================================================================
     # PROCESSAMENTO DO ENVIO: INDIVIDUAL OU EM LOTE
