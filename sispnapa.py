@@ -861,72 +861,67 @@ elif modo in ["➕ Inserir Nova Linha", "📝 Editar Linha Existente"]:
 
     # 🌟 PASSO 2: CAMPOS LIVRES FORA DE CONTAINER FORM (REATIVIDADE TOTAL)
     st.text_input("ID do Registro", value=id_atual if id_atual else "Definido no envio", disabled=True)
+    
+    # =================================================================
+    # CONDICIONAL VISUAL: SE FOR AÇÃO
+    # =================================================================
+    if nivel_selecionado == "Ação":
+        val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária")) if 'dados_aux_linha' in locals() else "Ordinária"
+        if val_importancia_automatica == "Ordinária":
+            importancia = "Baixa"
+        elif val_importancia_automatica == "Estratégica":
+            importancia = "Alta"
+        else:
+            importancia = "Média"
+
+        aba1, aba2, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "4. Cronograma & Custos", "5. Justificativas"])
         
-        # =================================================================
-        # CONDICIONAL VISUAL: SE FOR AÇÃO
-        # =================================================================
-        if nivel_selecionado == "Ação":
-            # REFEITO CONFORME DIRETRIZ: Importância da Atividade herdada do Catálogo Auxiliar da Ação selecionada
-            val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária"))
-            if val_importancia_automatica == "Ordinária":
-                importancia = "Baixa"
-            elif val_importancia_automatica == "Estratégica":
-                importancia = "Alta"
-            else:
-                importancia = "Média"
-
-            aba1, aba2, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "4. Cronograma & Custos", "5. Justificativas"])
+        with aba1:
+            st.text_input("Ano da Ação (Automático)", value=str(val_ano if val_ano else ""), disabled=True)
+            st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
+            st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
             
-            with aba1:
-                st.text_input("Ano da Ação (Automático)", value=str(val_ano if val_ano else ""), disabled=True)
-                st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
-                st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
-                
-                # REFEITO CONFORME DIRETRIZ: Andamento restrito para Ação
-                lista_andamentos_acao = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
-                try: idx_and = lista_andamentos_acao.index(registro_selecionado["Andamento"])
-                except: idx_and = 0
-                andamento = st.selectbox("Andamento da Ação", lista_andamentos_acao, index=idx_and)
+            lista_andamentos_acao = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
+            try: idx_and = lista_andamentos_acao.index(registro_selecionado["Andamento"]) if registro_selecionado is not None else 0
+            except: idx_and = 0
+            andamento = st.selectbox("Andamento da Ação", lista_andamentos_acao, index=idx_and, key="pna_sel_andamento_acao")
 
-                
-            with aba2:
-                st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
-                meta_indicador = st.text_input("Meta do Indicador", value=str(registro_selecionado["Meta_Indicador"]) if registro_selecionado is not None else "")
-                
-                # Trava a UF da ação com base no usuário logado ou SP padrão administrativo Ibama
-                uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
-                st.text_input("Importância da Atividade (Herdada do Catálogo)", value=importancia, disabled=True)
-                
-                tema = st.selectbox("Tema da Atividade", LISTA_TEMAS)
-                objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS)
-                tipo_atividade = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE)
+        with aba2:
+            st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
+            meta_indicador = st.text_input("Meta do Indicador", value=str(registro_selecionado["Meta_Indicador"]) if registro_selecionado is not None else "")
+            
+            uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
+            st.text_input("Importância da Atividade (Herdada do Catálogo)", value=importancia, disabled=True)
+            
+            tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="pna_sel_tema_acao")
+            objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS, key="pna_sel_obj_acao")
+            tipo_atividade = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE, key="pna_sel_tipo_acao")
 
-            with aba4:
-                dt_inicio = st.date_input("Data de Início", value=val_dt_inicio)
-                dt_termino = st.date_input("Data de Término", value=val_dt_termino)
-                dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
-                origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO)
-                
-                st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
-                rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f")
-                rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f")
-                rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), format="%.2f")
+        with aba4:
+            dt_inicio = st.date_input("Data de Início", value=val_dt_inicio, key="pna_dt_ini_acao")
+            dt_termino = st.date_input("Data de Término", value=val_dt_termino, key="pna_dt_fim_acao")
+            dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), key="pna_dias_pl_acao")
+            origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, key="pna_orig_acao")
+            
+            st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
+            rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), format="%.2f", key="pna_rpd_acao")
+            rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), format="%.2f", key="pna_rpp_acao")
+            rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), format="%.2f", key="pna_rpo_acao")
 
-            with aba5:
-                obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "")
-                
-                # REFEITO CONFORME DIRETRIZ: Justificativa condicional reativa para andamentos restritivos de Ação
-                if andamento in ["Cancelada", "Não Demandada", "Não Executada"]:
-                    justificativa = st.selectbox("Justificativa_Acao_PNAPA", LISTA_JUSTIFICATIVAS_ACAO)
-                else:
-                    justificativa = ""
-                    st.info("ℹ️ Justificativa habilitada apenas para ações com andamento Cancelada, Não Demandada ou Não Executada.")
+        with aba5:
+            obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "", key="pna_obs_acao")
+            
+            if andamento in ["Cancelada", "Não Demandada", "Não Executada"]:
+                justificativa = st.selectbox("Justificativa_Acao_PNAPA", LISTA_JUSTIFICATIVAS_ACAO, key="pna_just_acao")
+            else:
+                justificativa = ""
+                st.info("ℹ️ Justificativa habilitada apenas para ações com andamento Cancelada, Não Demandada ou Não Executada.")
 
-            # Inicializa nulos regulamentares de Atividade para o construtor do payload
-            nome_atividade, resultado_indicador, doc_probatorio, periculosidade = "", "", "", "Não se Aplica"
-            servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp = "", "", "", "Não", ""
-            pais, uf_ocorrencia, estado_local, municipio, dias_exec = "Brasil", "", "", "", 0.0
-            rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
+        # Nulos regulamentares de Atividade para o construtor do payload
+        nome_atividade, resultado_indicador, doc_probatorio, periculosidade = "", "", "", "Não se Aplica"
+        servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp = "", "", "", "Não", ""
+        pais, uf_ocorrencia, estado_local, municipio, dias_exec = "Brasil", "", "", "", 0.0
+        rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
 
         # =================================================================
         # CONDICIONAL VISUAL: SE FOR ATIVIDADE
