@@ -139,10 +139,10 @@ def carregar_dados_da_nuvem():
             if dados_json:
                 df = pd.DataFrame(dados_json)
                 
-                # 1. Remove espaços invisíveis e quebras dos nomes das colunas vindas do Excel
+                # 1. Remove espaços invisíveis (\xa0) e espaços extras dos nomes das colunas
                 df.columns = [str(col).replace('\xa0', ' ').strip() for col in df.columns]
                 
-                # 2. Garante todas as colunas oficiais (preenche com "" as que o Power Automate omitir)
+                # 2. Reindexa com a lista oficial preenchendo ausentes com vazio
                 df = df.reindex(columns=COLUNAS_PNAPA, fill_value="")
                 return df
                 
@@ -325,6 +325,13 @@ if modo == "📊 Visualizar Base":
             return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
 
         df_trabalho = df_atual.copy()
+        
+        # Garante a existência das colunas mesmo se vierem vazias do SharePoint/Power Automate
+        if "Data de Início" not in df_trabalho.columns:
+            df_trabalho["Data de Início"] = ""
+        if "Data de Término" not in df_trabalho.columns:
+            df_trabalho["Data de Término"] = ""
+
         df_trabalho["Data_Inicio_Datetime"] = df_trabalho["Data de Início"].apply(limpar_e_converter_data)
         df_trabalho["Data_Termino_Datetime"] = df_trabalho["Data de Término"].apply(limpar_e_converter_data)
 
