@@ -527,10 +527,15 @@ if modo == "📊 Visualizar Base":
 
             st.markdown("#### 📝 Formulário Adaptativo de Atualização")
             
+            # --- FUNÇÃO AUXILIAR PARA GARANTIR NÚMEROS LIMPOS (SEM NAN) ---
+            def obter_float_limpo(val):
+                num = pd.to_numeric(val, errors='coerce')
+                return 0.0 if pd.isna(num) else float(num)
+
             # --- DEFINIÇÃO DE FALLBACKS (INDIVIDUAL VS LOTE) ---
             if qtd_selecionada == 1:
                 registro_alvo = df_linhas_selecionadas.iloc[0]
-                st.info(f"ℹ️ Modo de Edição Individual ativo para o ID **{id_referencia}**.")
+                st.info(f"ℹ️ Modo de Edição Individual ativo para o ID **{ids_selecionados[0]}**.")
                 
                 f_nivel = str(registro_alvo.get("Nível", "Atividade"))
                 f_andamento = str(registro_alvo.get("Andamento", "Prevista"))
@@ -552,15 +557,18 @@ if modo == "📊 Visualizar Base":
                 f_uf_oc = str(registro_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "SP"))
                 f_est = str(registro_alvo.get("Estado_Local_Acao", "São Paulo"))
                 f_mun = str(registro_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
-                f_dias_pl = float(pd.to_numeric(registro_alvo.get("Dias_Gastos_Plan", 0), errors='coerce') or 0.0)
-                f_dias_ex = float(pd.to_numeric(registro_alvo.get("Dias_Gastos_Exec", 0), errors='coerce') or 0.0)
+                
+                # 🚀 LEITURA SEGURA DOS CAMPOS NUMÉRICOS (Elimina o NaN)
+                f_dias_pl = obter_float_limpo(registro_alvo.get("Dias_Gastos_Plan"))
+                f_dias_ex = obter_float_limpo(registro_alvo.get("Dias_Gastos_Exec"))
                 f_origem = str(registro_alvo.get("Origem do Recurso", ""))
-                f_rp_d = float(pd.to_numeric(registro_alvo.get("Rec_Plan_Diarias", 0), errors='coerce') or 0.0)
-                f_rp_p = float(pd.to_numeric(registro_alvo.get("Rec_Plan_Passagens", 0), errors='coerce') or 0.0)
-                f_rp_o = float(pd.to_numeric(registro_alvo.get("Rec_Plan_Outras_Despesas", 0), errors='coerce') or 0.0)
-                f_re_d = float(pd.to_numeric(registro_alvo.get("Rec_Exec_Diarias", 0), errors='coerce') or 0.0)
-                f_re_p = float(pd.to_numeric(registro_alvo.get("Rec_Exec_Passagens", 0), errors='coerce') or 0.0)
-                f_re_o = float(pd.to_numeric(registro_alvo.get("Rec_Exec_Outras_Despesas", 0), errors='coerce') or 0.0)
+                f_rp_d = obter_float_limpo(registro_alvo.get("Rec_Plan_Diarias"))
+                f_rp_p = obter_float_limpo(registro_alvo.get("Rec_Plan_Passagens"))
+                f_rp_o = obter_float_limpo(registro_alvo.get("Rec_Plan_Outras_Despesas"))
+                f_re_d = obter_float_limpo(registro_alvo.get("Rec_Exec_Diarias"))
+                f_re_p = obter_float_limpo(registro_alvo.get("Rec_Exec_Passagens"))
+                f_re_o = obter_float_limpo(registro_alvo.get("Rec_Exec_Outras_Despesas"))
+                
                 f_obs = str(registro_alvo.get("Observações", ""))
                 f_just = str(registro_alvo.get("Justificativa_Acao_PNAPA", ""))
                 f_meta = str(registro_alvo.get("Meta_Indicador", ""))
@@ -665,7 +673,7 @@ if modo == "📊 Visualizar Base":
                 ed_dt_ini = st.text_input("Data de Início", value=str(ref_linha.get("Data de Início", "")) if qtd_selecionada == 1 else "", key=f"t1_dt_ini_{id_referencia}")
                 ed_dt_fim = st.text_input("Data de Término", value=str(ref_linha.get("Data de Término", "")) if qtd_selecionada == 1 else "", key=f"t1_dt_fim_{id_referencia}")
                 
-                # 🚀 Incrementos de 0.5 em 0.5 para dias
+                # 🚀 Incrementos de 0.5 em 0.5
                 c_d1, c_d2 = st.columns(2)
                 with c_d1:
                     ed_dias_pl = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=f_dias_pl, step=0.5, format="%.1f", key=f"t1_dias_pl_{id_referencia}")
@@ -682,9 +690,13 @@ if modo == "📊 Visualizar Base":
                     ed_rp_p = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=f_rp_p, step=50.0, format="%.2f", key=f"t1_rpp_{id_referencia}")
                     ed_rp_o = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=f_rp_o, step=50.0, format="%.2f", key=f"t1_rpo_{id_referencia}")
                     
-                    # 🚀 SOMA EM TEMPO REAL: sem 'key' para não travar no session_state
-                    calc_total_plan = float(ed_rp_d + ed_rp_p + ed_rp_o)
-                    st.text_input("Rec_Plan_Total (Soma Automática)", value=f"{calc_total_plan:.2f}", disabled=True)
+                    # 🚀 SOMA BLINDADA CONTRA NULOS / NAN:
+                    val_rp_d = 0.0 if (ed_rp_d is None or pd.isna(ed_rp_d)) else float(ed_rp_d)
+                    val_rp_p = 0.0 if (ed_rp_p is None or pd.isna(ed_rp_p)) else float(ed_rp_p)
+                    val_rp_o = 0.0 if (ed_rp_o is None or pd.isna(ed_rp_o)) else float(ed_rp_o)
+                    
+                    calc_total_plan = val_rp_d + val_rp_p + val_rp_o
+                    st.text_input("Rec_Plan_Total (Soma Automática)", value=f"{calc_total_plan:,.2f}", disabled=True)
 
                 with c_e:
                     st.caption("Executado")
@@ -692,9 +704,13 @@ if modo == "📊 Visualizar Base":
                     ed_re_p = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=f_re_p, step=50.0, format="%.2f", key=f"t1_rep_{id_referencia}")
                     ed_re_o = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=f_re_o, step=50.0, format="%.2f", key=f"t1_reo_{id_referencia}")
                     
-                    # 🚀 SOMA EM TEMPO REAL: sem 'key' para não travar no session_state
-                    calc_total_exec = float(ed_re_d + ed_re_p + ed_re_o)
-                    st.text_input("Rec_Exec_Total (Soma Automática)", value=f"{calc_total_exec:.2f}", disabled=True)
+                    # 🚀 SOMA BLINDADA CONTRA NULOS / NAN:
+                    val_re_d = 0.0 if (ed_re_d is None or pd.isna(ed_re_d)) else float(ed_re_d)
+                    val_re_p = 0.0 if (ed_re_p is None or pd.isna(ed_re_p)) else float(ed_re_p)
+                    val_re_o = 0.0 if (ed_re_o is None or pd.isna(ed_re_o)) else float(ed_re_o)
+                    
+                    calc_total_exec = val_re_d + val_re_p + val_re_o
+                    st.text_input("Rec_Exec_Total (Soma Automática)", value=f"{calc_total_exec:,.2f}", disabled=True)
 
             with aba5:
                 ed_obs = st.text_area("Observações", value=f_obs, key=f"t1_obs_{id_referencia}")
