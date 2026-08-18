@@ -485,12 +485,8 @@ if modo == "📊 Visualizar Base":
                 (df_exibicao["Número da Ação PNAPA"].astype(str).str.strip() == cod_prefixo_puro)
             )
             df_exibicao = df_exibicao[mascara_acao]
-            
-        # 🚀 APLICAÇÃO DO NOVO FILTRO DE AÇÃO PNAPA:
-        if acao_pna_sel != "Todas":
-            cod_acao_filtrar = acao_pna_sel.split(" - ")[0].strip()
-            df_exibicao = df_exibicao[df_exibicao["Número da Ação PNAPA"].astype(str).str.strip() == cod_acao_filtrar]
-            
+          
+                    
         if uf_sel != "Todas": 
             df_exibicao = df_exibicao[df_exibicao["UF_Acao_PNAPA"].astype(str).str.strip() == str(uf_sel)]
         if lotacao_sel != "Todas": 
@@ -667,7 +663,8 @@ if modo == "📊 Visualizar Base":
                         
                         val_ano = int(dados_aux_linha["Ano"])
                         val_num_acao = str(dados_aux_linha.get("Acao_Ano", dados_aux_linha["Num_Acao_PNAPA"]))
-                        val_nome_acao = str(dados_aux_linha.get("Nome_Acao_Apelido", dados_aux_linha["Nome_Acao_Completo"]))
+                        apelido_ind = str(dados_aux_linha.get("Nome_Acao_Apelido", "")).strip()
+                        val_nome_acao = apelido_ind if apelido_ind and apelido_ind.lower() != "nan" else str(dados_aux_linha.get("Nome_Acao_Completo", "")).strip()
                         val_indicador = str(dados_aux_linha["Indicador"])
                         val_importancia_raw = str(dados_aux_linha.get("Importância", "Ordinária"))
                         importancia = "Alta" if val_importancia_raw == "Estratégica" else ("Baixa" if val_importancia_raw == "Ordinária" else "Média")
@@ -898,12 +895,18 @@ if modo == "📊 Visualizar Base":
                             opcao_vinc_lt_sel = st.selectbox("Selecione a Ação PNAPA correspondente:", lista_opcoes_vinc_lt, index=idx_pna_vinc_lt, key="lt_comp_sel_pna")
                             
                             acao_ano_detectado_lt = opcao_vinc_lt_sel.split(" - ")[0].strip()
-                            dados_aux_lt = df_pnapas_ano_lt[df_pnapas_ano_lt["Acao_Ano"].astype(str) == acao_ano_detectado_lt].iloc[0]
                             
+                            dados_aux_lt = df_pnapas_ano_lt[df_pnapas_ano_lt["Acao_Ano"].astype(str) == acao_ano_detectado_lt].iloc[0]
+
                             val_ano_lt = int(dados_aux_lt["Ano"])
                             val_num_acao_lt = str(dados_aux_lt.get("Acao_Ano", dados_aux_lt["Num_Acao_PNAPA"]))
-                            val_nome_acao_lt = str(dados_aux_lt["Nome_Acao_Completo"])
+                            
+                            # 🚀 Puxa o Apelido / Nome Amigável (ex: Planos de Área)
+                            apelido_lt = str(dados_aux_lt.get("Nome_Acao_Apelido", "")).strip()
+                            val_nome_acao_lt = apelido_lt if apelido_lt and apelido_lt.lower() != "nan" else str(dados_aux_lt.get("Nome_Acao_Completo", "")).strip()
+                            
                             val_ind_lt = str(dados_aux_lt["Indicador"])
+                            
                             val_imp_raw_lt = str(dados_aux_lt.get("Importância", "Ordinária"))
                             val_imp_lt = "Alta" if val_imp_raw_lt == "Estratégica" else ("Baixa" if val_imp_raw_lt == "Ordinária" else "Média")
                             
@@ -1101,7 +1104,7 @@ elif modo == "➕ Inserir Nova Linha":
             num_acao_gravada = str(registro_selecionado.get("Número da Ação PNAPA", "")) if registro_selecionado is not None else ""
             idx_pna_vinc = 0
             for i, opc in enumerate(lista_opcoes_vinc):
-                if opc.startswith(num_acao_gravada + "-"):
+                if opc.startswith(num_acao_gravada + " - ") or opc.startswith(num_acao_gravada + "-") or (num_acao_gravada and opc.startswith(num_acao_gravada)):
                     idx_pna_vinc = i
                     break
             
@@ -1114,7 +1117,8 @@ elif modo == "➕ Inserir Nova Linha":
             val_ano = int(dados_aux_linha["Ano"])
             # 🚀 AJUSTADO: Puxa o código completo com o ano (ex: CEN001-2026)
             val_num_acao = str(dados_aux_linha.get("Acao_Ano", dados_aux_linha["Num_Acao_PNAPA"]))
-            val_nome_acao = str(dados_aux_linha.get("Nome_Acao_Apelido", dados_aux_linha["Nome_Acao_Completo"]))
+            apelido_ins = str(dados_aux_linha.get("Nome_Acao_Apelido", "")).strip()
+            val_nome_acao = apelido_ins if apelido_ins and apelido_ins.lower() != "nan" else str(dados_aux_linha.get("Nome_Acao_Completo", "")).strip()
             val_indicador = str(dados_aux_linha["Indicador"])
             
             st.success(f"✅ Dados Vinculados: Código {val_num_acao} | {val_nome_acao[:60]}...")
