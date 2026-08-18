@@ -1683,34 +1683,60 @@ elif modo == "👥 Gerenciar Equipes":
             st.success(f"Servidor {n_srv} inserido com sucesso!")
             st.rerun()
 
+    # =================================================================
+    # ABA 2: ALTERAR CADASTRO (COM EDIÇÃO DE NOME, UF E CASCATA)
+    # =================================================================
     with ts_edit:
         if not df_visualizacao_srv.empty:
             sel_srv = st.selectbox("Selecione o Servidor para alterar:", df_visualizacao_srv["Servidor"].tolist(), key="srv_sel_edit")
             dados_atuais_srv = df_visualizacao_srv[df_visualizacao_srv["Servidor"] == sel_srv].iloc[0]
             id_srv_edit = int(float(dados_atuais_srv["ID_SERV"]))
             
-            # --- EXPANSÃO DOS CAMPOS DE EDIÇÃO ---
-            col_ed1, col_ed2 = st.columns(2)
-            with col_ed1:
-                novo_email = st.text_input("Alterar E-mail:", value=str(dados_atuais_srv.get("E_mail", "")))
-                nova_funcao = st.text_input("Alterar Função Interna / Cargo:", value=str(dados_atuais_srv.get("Funcao", "")))
-            
-            with col_ed2:
-                # Descobre a UF do servidor selecionado para filtrar as lotações disponíveis
-                uf_atual_srv = dados_atuais_srv.get("UF_Servidor", uf_usuario)
-                unidades_disponiveis_edit = df_lotacoes[df_lotacoes["UF"] == uf_atual_srv]["Unidade"].tolist()
+            # --- LINHA 1: IDENTIFICAÇÃO (NOME E E-MAIL) ---
+            col_id1, col_id2 = st.columns(2)
+            with col_id1:
+                novo_nome_srv = st.text_input("Nome Completo do Servidor:", value=str(dados_atuais_srv.get("Servidor", "")), key="srv_edit_nome").strip()
+            with col_id2:
+                novo_email = st.text_input("E-mail Institucional (@ibama.gov.br):", value=str(dados_atuais_srv.get("E_mail", "")), key="srv_edit_email").strip()
+
+            # --- LINHA 2: LOCALIZAÇÃO & UNIDADE (COM TRAVA DE PERFIL) ---
+            col_loc1, col_loc2 = st.columns(2)
+            with col_loc1:
+                uf_cadastrada = str(dados_atuais_srv.get("UF_Servidor", uf_usuario)).strip()
+                
+                # 🔒 TRAVA: Apenas Administrador pode transferir o servidor para outra UF
+                if perfil_usuario == "Administrador":
+                    try:
+                        idx_uf_srv = LISTA_UFS_COMPLETA.index(uf_cadastrada)
+                    except ValueError:
+                        idx_uf_srv = 0
+                    nova_uf_srv = st.selectbox("UF/Órgão de Lotação:", LISTA_UFS_COMPLETA, index=idx_uf_srv, key="srv_edit_uf")
+                else:
+                    st.text_input("UF de Lotação (Travada para Editor Regional):", value=uf_cadastrada, disabled=True, key="srv_edit_uf_rep")
+                    nova_uf_srv = uf_cadastrada
+
+            with col_loc2:
+                # Carrega as unidades disponíveis com base na UF selecionada
+                unidades_disponiveis_edit = df_lotacoes[df_lotacoes["UF"] == nova_uf_srv]["Unidade"].tolist()
                 if not unidades_disponiveis_edit:
                     unidades_disponiveis_edit = ["Sede Superintendência"]
                 
-                # Define o índice padrão da lotação atual
                 lotacao_atual_str = str(dados_atuais_srv.get("Lotacao", "")).strip()
-                try: idx_lot = unidades_disponiveis_edit.index(lotacao_atual_str)
-                except ValueError: idx_lot = 0
+                try:
+                    idx_lot = unidades_disponiveis_edit.index(lotacao_atual_str)
+                except ValueError:
+                    idx_lot = 0
                 
-                nova_lot_srv = st.selectbox("Alterar Unidade de Lotação Relacionada:", unidades_disponiveis_edit, index=idx_lot)
-                novo_token = st.text_input("Alterar Token/Senha de Acesso:", value=str(dados_atuais_srv.get("Token", "")), type="password")
+                nova_lot_srv = st.selectbox("Unidade de Lotação Relacionada:", unidades_disponiveis_edit, index=idx_lot, key=f"srv_edit_lot_{nova_uf_srv}")
 
-            # Colunas para os Checkboxes/Dropdowns de Atributos Técnicos
+            # --- LINHA 3: CARGO E CREDENCIAIS ---
+            col_cr1, col_cr2 = st.columns(2)
+            with col_cr1:
+                nova_funcao = st.text_input("Função / Cargo Interno:", value=str(dados_atuais_srv.get("Funcao", "")), key="srv_edit_funcao")
+            with col_cr2:
+                novo_token = st.text_input("Token/Senha de Acesso:", value=str(dados_atuais_srv.get("Token", "")), type="password", key="srv_edit_token")
+
+            # --- LINHA 4: ATRIBUTOS OPERACIONAIS ---
             col_eq_ed1, col_eq_ed2, col_eq_ed3 = st.columns(3)
             
             def obter_index_sim_nao(valores_df, chave):
@@ -1724,37 +1750,98 @@ elif modo == "👥 Gerenciar Equipes":
             with col_eq_ed3:
                 n_eq_aeac = st.selectbox("Possui AEAC?", ["Sim", "Não"], index=obter_index_sim_nao(dados_atuais_srv, "AEAC"), key="srv_edit_aeac")
             
-            # Ajuste de Perfil de Acesso baseado nas regras de privilégio
+            # --- LINHA 5: PERFIL DE ACESSO ---
             perfil_atual_string = str(dados_atuais_srv.get("Perfil", "Visualização")).strip()
-            try: index_padrao = LISTA_PERFIS.index(perfil_atual_string)
-            except ValueError: index_padrao = 0
+            if perfil_usuario == "Administrador":
+                try:
+                    index_padrao = LISTA_PERFIS.index(perfil_atual_string)
+                except ValueError:
+                    index_padrao = 0
+                n_perf = st.selectbox("Perfil de Acesso no Sistema:", LISTA_PERFIS, index=index_padrao, key="srv_edit_perfil")
+            else:
+                perfis_editor = ["Visualização", "Editor Regional"]
+                index_padrao = 1 if perfil_atual_string == "Editor Regional" else 0
+                n_perf = st.selectbox("Perfil de Acesso no Sistema:", perfis_editor, index=index_padrao, key="srv_edit_perfil")
+
+            st.markdown("<br>", unsafe_allow_html=True)
             
-            n_perf = st.selectbox("Alterar Perfil de Acesso:", LISTA_PERFIS, index=index_padrao) if perfil_usuario == "Administrador" else st.selectbox("Alterar Perfil de Acesso:", ["Visualização", "Editor Regional"], index=1 if index_padrao == 1 else 0)
-            
-            # --- DISPARO DE ATUALIZAÇÃO ---
-            if st.button("Salvar Modificações"):
-                # O payload agora reconstrói a linha completa para o Power Automate atualizar todas as células correspondentes
-                payload_editar_srv = {
-                    "Acao": "Editar", 
-                    "ID_SERV": id_srv_edit, 
-                    "Servidor": sel_srv, 
-                    "UF_Servidor": uf_atual_srv,
-                    "Lotacao": nova_lot_srv,
-                    "Equipe_Emergencias": n_eq_emerg,
-                    "Fiscal": n_eq_fiscal,
-                    "AEAC": n_eq_aeac,
-                    "E_mail": novo_email, 
-                    "Funcao": nova_funcao, 
-                    "Perfil": n_perf,
-                    "Token": novo_token
-                }
-                
-                with st.spinner("Atualizando cadastro completo da equipe no SharePoint..."):
-                    executar_api_equipes(payload_editar_srv)
-                    time.sleep(2)
+            # --- DISPARO DE ATUALIZAÇÃO COM CASCATA (PARALELO) ---
+            from concurrent.futures import ThreadPoolExecutor
+
+            if st.button("💾 Salvar Modificações e Sincronizar Base Principal", type="primary", key="btn_salvar_srv_cascata"):
+                if not novo_nome_srv:
+                    st.error("⚠️ O Nome do Servidor não pode ficar vazio.")
+                else:
+                    # 1. Payload para a tabela auxiliar de Equipes
+                    payload_editar_srv = {
+                        "Acao": "Editar", 
+                        "ID_SERV": id_srv_edit, 
+                        "Servidor": novo_nome_srv, 
+                        "UF_Servidor": nova_uf_srv, 
+                        "Lotacao": nova_lot_srv, 
+                        "Equipe_Emergencias": n_eq_emerg, 
+                        "Fiscal": n_eq_fiscal, 
+                        "AEAC": n_eq_aeac, 
+                        "E_mail": novo_email, 
+                        "Funcao": nova_funcao, 
+                        "Perfil": n_perf, 
+                        "Token": novo_token
+                    }
+                    
+                    with st.spinner(f"1/2 Atualizando cadastro de '{novo_nome_srv}' na tabela de equipes..."):
+                        executar_api_equipes(payload_editar_srv)
+
+                    # 2. Busca as atividades vinculadas pelo NOME ANTERIOR (sel_srv)
+                    linhas_servidor_macro = df_atual[df_atual["Servidor"].astype(str).str.strip() == str(sel_srv).strip()]
+                    qtd_vinculadas = len(linhas_servidor_macro)
+                    sucessos_cascata = 0
+
+                    if qtd_vinculadas > 0:
+                        with st.spinner(f"2/2 Atualizando {qtd_vinculadas} registro(s) vinculados na Planilha Principal..."):
+                            payloads_cascata = []
+                            for _, row_orig in linhas_servidor_macro.iterrows():
+                                p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                                p_item["Acao"] = "Editar"
+                                p_item["Id"] = str(row_orig["Id"])
+                                
+                                # 🚀 Aplica o novo nome, nova UF e nova lotação em todas as linhas
+                                p_item["Servidor"] = str(novo_nome_srv)
+                                p_item["UF_Servidor"] = str(nova_uf_srv)
+                                p_item["Lotação"] = str(nova_lot_srv)
+                                p_item["Faz parte da Equipe de Emergências"] = str(n_eq_emerg)
+                                
+                                # Sanitização
+                                payload_sanit = {
+                                    k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) 
+                                    for k, v in p_item.items()
+                                }
+                                payloads_cascata.append(payload_sanit)
+
+                            # Disparo concorrente
+                            def enviar_req(p):
+                                try:
+                                    r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
+                                    return 1 if r.status_code in [200, 202] else 0
+                                except:
+                                    return 0
+
+                            with ThreadPoolExecutor(max_workers=10) as executor:
+                                resultados = list(executor.map(enviar_req, payloads_cascata))
+                                sucessos_cascata = sum(resultados)
+
+                    # 3. Limpeza de cache e reload
+                    time.sleep(2.0)
                     st.cache_data.clear()
-                st.success("Cadastro completo atualizado com sucesso no Excel!")
-                st.rerun()
+                    if "df" in st.session_state:
+                        del st.session_state.df
+
+                    if qtd_vinculadas > 0:
+                        st.success(f"🎉 Sucesso! Cadastro atualizado e **{sucessos_cascata}/{qtd_vinculadas}** atividades na Planilha Principal foram migradas para o novo cadastro.")
+                    else:
+                        st.success(f"🎉 Sucesso! Cadastro de **{novo_nome_srv}** atualizado com sucesso.")
+                    
+                    time.sleep(1.5)
+                    st.rerun()
 
     with ts_del:
         if not df_visualizacao_srv.empty:
