@@ -368,49 +368,115 @@ if modo == "📊 Visualizar Base":
 
         df_trabalho = df_atual.copy()
         
-        # Garante a existência das colunas mesmo se vierem vazias do SharePoint/Power Automate
-        if "Data de Início" not in df_trabalho.columns:
-            df_trabalho["Data de Início"] = ""
-        if "Data de Término" not in df_trabalho.columns:
-            df_trabalho["Data de Término"] = ""
+        # Garante a existência das colunas
+        for col_nec in ["Data de Início", "Data de Término", "Lotação", "Andamento", "Importância da Atividade", "Tema da Atividade", "Objetivo da Atividade", "Tipo de Atividade"]:
+            if col_nec not in df_trabalho.columns:
+                df_trabalho[col_nec] = ""
 
         df_trabalho["Data_Inicio_Datetime"] = df_trabalho["Data de Início"].apply(limpar_e_converter_data)
         df_trabalho["Data_Termino_Datetime"] = df_trabalho["Data de Término"].apply(limpar_e_converter_data)
 
-        data_min_absoluta = df_trabalho["Data_Inicio_Datetime"].min()
-        data_max_absoluta = df_trabalho["Data_Inicio_Datetime"].max()
-        
-        if pd.isna(data_min_absoluta) or pd.isna(data_max_absoluta):
-            data_min_slider, data_max_slider = date(2025, 1, 1), date(2026, 12, 31)
-        else:
-            data_min_slider = (data_min_absoluta - pd.Timedelta(days=30)).to_pydatetime().date()
-            data_max_slider = (data_max_absoluta + pd.Timedelta(days=30)).to_pydatetime().date()
-
-        col_ano, col_uf, col_nivel = st.columns(3)
+        # =================================================================
+        # GRADE DE FILTROS CORPORATIVOS
+        # =================================================================
         df_filtros = df_trabalho.copy()
-        with col_ano: ano_sel = st.selectbox("📅 Filtrar por Ano:", ["Todos"] + sorted(df_filtros["Ano da Ação"].dropna().astype(str).unique().tolist()))
-        if ano_sel != "Todos": df_filtros = df_filtros[df_filtros["Ano da Ação"].astype(str) == ano_sel]
-        with col_uf: uf_sel = st.selectbox("📍 Filtrar por UF:", ["Todas"] + sorted(df_filtros["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist()))
-        if uf_sel != "Todas": df_filtros = df_filtros[df_filtros["UF_Acao_PNAPA"].astype(str) == uf_sel]
-        with col_nivel: nivel_sel = st.selectbox("🎚️ Filtrar por Nível:", ["Todos"] + sorted(df_filtros["Nível"].dropna().astype(str).unique().tolist()))
-        if nivel_sel != "Todos": df_filtros = df_filtros[df_filtros["Nível"].astype(str) == nivel_sel]
-
-        col_servidor, col_data = st.columns([1, 2])
-        with col_servidor: servidor_sel = st.selectbox("👤 Filtrar por Servidor:", ["Todos"] + sorted(df_filtros["Servidor"].dropna().astype(str).unique().tolist()))
-        with col_data:
-            intervalo_datas = st.slider("⏳ Período (Data de Início):", min_value=data_min_slider, max_value=data_max_slider, value=(data_min_slider, data_max_slider), format="DD/MM/YYYY")
-
-        df_exibicao = df_trabalho.copy()
-        if ano_sel != "Todos": df_exibicao = df_exibicao[df_exibicao["Ano da Ação"].astype(str) == ano_sel]
-        if uf_sel != "Todas": df_exibicao = df_exibicao[df_exibicao["UF_Acao_PNAPA"].astype(str) == uf_sel]
-        if nivel_sel != "Todos": df_exibicao = df_exibicao[df_exibicao["Nível"].astype(str) == nivel_sel]
-        if servidor_sel != "Todos": df_exibicao = df_exibicao[df_exibicao["Servidor"].astype(str) == servidor_sel]
         
-        # --- FILTRAGEM SEGURA POR TIMESTAMP (Inclui registros com ou sem data) ---
+        # Linha 1: Filtros de Escopo e Localização
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+        with col_f1:
+            anos_disp = sorted([str(a).split('.')[0] for a in df_filtros["Ano da Ação"].dropna().unique() if str(a).strip() != ""], reverse=True)
+            ano_sel = st.selectbox("📅 Ano da Ação:", ["Todos"] + anos_disp, key="f_ano")
+        with col_f2:
+            ufs_disp = sorted([str(u).strip() for u in df_filtros["UF_Acao_PNAPA"].dropna().unique() if str(u).strip() != ""])
+            uf_sel = st.selectbox("📍 UF da Ação:", ["Todas"] + ufs_disp, key="f_uf")
+        with col_f3:
+            lot_disp = sorted([str(l).strip() for l in df_filtros["Lotação"].dropna().unique() if str(l).strip() != ""])
+            lotacao_sel = st.selectbox("🏢 Lotação:", ["Todas"] + lot_disp, key="f_lotacao")
+        with col_f4:
+            niv_disp = sorted([str(n).strip() for n in df_filtros["Nível"].dropna().unique() if str(n).strip() != ""])
+            nivel_sel = st.selectbox("🎚️ Nível:", ["Todos"] + niv_disp, key="f_nivel")
+
+        # Linha 2: Filtros de Gestão e Responsável
+        col_f5, col_f6, col_f7, col_f8 = st.columns(4)
+        with col_f5:
+            and_disp = sorted([str(a).strip() for a in df_filtros["Andamento"].dropna().unique() if str(a).strip() != ""])
+            andamento_sel = st.selectbox("🔄 Andamento:", ["Todos"] + and_disp, key="f_andamento")
+        with col_f6:
+            srv_disp = sorted([str(s).strip() for s in df_filtros["Servidor"].dropna().unique() if str(s).strip() != ""])
+            servidor_sel = st.selectbox("👤 Servidor:", ["Todos"] + srv_disp, key="f_servidor")
+        with col_f7:
+            imp_disp = sorted([str(i).strip() for i in df_filtros["Importância da Atividade"].dropna().unique() if str(i).strip() != ""])
+            importancia_sel = st.selectbox("⭐ Importância:", ["Todas"] + imp_disp, key="f_importancia")
+        with col_f8:
+            tema_disp = sorted([str(t).strip() for t in df_filtros["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
+            tema_sel = st.selectbox("🏷️ Tema:", ["Todos"] + tema_disp, key="f_tema")
+
+        # Linha 3: Filtros Temáticos e Filtro Deslizante Dinâmico
+        col_f9, col_f10, col_f11 = st.columns([1, 1, 2])
+        with col_f9:
+            obj_disp = sorted([str(o).strip() for o in df_filtros["Objetivo da Atividade"].dropna().unique() if str(o).strip() != ""])
+            objetivo_sel = st.selectbox("🎯 Objetivo:", ["Todos"] + obj_disp, key="f_objetivo")
+        with col_f10:
+            tipos_disp = sorted([str(tp).strip() for tp in df_filtros["Tipo de Atividade"].dropna().unique() if str(tp).strip() != ""])
+            tipo_sel = st.selectbox("📌 Tipo de Atividade:", ["Todos"] + tipos_disp, key="f_tipo")
+        
+        # 🚀 CÁLCULO DINÂMICO DOS LIMITES DO SLIDER POR ANO
+        if ano_sel != "Todos":
+            try:
+                ano_int = int(ano_sel)
+                data_min_slider = date(ano_int, 1, 1)
+                data_max_slider = date(ano_int, 12, 31)
+            except:
+                data_min_slider, data_max_slider = date(2026, 1, 1), date(2026, 12, 31)
+        else:
+            data_min_absoluta = df_trabalho["Data_Inicio_Datetime"].min()
+            data_max_absoluta = df_trabalho["Data_Inicio_Datetime"].max()
+            if pd.isna(data_min_absoluta) or pd.isna(data_max_absoluta):
+                data_min_slider, data_max_slider = date(2025, 1, 1), date(2026, 12, 31)
+            else:
+                data_min_slider = data_min_absoluta.to_pydatetime().date()
+                data_max_slider = data_max_absoluta.to_pydatetime().date()
+
+        with col_f11:
+            intervalo_datas = st.slider(
+                "⏳ Período (Data de Início):", 
+                min_value=data_min_slider, 
+                max_value=data_max_slider, 
+                value=(data_min_slider, data_max_slider), 
+                format="DD/MM/YYYY",
+                key=f"slider_data_filtro_{ano_sel}"
+            )
+
+        # =================================================================
+        # APLICAÇÃO DOS FILTROS NO DATAFRAME
+        # =================================================================
+        df_exibicao = df_trabalho.copy()
+        
+        if ano_sel != "Todos": 
+            df_exibicao = df_exibicao[df_exibicao["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_sel)]
+        if uf_sel != "Todas": 
+            df_exibicao = df_exibicao[df_exibicao["UF_Acao_PNAPA"].astype(str).str.strip() == str(uf_sel)]
+        if lotacao_sel != "Todas": 
+            df_exibicao = df_exibicao[df_exibicao["Lotação"].astype(str).str.strip() == str(lotacao_sel)]
+        if nivel_sel != "Todos": 
+            df_exibicao = df_exibicao[df_exibicao["Nível"].astype(str).str.strip() == str(nivel_sel)]
+        if andamento_sel != "Todos": 
+            df_exibicao = df_exibicao[df_exibicao["Andamento"].astype(str).str.strip() == str(andamento_sel)]
+        if servidor_sel != "Todos": 
+            df_exibicao = df_exibicao[df_exibicao["Servidor"].astype(str).str.strip() == str(servidor_sel)]
+        if importancia_sel != "Todas": 
+            df_exibicao = df_exibicao[df_exibicao["Importância da Atividade"].astype(str).str.strip() == str(importancia_sel)]
+        if tema_sel != "Todos": 
+            df_exibicao = df_exibicao[df_exibicao["Tema da Atividade"].astype(str).str.strip() == str(tema_sel)]
+        if objetivo_sel != "Todos": 
+            df_exibicao = df_exibicao[df_exibicao["Objetivo da Atividade"].astype(str).str.strip() == str(objetivo_sel)]
+        if tipo_sel != "Todos": 
+            df_exibicao = df_exibicao[df_exibicao["Tipo de Atividade"].astype(str).str.strip() == str(tipo_sel)]
+        
+        # Filtragem temporal inclusiva (registros no período ou sem data definida)
         ts_inicio = pd.to_datetime(intervalo_datas[0])
         ts_fim = pd.to_datetime(intervalo_datas[1]) + pd.Timedelta(hours=23, minutes=59, seconds=59)
 
-        # Filtra registros dentro do período OU que ainda não tenham data definida
         mascara_datas = (
             df_exibicao["Data_Inicio_Datetime"].isna() |
             (
@@ -418,7 +484,6 @@ if modo == "📊 Visualizar Base":
                 (df_exibicao["Data_Inicio_Datetime"] <= ts_fim)
             )
         )
-
         df_exibicao = df_exibicao[mascara_datas]
 
         df_exibicao["Data de Início"] = df_exibicao["Data_Inicio_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
