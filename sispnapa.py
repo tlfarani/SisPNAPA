@@ -653,7 +653,7 @@ if modo == "📊 Visualizar Base":
                         
                         val_ano = int(dados_aux_linha["Ano"])
                         val_num_acao = str(dados_aux_linha.get("Acao_Ano", dados_aux_linha["Num_Acao_PNAPA"]))
-                        val_nome_acao = str(dados_aux_linha["Nome_Acao_Completo"])
+                        val_nome_acao = str(dados_aux_linha.get("Nome_Acao_Apelido", dados_aux_linha["Nome_Acao_Completo"]))
                         val_indicador = str(dados_aux_linha["Indicador"])
                         val_importancia_raw = str(dados_aux_linha.get("Importância", "Ordinária"))
                         importancia = "Alta" if val_importancia_raw == "Estratégica" else ("Baixa" if val_importancia_raw == "Ordinária" else "Média")
@@ -1100,7 +1100,7 @@ elif modo == "➕ Inserir Nova Linha":
             val_ano = int(dados_aux_linha["Ano"])
             # 🚀 AJUSTADO: Puxa o código completo com o ano (ex: CEN001-2026)
             val_num_acao = str(dados_aux_linha.get("Acao_Ano", dados_aux_linha["Num_Acao_PNAPA"]))
-            val_nome_acao = str(dados_aux_linha["Nome_Acao_Completo"])
+            val_nome_acao = str(dados_aux_linha.get("Nome_Acao_Apelido", dados_aux_linha["Nome_Acao_Completo"]))
             val_indicador = str(dados_aux_linha["Indicador"])
             
             st.success(f"✅ Dados Vinculados: Código {val_num_acao} | {val_nome_acao[:60]}...")
