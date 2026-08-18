@@ -190,9 +190,10 @@ def executar_api_equipes(dados_json):
         return []
     except: return []
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=15, show_spinner=False)
 def carregar_sugestoes():
     """Lê os registros da planilha Sugestoes.xlsx via Power Automate com sanitização."""
+    cols_padrao = ["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"]
     try:
         r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler"}, timeout=15)
         if r.status_code == 200:
@@ -202,37 +203,31 @@ def carregar_sugestoes():
             if isinstance(lista_itens, list) and len(lista_itens) > 0:
                 df = pd.DataFrame(lista_itens)
                 
-                # 1. Limpeza de cabeçalhos (remove espaços extras e caracteres ocultos)
+                # 1. Limpeza de cabeçalhos
                 df.columns = [str(c).replace('\xa0', ' ').strip() for c in df.columns]
                 
-                # 2. Mapeamento de tolerância (espaço vs underscore)
-                mapa_cols = {
-                    "Data Registro": "Data_Registro",
-                    "UF Autor": "UF_Autor",
-                    "Módulo": "Modulo",
-                    "Título": "Titulo",
-                    "Descrição": "Descricao",
-                    "Resposta Admin": "Resposta_Admin",
-                    "Resposta_do_Admin": "Resposta_Admin"
-                }
-                df = df.rename(columns=mapa_cols)
-                
-                # 3. Garante todas as colunas padrão
-                cols_padrao = ["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"]
+                # 2. Garante as colunas necessárias
                 for c in cols_padrao:
                     if c not in df.columns:
                         df[c] = ""
                 
-                # 4. Remove linhas em branco que o Excel possa ter retornado
-                df = df[df["Id"].astype(str).str.strip() != ""]
-                df = df[df["Id"].astype(str).str.lower() != "nan"]
+                # 3. Descarta linhas em branco/nulas do Excel
+                df = df[df["Id"].notna()]
+                df["Id_Str"] = df["Id"].astype(str).str.strip()
+                df = df[~df["Id_Str"].isin(["", "nan", "None"])]
+                df = df.drop(columns=["Id_Str"])
                 
-                # 5. Ordena pelas sugestões mais recentes primeiro
-                return df.sort_values(by="Id", ascending=False).reset_index(drop=True)
+                # 4. Converte Id para número e ordena pelo mais recente
+                df["Id_Num"] = pd.to_numeric(df["Id"], errors='coerce').fillna(0)
+                df = df.sort_values(by="Id_Num", ascending=False).drop(columns=["Id_Num"]).reset_index(drop=True)
+                
+                return df
+        else:
+            st.error(f"⚠️ O Power Automate recusou a leitura de sugestões (Status {r.status_code}): {r.text}")
     except Exception as e:
-        st.sidebar.warning(f"Aviso: Sincronização de sugestões ({e})")
+        st.error(f"⚠️ Erro de conexão ao carregar sugestões: {e}")
     
-    return pd.DataFrame(columns=["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"])
+    return pd.DataFrame(columns=cols_padrao)
 
 # Função de Leitura Blindada contra Chaves Ausentes do Power Automate
 def carregar_dados_da_nuvem():
