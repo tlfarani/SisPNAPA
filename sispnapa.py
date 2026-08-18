@@ -1937,8 +1937,8 @@ elif modo == "💡 Sugestões & Melhorias":
     
     # 1. Cartões de Métricas no Topo
     total_feedbacks = len(df_sugestoes)
-    abertos = len(df_sugestoes[df_sugestoes["Status"].isin(["Aberto", "Em Desenvolvimento"])]) if not df_sugestoes.empty else 0
-    concluidos = len(df_sugestoes[df_sugestoes["Status"] == "Concluído"]) if not df_sugestoes.empty else 0
+    abertos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip().isin(["Aberto", "Em Desenvolvimento"])]) if not df_sugestoes.empty else 0
+    concluidos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip() == "Concluído"]) if not df_sugestoes.empty else 0
     
     c_m1, c_m2, c_m3 = st.columns(3)
     c_m1.metric("📋 Total de Sugestões", f"{total_feedbacks}")
@@ -2010,13 +2010,15 @@ elif modo == "💡 Sugestões & Melhorias":
                     "Resposta_Admin": ""
                 }
                 
-                with st.spinner("Gravando no SharePoint..."):
+                with st.spinner("Gravando no SharePoint e indexando na planilha..."):
                     try:
                         r = requests.post(URL_FLOW_SUGESTOES, json=payload_sugestao, timeout=20)
                         if r.status_code in [200, 202]:
+                            # 🚀 Tempo seguro para o Excel Online gravar a linha antes do reload
+                            time.sleep(2.5)
                             st.cache_data.clear()
-                            st.success("🎉 Sugestão registrada com sucesso! A equipe técnica já pode visualizá-la.")
-                            time.sleep(1.5)
+                            st.success("🎉 Sugestão registrada com sucesso! Ela já consta no quadro de acompanhamento.")
+                            time.sleep(1)
                             st.rerun()
                         else:
                             st.error(f"❌ O Power Automate rejeitou a solicitação (Status {r.status_code}).")
@@ -2027,10 +2029,16 @@ elif modo == "💡 Sugestões & Melhorias":
     # ABA 2: QUADRO GERAL & PAINEL DE GOVERNANÇA (ADMIN)
     # =================================================================
     with tab_quadro:
-        st.markdown("##### 📌 Acompanhamento Geral das Demandas")
+        c_q_tit, c_q_ref = st.columns([4, 1])
+        with c_q_tit:
+            st.markdown("##### 📌 Acompanhamento Geral das Demandas")
+        with c_q_ref:
+            if st.button("🔄 Atualizar Lista", key="btn_ref_sug_tab"):
+                st.cache_data.clear()
+                st.rerun()
         
         if df_sugestoes.empty:
-            st.info("ℹ️ Nenhuma sugestão cadastrada até o momento. Seja o primeiro a colaborar!")
+            st.info("ℹ️ Nenhuma sugestão carregada no momento. Caso tenha acabado de enviar, clique em '🔄 Atualizar Lista'.")
         else:
             # Filtros visuais da tabela
             c_f_st, c_f_pr = st.columns(2)
@@ -2041,9 +2049,9 @@ elif modo == "💡 Sugestões & Melhorias":
                 
             df_sug_exib = df_sugestoes.copy()
             if filtro_status != "Todos":
-                df_sug_exib = df_sug_exib[df_sug_exib["Status"] == filtro_status]
+                df_sug_exib = df_sug_exib[df_sug_exib["Status"].astype(str).str.strip() == filtro_status]
             if filtro_prio != "Todas":
-                df_sug_exib = df_sug_exib[df_sug_exib["Prioridade"] == filtro_prio]
+                df_sug_exib = df_sug_exib[df_sug_exib["Prioridade"].astype(str).str.strip() == filtro_prio]
                 
             cols_exib = [c for c in ["Id", "Data_Registro", "Prioridade", "Status", "Modulo", "Titulo", "Descricao", "Autor", "Resposta_Admin"] if c in df_sug_exib.columns]
             st.dataframe(df_sug_exib[cols_exib], use_container_width=True, hide_index=True)
@@ -2064,11 +2072,11 @@ elif modo == "💡 Sugestões & Melhorias":
                     
                     c_adm_pr, c_adm_st = st.columns(2)
                     with c_adm_pr:
-                        prio_atual = str(sug_linha_alvo.get("Prioridade", "Média"))
+                        prio_atual = str(sug_linha_alvo.get("Prioridade", "Média")).strip()
                         idx_pr = ["Alta", "Média", "Baixa"].index(prio_atual) if prio_atual in ["Alta", "Média", "Baixa"] else 1
                         nova_prio_adm = st.selectbox("Definir Prioridade Oficial:", ["Alta", "Média", "Baixa"], index=idx_pr, key="adm_sug_prio")
                     with c_adm_st:
-                        status_atual = str(sug_linha_alvo.get("Status", "Aberto"))
+                        status_atual = str(sug_linha_alvo.get("Status", "Aberto")).strip()
                         lista_st_opcs = ["Aberto", "Em Desenvolvimento", "Concluído", "Descartado"]
                         idx_st = lista_st_opcs.index(status_atual) if status_atual in lista_st_opcs else 0
                         novo_status_adm = st.selectbox("Definir Status de Atendimento:", lista_st_opcs, index=idx_st, key="adm_sug_status")
@@ -2095,9 +2103,10 @@ elif modo == "💡 Sugestões & Melhorias":
                                 try:
                                     r = requests.post(URL_FLOW_SUGESTOES, json=payload_edt_sug, timeout=20)
                                     if r.status_code in [200, 202]:
+                                        time.sleep(2)
                                         st.cache_data.clear()
                                         st.success(f"✅ Sugestão ID {id_gestao_sel} atualizada!")
-                                        time.sleep(1.5)
+                                        time.sleep(1)
                                         st.rerun()
                                     else:
                                         st.error(f"❌ Erro ao atualizar (Status {r.status_code}).")
@@ -2111,9 +2120,10 @@ elif modo == "💡 Sugestões & Melhorias":
                                 try:
                                     r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Excluir", "Id": str(id_gestao_sel)}, timeout=20)
                                     if r.status_code in [200, 202]:
+                                        time.sleep(2)
                                         st.cache_data.clear()
                                         st.success("Sugestão excluída.")
-                                        time.sleep(1.2)
+                                        time.sleep(1)
                                         st.rerun()
                                 except Exception as e:
                                     st.error(f"Erro: {e}")
