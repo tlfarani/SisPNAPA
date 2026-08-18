@@ -279,7 +279,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =================================================================
-# IV. GESTÃO DE AUTENTICAÇÃO E PERFIS DE ACESSO (SSO CONTEXT)
+# IV. GESTÃO DE AUTENTICAÇÃO E PERFIS DE ACESSO (SSO & PERFIS)
 # =================================================================
 try:
     if hasattr(st, "user") and hasattr(st.user, "email"): email_logado = st.user.email
@@ -294,11 +294,11 @@ if not email_logado:
 
 try:
     dados_usuario = df_servidores[df_servidores["E_mail"] == email_logado].iloc[0]
-    uf_usuario = dados_usuario["UF_Servidor"]
-    perfil_usuario = dados_usuario["Perfil"]
+    uf_usuario = str(dados_usuario["UF_Servidor"]).strip()
+    perfil_usuario = str(dados_usuario["Perfil"]).strip()
     token_correto = str(dados_usuario["Token"]).strip()
 except:
-    uf_usuario = "Acesso Restrito"
+    uf_usuario = "SP"
     perfil_usuario = "Visualização"
     token_correto = None
 
@@ -307,39 +307,48 @@ if email_logado == EMAIL_ADMIN:
 
 acesso_liberado = False
 
-if perfil_usuario == "Administrador":
-    acesso_liberado = True
-    uf_usuario = "SP"
-    st.sidebar.success("👑 Modo Administrador Ativo")
+# Simulador de Perfis para Testes (Exclusivo para o Desenvolvedor / Admin)
+if email_logado == EMAIL_ADMIN:
+    st.sidebar.markdown("### 🧪 Simulador de Nível de Acesso")
+    perfil_teste = st.sidebar.selectbox("Testar Perfil como:", ["Administrador", "Editor Regional", "Visualização"], index=0)
+    perfil_usuario = perfil_teste
+    if perfil_usuario == "Editor Regional":
+        uf_usuario = st.sidebar.selectbox("Simular UF do Editor:", LISTA_UFS_COMPLETA, index=LISTA_UFS_COMPLETA.index("SP"))
+    acesso_liberado = True if perfil_usuario != "Visualização" else False
 else:
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🔐 Autenticação")
-    token_digitado = st.sidebar.text_input("Digite seu Token de Acesso:", type="password")
-    if token_digitado and token_digitado == token_correto:
+    if perfil_usuario == "Administrador":
         acesso_liberado = True
-        st.sidebar.success(f"🔓 {perfil_usuario} Liberado ({uf_usuario})")
-    elif token_digitado:
-        st.sidebar.error("❌ Token Incorreto.")
+        st.sidebar.success("👑 Administrador Conectado")
+    elif perfil_usuario == "Editor Regional":
+        token_digitado = st.sidebar.text_input("Token de Editor Regional:", type="password")
+        if token_digitado and token_digitado == token_correto:
+            acesso_liberado = True
+            st.sidebar.success(f"🔓 Editor Regional ({uf_usuario})")
+        elif token_digitado:
+            st.sidebar.error("❌ Token incorreto.")
+    else:
+        st.sidebar.info("👁️ Perfil: Somente Visualização")
 
-# Menu de navegação lateral baseado em níveis de acesso (Enxugado)
-opcoes_menu = ["📊 Visualizar Base"]
+# Montagem Dinâmica do Menu Lateral
+opcoes_menu = ["📈 Dashboards Executivos", "📊 Visualizar Base"]
+
+# Apenas perfis com permissão operacional acessam as abas de cadastro/gestão
 if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
-    opcoes_menu.extend(["➕ Inserir Nova Linha", "🏢 Gerenciar Unidades", "👥 Gerenciar Equipes", "🗂️ Gerenciar Ações PNAPA"])
+    opcoes_menu.extend([
+        "➕ Inserir Nova Linha", 
+        "🏢 Gerenciar Unidades", 
+        "👥 Gerenciar Equipes", 
+        "🗂️ Gerenciar Ações PNAPA"
+    ])
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
-modo = st.sidebar.radio("Operação:", opcoes_menu)
+modo = st.sidebar.radio("Navegação:", opcoes_menu)
 
-# --- INSERIR O BOTÃO DE REFRESH AQUI ---
 st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Atualizar Base (Refresh)"):
-    # 1. Limpa o cache das tabelas auxiliares (Unidades, Servidores, PNAPA)
+if st.sidebar.button("🔄 Atualizar Base (Refresh)", use_container_width=True):
     st.cache_data.clear()
-    
-    # 2. Apaga o dataframe da sessão para forçar a busca nova no SharePoint
-    if "df" in st.session_state:
+    if "df" in st.session_state: 
         del st.session_state.df
-        
-    # 3. Recarrega a página mantendo o usuário na mesma aba
     st.rerun()
     
 # Variáveis de controle de contexto para a Planilha Macro
@@ -349,6 +358,44 @@ id_atual = ""
 # =================================================================
 # V. NÚCLEO OPERACIONAL DAS TELAS
 # =================================================================
+
+# --- PÁGINA: DASHBOARDS EXECUTIVOS ---
+if modo == "📈 Dashboards Executivos":
+    st.markdown("<h2 style='color: #03170a;'>📈 Painel Executivo & Indicadores Estratégicos</h2>", unsafe_allow_html=True)
+    st.caption("Visão consolidada das operações do Plano Nacional de Ação de Emergências Ambientais (PNAPA).")
+    
+    if df_atual.empty:
+        st.info("Aguardando carregamento da base de dados do SharePoint.")
+    else:
+        # Cartões de Métricas Principais
+        total_atividades = len(df_atual[df_atual["Nível"] == "Atividade"])
+        total_acoes = len(df_atual[df_atual["Nível"] == "Ação"])
+        
+        rec_plan_total = pd.to_numeric(df_atual["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
+        rec_exec_total = pd.to_numeric(df_atual["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
+        
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        col_m1.metric("📌 Total de Atividades", f"{total_atividades}")
+        col_m2.metric("🎯 Total de Ações", f"{total_acoes}")
+        col_m3.metric("💰 Orçamento Planejado", f"R$ {rec_plan_total:,.2f}")
+        col_m4.metric("💳 Orçamento Executado", f"R$ {rec_exec_total:,.2f}")
+        
+        st.markdown("---")
+        
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            st.markdown("#### 🔄 Atividades por Andamento")
+            df_and = df_atual["Andamento"].value_counts().reset_index()
+            df_and.columns = ["Andamento", "Quantidade"]
+            st.bar_chart(df_and.set_index("Andamento"))
+            
+        with col_g2:
+            st.markdown("#### 📍 Atividades por UF da Ação")
+            df_uf_cont = df_atual[df_atual["UF_Acao_PNAPA"] != ""]["UF_Acao_PNAPA"].value_counts().reset_index()
+            df_uf_cont.columns = ["UF", "Quantidade"]
+            st.bar_chart(df_uf_cont.set_index("UF"))
+            
+        st.info("💡 **Espaço para Novos Gráficos:** Novos indicadores analíticos podem ser plugados diretamente nesta página.")
 
 # --- TELA 1: VISUALIZAÇÃO COM FILTROS INTERDEPENDENTES ---
 if modo == "📊 Visualizar Base":
@@ -540,22 +587,28 @@ if modo == "📊 Visualizar Base":
                 st.session_state["version_editor"] += 1  # Força o reset visual do data_editor
                 st.rerun()
 
-        # --- 📊 ORDENAÇÃO NUMÉRICA POR ID ---
+        # --- 📊 ORDENAÇÃO NUMÉRICA POR ID & CONTROLE DE ACESSO ---
         df_interativo = df_exibicao.copy()
         # Converte a própria coluna Id para número inteiro (evita a ordenação alfabética 1, 10, 100)
         df_interativo["Id"] = pd.to_numeric(df_interativo["Id"], errors='coerce').fillna(0).astype(int)
         df_interativo = df_interativo.sort_values(by="Id", ascending=False).reset_index(drop=True)
         
-        # Injeta os estados booleanos gravados na coluna visível do editor único
-        df_interativo.insert(
-            0, 
-            "Selecionar", 
-            [st.session_state["selecoes_macro"].get(str(row_id), False) for row_id in df_interativo["Id"]]
-        )
-        
-        colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
-        # Configura a coluna Id como NumberColumn sem casas decimais
-        colunas_travadas["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+        # 🔒 DEFINIÇÃO DE PERMISSÃO DE EDIÇÃO
+        pode_editar = (perfil_usuario in ["Administrador", "Editor Regional"]) and acesso_liberado
+
+        if pode_editar:
+            # Injeta a coluna booleana de seleção apenas para quem tem permissão de editar
+            df_interativo.insert(
+                0, 
+                "Selecionar", 
+                [st.session_state["selecoes_macro"].get(str(row_id), False) for row_id in df_interativo["Id"]]
+            )
+            colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns if col != "Selecionar"}
+            colunas_travadas["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+        else:
+            # Para perfil Visualização: nenhuma coluna é editável e não há caixas de seleção
+            colunas_travadas = {col: st.column_config.Column(disabled=True) for col in df_interativo.columns}
+            colunas_travadas["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
         
         # RENDERIZAÇÃO DA TABELA ÚNICA CORPORATIVA
         key_dinamica = f"editor_lote_pnapa_v{st.session_state['version_editor']}"
@@ -567,17 +620,26 @@ if modo == "📊 Visualizar Base":
             key=key_dinamica
         )
         
-        # --- 💾 CAPTURA AS ALTERAÇÕES SEM ENTRAR EM LOOP ---
-        if st.session_state[key_dinamica] and "edited_rows" in st.session_state[key_dinamica]:
+        # --- 💾 CAPTURA AS ALTERAÇÕES COM TRAVA REGIONAL ---
+        if pode_editar and st.session_state[key_dinamica] and "edited_rows" in st.session_state[key_dinamica]:
             linhas_editadas = st.session_state[key_dinamica]["edited_rows"]
             mudanca_detectada = False
             
             for idx_linha, alteracao in linhas_editadas.items():
                 if "Selecionar" in alteracao:
-                    id_real_linha = str(df_interativo.iloc[int(idx_linha)]["Id"])
-                    if st.session_state["selecoes_macro"].get(id_real_linha, False) != alteracao["Selecionar"]:
-                        st.session_state["selecoes_macro"][id_real_linha] = alteracao["Selecionar"]
+                    linha_alvo = df_interativo.iloc[int(idx_linha)]
+                    id_real_linha = str(linha_alvo["Id"])
+                    uf_linha = str(linha_alvo.get("UF_Acao_PNAPA", "")).strip()
+                    
+                    # 🔒 TRAVA DO EDITOR REGIONAL: impede selecionar linhas de outra UF
+                    if perfil_usuario == "Editor Regional" and uf_linha != uf_usuario and alteracao["Selecionar"] is True:
+                        st.error(f"⛔ Acesso Negado: Como Editor Regional ({uf_usuario}), você não tem permissão para editar o registro ID {id_real_linha} da UF: {uf_linha}.")
+                        st.session_state["selecoes_macro"][id_real_linha] = False
                         mudanca_detectada = True
+                    else:
+                        if st.session_state["selecoes_macro"].get(id_real_linha, False) != alteracao["Selecionar"]:
+                            st.session_state["selecoes_macro"][id_real_linha] = alteracao["Selecionar"]
+                            mudanca_detectada = True
             
             if mudanca_detectada:
                 st.rerun()
@@ -586,9 +648,13 @@ if modo == "📊 Visualizar Base":
         ids_marcados = [id_key for id_key, marcado in st.session_state["selecoes_macro"].items() if marcado]
         df_linhas_selecionadas = df_exibicao[df_exibicao["Id"].astype(str).isin(ids_marcados)]
         
-        # Se houver linhas retidas na memória, faz saltar o painel operacional de lote
-        # --- MOTOR DINÂMICO DE EDIÇÃO / EXCLUSÃO (INDIVIDUAL OU EM LOTE) ---
-        if not df_linhas_selecionadas.empty:
+        # --- EXIBIÇÃO DE MENSAGENS / PAINEL OPERACIONAL ---
+        if not pode_editar:
+            st.info("👁️ **Modo Somente Leitura:** Seu perfil possui acesso exclusivo para visualização dos registros.")
+        elif df_linhas_selecionadas.empty:
+            st.caption("💡 *Selecione uma ou mais caixas na coluna 'Selecionar' acima para editar ou excluir registros.*")
+        else:
+            # Se houver linhas retidas na memória e permissão ativa, abre o painel operacional
             ids_selecionados = df_linhas_selecionadas["Id"].astype(str).tolist()
             qtd_selecionada = len(ids_selecionados)
             id_referencia = ids_selecionados[0]
