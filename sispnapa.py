@@ -2086,25 +2086,32 @@ elif modo == "💡 Sugestões & Melhorias":
                     c_btn_salvar, c_btn_excluir = st.columns([3, 1])
                     with c_btn_salvar:
                         if st.button("💾 Gravar Atualização no SharePoint", type="primary", key="btn_salvar_gestao_sug"):
+                            # 🚀 Envio do payload completo para evitar erro 502 de campos nulos no Excel
                             payload_edt_sug = {
                                 "Acao": "Editar",
                                 "Id": str(id_gestao_sel),
+                                "Data_Registro": str(sug_linha_alvo.get("Data_Registro", "")),
+                                "Autor": str(sug_linha_alvo.get("Autor", "")),
+                                "UF_Autor": str(sug_linha_alvo.get("UF_Autor", "")),
+                                "Modulo": str(sug_linha_alvo.get("Modulo", "")),
+                                "Titulo": str(sug_linha_alvo.get("Titulo", "")),
+                                "Descricao": str(sug_linha_alvo.get("Descricao", "")),
                                 "Prioridade": str(nova_prio_adm),
                                 "Status": str(novo_status_adm),
                                 "Resposta_Admin": str(nova_resp_adm).strip()
                             }
                             
-                            with st.spinner("Atualizando sugestão..."):
+                            with st.spinner("Atualizando sugestão no SharePoint..."):
                                 try:
                                     r = requests.post(URL_FLOW_SUGESTOES, json=payload_edt_sug, timeout=20)
                                     if r.status_code in [200, 202]:
                                         time.sleep(2)
                                         st.cache_data.clear()
-                                        st.success(f"✅ Sugestão ID {id_gestao_sel} atualizada!")
+                                        st.success(f"✅ Sugestão ID {id_gestao_sel} atualizada com sucesso!")
                                         time.sleep(1)
                                         st.rerun()
                                     else:
-                                        st.error(f"❌ Erro ao atualizar (Status {r.status_code}).")
+                                        st.error(f"❌ Erro ao atualizar (Status {r.status_code}): {r.text}")
                                 except Exception as e:
                                     st.error(f"❌ Erro de conexão: {e}")
 
