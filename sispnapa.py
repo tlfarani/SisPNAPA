@@ -195,7 +195,7 @@ def carregar_sugestoes():
     """Lê os registros da planilha Sugestoes.xlsx via Power Automate com sanitização."""
     cols_padrao = ["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"]
     try:
-        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler"}, timeout=15)
+        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler", "Id": ""}, timeout=15)
         if r.status_code == 200:
             dados = r.json()
             lista_itens = dados.get("value", dados) if isinstance(dados, dict) else dados
