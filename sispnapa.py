@@ -1731,9 +1731,10 @@ elif modo == "👥 Gerenciar Equipes":
             
             n_perf = st.selectbox("Alterar Perfil de Acesso:", LISTA_PERFIS, index=index_padrao) if perfil_usuario == "Administrador" else st.selectbox("Alterar Perfil de Acesso:", ["Visualização", "Editor Regional"], index=1 if index_padrao == 1 else 0)
             
-            # --- DISPARO DE ATUALIZAÇÃO ---
-            if st.button("Salvar Modificações"):
-                # O payload agora reconstrói a linha completa para o Power Automate atualizar todas as células correspondentes
+            from concurrent.futures import ThreadPoolExecutor
+
+            # --- DISPARO DE ATUALIZAÇÃO COM CASCATA ULTRA-RÁPIDA (PARALELA) ---
+            if st.button("💾 Salvar Modificações e Sincronizar Base Principal", type="primary"):
                 payload_editar_srv = {
                     "Acao": "Editar", 
                     "ID_SERV": id_srv_edit, 
@@ -1749,11 +1750,55 @@ elif modo == "👥 Gerenciar Equipes":
                     "Token": novo_token
                 }
                 
-                with st.spinner("Atualizando cadastro completo da equipe no SharePoint..."):
+                with st.spinner(f"Sincronizando cadastro e atividades de {sel_srv}..."):
+                    # 1. Atualiza a tabela auxiliar de Equipes
                     executar_api_equipes(payload_editar_srv)
-                    time.sleep(2)
-                    st.cache_data.clear()
-                st.success("Cadastro completo atualizado com sucesso no Excel!")
+            
+                    # 2. Localiza as atividades do servidor na Planilha Principal
+                    linhas_servidor_macro = df_atual[df_atual["Servidor"].astype(str).str.strip() == str(sel_srv).strip()]
+                    qtd_vinculadas = len(linhas_servidor_macro)
+                    sucessos_cascata = 0
+            
+                    if qtd_vinculadas > 0:
+                        payloads_cascata = []
+                        for _, row_orig in linhas_servidor_macro.iterrows():
+                            p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                            p_item["Acao"] = "Editar"
+                            p_item["Id"] = str(row_orig["Id"])
+                            p_item["UF_Servidor"] = str(uf_atual_srv)
+                            p_item["Lotação"] = str(nova_lot_srv)
+                            p_item["Faz parte da Equipe de Emergências"] = str(n_eq_emerg)
+                            
+                            payload_sanit = {
+                                k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) 
+                                for k, v in p_item.items()
+                            }
+                            payloads_cascata.append(payload_sanit)
+            
+                        # ⚡ DISPARO PARALELO (Até 10 requisições simultâneas)
+                        def enviar_requisicao(p):
+                            try:
+                                r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
+                                return 1 if r.status_code in [200, 202] else 0
+                            except:
+                                return 0
+            
+                        with ThreadPoolExecutor(max_workers=10) as executor:
+                            resultados = list(executor.map(enviar_requisicao, payloads_cascata))
+                            sucessos_cascata = sum(resultados)
+            
+                # 3. Limpeza de cache e reload
+                time.sleep(2.0)
+                st.cache_data.clear()
+                if "df" in st.session_state:
+                    del st.session_state.df
+            
+                if qtd_vinculadas > 0:
+                    st.success(f"🎉 Sucesso! Cadastro de **{sel_srv}** e **{sucessos_cascata}/{qtd_vinculadas}** atividades na Planilha Principal sincronizados em tempo recorde.")
+                else:
+                    st.success(f"🎉 Sucesso! Cadastro de **{sel_srv}** atualizado.")
+                
+                time.sleep(1.5)
                 st.rerun()
 
     with ts_del:
