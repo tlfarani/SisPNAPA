@@ -1720,140 +1720,159 @@ elif modo == "👥 Gerenciar Equipes":
                 st.success(f"Acesso revogado com sucesso!")
                 st.rerun()
 
-# --- TELA 7: GERENCIAR AÇÕES PNAPA (TABELA AUXILIAR) ---
+# --- TELA AUXILIAR: GERENCIAR AÇÕES PNAPA ---
 elif modo == "🗂️ Gerenciar Ações PNAPA":
-    st.markdown("<h3>🗂️ Gerenciamento de Ações Cadastradas (Tabela Auxiliar via SharePoint)</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #03170a;'>🗂️ Catálogo Oficial de Ações PNAPA</h3>", unsafe_allow_html=True)
+    st.caption("Tabela auxiliar corporativa para vinculação e padronização das atividades operacionais.")
     
-    st.write("#### 📋 Ações Ativas no Catálogo")
+    # 🔒 VERIFICAÇÃO DE PERMISSÃO ADMINISTRATIVA
+    pode_administrar_catalogo = (perfil_usuario == "Administrador") and acesso_liberado
+
+    # 1. VISUALIZAÇÃO DA TABELA (DISPONÍVEL PARA TODOS OS PERFIS COM ACESSO À TELA)
     if df_pnapas.empty:
-        st.info("Nenhuma ação do PNAPA cadastrada na base de dados.")
+        st.warning("⚠️ O catálogo de Ações PNAPA está vazio no momento.")
     else:
-        # Oculta colunas de metadados da Microsoft se houverem
-        colunas_validas_pna = [col for col in ["ID_PNAPA", "Ano", "Num_Acao_PNAPA", "Acao_Ano", "Nome_Acao_Completo", "Nome_Acao_Apelido", "Importância", "Indicador"] if col in df_pnapas.columns]
-        df_limpo_pna = df_pnapas[colunas_validas_pna].sort_values(by=["Ano", "Num_Acao_PNAPA"], ascending=[False, True])
-        
-        def estilar_pna(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
-        st.dataframe(df_limpo_pna.reset_index(drop=True).style.apply(estilar_pna, axis=1), use_container_width=True)
-        
-    st.markdown("---")
-    tp_add, tp_edit, tp_del = st.tabs(["➕ Cadastrar Nova Ação", "📝 Alterar Cadastro", "🗑️ Remover Ação"])
+        st.dataframe(df_pnapas, use_container_width=True, hide_index=True)
+
+    # 2. BLOQUEIO PARA PERFIS NÃO ADMINISTRADORES
+    if not pode_administrar_catalogo:
+        st.info("👁️ **Modo Somente Leitura:** Como Editor Regional, você pode consultar o catálogo de ações. A criação, alteração e exclusão de Ações PNAPA são operações de governança restritas ao **Administrador**.")
     
-    with tp_add:
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            p_ano = st.number_input("Ano da Ação PNAPA:", min_value=2020, max_value=2100, value=2026, step=1, key="pna_ins_ano")
-            # --- MODIFICADO PARA TEXTO LIVRE ---
-            p_num = st.text_input("Número da Ação PNAPA:", placeholder="Ex: CEN001", key="pna_ins_num").strip()
-            p_importancia = st.selectbox("Importância da Ação:", ["Ordinária", "Estratégica"], key="pna_ins_imp")
-        with col_p2:
-            p_nome_completo = st.text_input("Nome da Ação Completo:", placeholder="Ex: Reuniões do Plano de Área do Porto de Santos", key="pna_ins_comp")
-            p_nome_apelido = st.text_input("Nome da Ação Apelido (Amigável):", placeholder="Ex: Reuniões Plano de Área Santos", key="pna_ins_apel")
-            p_indicador = st.text_input("Indicador Associado:", placeholder="Ex: Reuniões Atendidas", key="pna_ins_ind")
-            
-        # Concatenação flexível (ex: CEN001-2026)
-        p_acao_ano = f"{p_num}-{int(p_ano)}" if p_num else f"-[{int(p_ano)}]"
-        st.info(f"**Código Identificador Gerado Automaticamente (Acao_Ano):** {p_acao_ano}")
+    # 3. PAINEL OPERACIONAL DE CRUD (EXCLUSIVO PARA ADMINISTRADOR)
+    else:
+        st.markdown("---")
+        st.markdown("### ⚙️ Painel de Governança do Catálogo (Exclusivo Administrador)")
         
-        if st.button("Gravar Nova Ação"):
-            if not p_num or not p_nome_completo or not p_nome_apelido:
-                st.error("❌ Os campos de Número da Ação, Nome Completo e Nome Apelido são obrigatórios.")
-            else:
-                next_id_pnapa = int(pd.to_numeric(df_pnapas["ID_PNAPA"], errors='coerce').dropna().max() + 1) if not df_pnapas.empty else 1
-                payload_novo_pna = {
-                    "Acao": "Inserir",
-                    "ID_PNAPA": next_id_pnapa,
-                    "Ano": int(p_ano),
-                    "Num_Acao_PNAPA": str(p_num), # <- Enviado como String
-                    "Acao_Ano": p_acao_ano,
-                    "Nome_Acao_Completo": p_nome_completo,
-                    "Nome_Acao_Apelido": p_nome_apelido,
-                    "Importância": p_importancia,
-                    "Indicador": p_indicador
-                }
-                with st.spinner("Sincronizando com o SharePoint..."):
-                    executar_api_pnapas(payload_novo_pna)
-                    time.sleep(2)
-                    st.cache_data.clear()
-                st.success(f"🎉 Ação {p_acao_ano} inserida com sucesso!")
-                st.rerun()
-
-    with tp_edit:
-        if not df_pnapas.empty:
-            st.markdown("### 📝 Filtrar e Editar Ação")
-            
-            # --- NOVO FILTRO DE ANO PARA EDIÇÃO ---
-            anos_disponiveis_edit = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
-            ano_selecionado_edit = st.selectbox("1. Filtrar Ações pelo Ano:", anos_disponiveis_edit, key="pna_ed_filtro_ano")
-            
-            # Filtra o DataFrame de PNAPAs pelo ano escolhido antes de montar o dropdown de seleção
-            df_pnapas_filtrado_edit = df_pnapas[df_pnapas["Ano"].astype(int) == ano_selecionado_edit]
-            
-            if not df_pnapas_filtrado_edit.empty:
-                lista_selecao_pna = (df_pnapas_filtrado_edit["Acao_Ano"].astype(str) + " - " + df_pnapas_filtrado_edit["Nome_Acao_Apelido"].astype(str)).tolist()
-                sel_pnapa_str = st.selectbox("2. Selecione a Ação que deseja editar:", lista_selecao_pna, key="pna_edit_sel")
+        tab_cad_pna, tab_edt_pna, tab_exc_pna = st.tabs([
+            "➕ Cadastrar Nova Ação", 
+            "📝 Editar Ação Existente", 
+            "🗑️ Excluir Ação"
+        ])
+        
+        # --- ABA 1: CADASTRAR NOVA AÇÃO ---
+        with tab_cad_pna:
+            st.markdown("##### ➕ Nova Ação PNAPA")
+            c_ano, c_num = st.columns(2)
+            with c_ano:
+                novo_ano_pna = st.number_input("Ano da Ação", min_value=2020, max_value=2040, value=2026, step=1, key="cad_pna_ano")
+            with c_num:
+                novo_num_pna = st.text_input("Código/Número (Ex: CEN001)", value="", key="cad_pna_num").strip().upper()
                 
-                acao_ano_sel = sel_pnapa_str.split(" - ")[0]
-                dados_atuais_p = df_pnapas_filtrado_edit[df_pnapas_filtrado_edit["Acao_Ano"].astype(str) == acao_ano_sel].iloc[0]
-                id_pnapa_edit = int(float(dados_atuais_p["ID_PNAPA"]))
+            novo_nome_comp = st.text_input("Nome Completo da Ação (Descrição Oficial)", key="cad_pna_nome_comp").strip()
+            novo_nome_apelido = st.text_input("Nome Resumido / Apelido (Exibição Amigável)", key="cad_pna_nome_apelido").strip()
+            
+            c_ind, c_imp = st.columns(2)
+            with c_ind:
+                novo_indicador = st.text_input("Indicador Associado", key="cad_pna_ind").strip()
+            with c_imp:
+                nova_importancia = st.selectbox("Importância Padrão", ["Ordinária", "Estratégica"], key="cad_pna_imp")
                 
-                col_pe1, col_pe2 = st.columns(2)
-                with col_pe1:
-                    ed_nome_completo = st.text_input("Alterar Nome Completo:", value=str(dados_atuais_p.get("Nome_Acao_Completo", "")), key="pna_ed_comp")
-                    ed_nome_apelido = st.text_input("Alterar Nome Apelido:", value=str(dados_atuais_p.get("Nome_Acao_Apelido", "")), key="pna_ed_apel")
-                with col_pe2:
-                    idx_imp = 0 if str(dados_atuais_p.get("Importância", "")) == "Ordinária" else 1
-                    ed_importancia = st.selectbox("Alterar Importância:", ["Ordinária", "Estratégica"], index=idx_imp, key="pna_ed_imp")
-                    ed_indicador = st.text_input("Alterar Indicador:", value=str(dados_atuais_p.get("Indicador", "")), key="pna_ed_ind")
+            if st.button("🚀 Gravar Nova Ação no Catálogo", type="primary", key="btn_gravar_nova_acao_pna"):
+                if not novo_num_pna or not novo_nome_comp:
+                    st.error("⚠️ O Código e o Nome Completo da Ação são obrigatórios.")
+                else:
+                    chave_acao_ano = f"{novo_num_pna}-{novo_ano_pna}"
+                    id_novo_pna = int(pd.to_numeric(df_pnapas["Id"], errors='coerce').max() + 1) if not df_pnapas.empty else 1
                     
-                if st.button("Salvar Modificações da Ação"):
-                    payload_editar_pna = {
-                        "Acao": "Editar",
-                        "ID_PNAPA": id_pnapa_edit,
-                        "Ano": int(dados_atuais_p["Ano"]),
-                        "Num_Acao_PNAPA": str(dados_atuais_p["Num_Acao_PNAPA"]),
-                        "Acao_Ano": acao_ano_sel,
-                        "Nome_Acao_Completo": ed_nome_completo,
-                        "Nome_Acao_Apelido": ed_nome_apelido,
-                        "Importância": ed_importancia,
-                        "Indicador": ed_indicador
+                    payload_nova_acao = {
+                        "Tabela": "Acoes",
+                        "Acao": "Inserir",
+                        "Id": str(id_novo_pna),
+                        "Ano": int(novo_ano_pna),
+                        "Num_Acao_PNAPA": novo_num_pna,
+                        "Acao_Ano": chave_acao_ano,
+                        "Nome_Acao_Completo": novo_nome_comp,
+                        "Nome_Acao_Apelido": novo_nome_apelido if novo_nome_apelido else novo_nome_comp,
+                        "Indicador": novo_indicador,
+                        "Importância": nova_importancia
                     }
-                    with st.spinner("Atualizando dados no SharePoint..."):
-                        executar_api_pnapas(payload_editar_pna)
-                        time.sleep(2)
-                        st.cache_data.clear()
-                    st.success(f"🚀 Ação {acao_ano_sel} atualizada com sucesso!")
-                    st.rerun()
-            else:
-                st.warning(f"Nenhuma ação cadastrada para o ano de {ano_selecionado_edit}.")
-        else:
-            st.info("Nenhuma ação disponível para edição.")
+                    
+                    with st.spinner("Gravando no catálogo do SharePoint..."):
+                        try:
+                            r = requests.post(URL_FLOW_AUXILIARES, json=payload_nova_acao, timeout=20)
+                            if r.status_code in [200, 202]:
+                                st.cache_data.clear()
+                                st.success(f"✅ Ação **{chave_acao_ano}** cadastrada com sucesso!")
+                                time.sleep(1.5)
+                                st.rerun()
+                            else:
+                                st.error("❌ Falha na resposta do Power Automate.")
+                        except Exception as e:
+                            st.error(f"❌ Erro de conexão: {e}")
 
-    with tp_del:
-        if not df_pnapas.empty:
-            st.markdown("### 🗑️ Filtrar e Remover Ação")
-            
-            # --- NOVO FILTRO DE ANO PARA EXCLUSÃO ---
-            anos_disponiveis_del = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
-            ano_selecionado_del = st.selectbox("1. Filtrar Ações pelo Ano:", anos_disponiveis_del, key="pna_del_filtro_ano")
-            
-            # Filtra o DataFrame de PNAPAs pelo ano escolhido antes de montar o dropdown de remoção
-            df_pnapas_filtrado_del = df_pnapas[df_pnapas["Ano"].astype(int) == ano_selecionado_del]
-            
-            if not df_pnapas_filtrado_del.empty:
-                lista_del_pna = (df_pnapas_filtrado_del["Acao_Ano"].astype(str) + " - " + df_pnapas_filtrado_del["Nome_Acao_Apelido"].astype(str)).tolist()
-                del_pnapa_str = st.selectbox("2. Selecione a Ação para REMOVER:", lista_del_pna, key="pna_del_sel")
+        # --- ABA 2: EDITAR AÇÃO EXISTENTE ---
+        with tab_edt_pna:
+            st.markdown("##### 📝 Atualizar Dados de Ação PNAPA")
+            if not df_pnapas.empty:
+                lista_acoes_edt = (df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()
+                acao_edt_sel = st.selectbox("Selecione a Ação para Editar:", lista_acoes_edt, key="edt_pna_sel")
                 
-                acao_ano_del = del_pnapa_str.split(" - ")[0]
-                id_pnapa_del = int(float(df_pnapas_filtrado_del[df_pnapas_filtrado_del["Acao_Ano"].astype(str) == acao_ano_del]["ID_PNAPA"].iloc[0]))
+                cod_alvo_edt = acao_edt_sel.split(" - ")[0].strip()
+                dados_alvo_edt = df_pnapas[df_pnapas["Acao_Ano"].astype(str) == cod_alvo_edt].iloc[0]
                 
-                if st.button("❌ Eliminar Ação", disabled=not st.checkbox(f"Confirmo que desejo excluir permanentemente a ação {acao_ano_del}", key="chk_pna_del")):
-                    with st.spinner("Removendo do SharePoint..."):
-                        executar_api_pnapas({"Acao": "Excluir", "ID_PNAPA": id_pnapa_del})
-                        time.sleep(2)
-                        st.cache_data.clear()
-                    st.success(f"Ação {acao_ano_del} removida com sucesso!")
-                    st.rerun()
-            else:
-                st.warning(f"Nenhuma ação cadastrada para o ano de {ano_selecionado_del}.")
-        else:
-            st.info("Nenhuma ação disponível para exclusão.")
+                e_ano = st.number_input("Ano", min_value=2020, max_value=2040, value=int(dados_alvo_edt["Ano"]), step=1, key="edt_pna_ano")
+                e_num = st.text_input("Código (Num_Acao_PNAPA)", value=str(dados_alvo_edt["Num_Acao_PNAPA"]), key="edt_pna_num").strip().upper()
+                e_comp = st.text_input("Nome Completo", value=str(dados_alvo_edt.get("Nome_Acao_Completo", "")), key="edt_pna_comp")
+                e_apelido = st.text_input("Nome Resumido / Apelido", value=str(dados_alvo_edt.get("Nome_Acao_Apelido", "")), key="edt_pna_apelido")
+                e_ind = st.text_input("Indicador", value=str(dados_alvo_edt.get("Indicador", "")), key="edt_pna_ind")
+                
+                imp_atual = str(dados_alvo_edt.get("Importância", "Ordinária"))
+                idx_imp = 1 if imp_atual == "Estratégica" else 0
+                e_imp = st.selectbox("Importância", ["Ordinária", "Estratégica"], index=idx_imp, key="edt_pna_imp")
+                
+                if st.button("💾 Salvar Alterações na Ação", type="primary", key="btn_salvar_edt_pna"):
+                    payload_edt = {
+                        "Tabela": "Acoes",
+                        "Acao": "Editar",
+                        "Id": str(dados_alvo_edt["Id"]),
+                        "Ano": int(e_ano),
+                        "Num_Acao_PNAPA": e_num,
+                        "Acao_Ano": f"{e_num}-{e_ano}",
+                        "Nome_Acao_Completo": e_comp,
+                        "Nome_Acao_Apelido": e_apelido,
+                        "Indicador": e_ind,
+                        "Importância": e_imp
+                    }
+                    with st.spinner("Atualizando ação no SharePoint..."):
+                        try:
+                            r = requests.post(URL_FLOW_AUXILIARES, json=payload_edt, timeout=20)
+                            if r.status_code in [200, 202]:
+                                st.cache_data.clear()
+                                st.success("✅ Ação atualizada com sucesso!")
+                                time.sleep(1.5)
+                                st.rerun()
+                            else:
+                                st.error("❌ Falha na resposta do Power Automate.")
+                        except Exception as e:
+                            st.error(f"❌ Erro de conexão: {e}")
+
+        # --- ABA 3: EXCLUIR AÇÃO ---
+        with tab_exc_pna:
+            st.markdown("##### 🗑️ Exclusão de Ação PNAPA")
+            if not df_pnapas.empty:
+                lista_acoes_del = (df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()
+                acao_del_sel = st.selectbox("Selecione a Ação para Excluir:", lista_acoes_del, key="del_pna_sel")
+                
+                cod_alvo_del = acao_del_sel.split(" - ")[0].strip()
+                dados_alvo_del = df_pnapas[df_pnapas["Acao_Ano"].astype(str) == cod_alvo_del].iloc[0]
+                
+                st.warning(f"⚠️ **Atenção:** A exclusão da ação **{cod_alvo_del}** removerá este item do catálogo auxiliar de vinculação.")
+                
+                if st.button("🔥 Confirmar Exclusão Permanente da Ação", type="primary", key="btn_confirmar_del_pna"):
+                    payload_del_pna = {
+                        "Tabela": "Acoes",
+                        "Acao": "Excluir",
+                        "Id": str(dados_alvo_del["Id"])
+                    }
+                    with st.spinner("Removendo ação do catálogo..."):
+                        try:
+                            r = requests.post(URL_FLOW_AUXILIARES, json=payload_del_pna, timeout=20)
+                            if r.status_code in [200, 202]:
+                                st.cache_data.clear()
+                                st.success(f"💥 Ação {cod_alvo_del} removida com sucesso!")
+                                time.sleep(1.5)
+                                st.rerun()
+                            else:
+                                st.error("❌ Falha ao excluir no SharePoint.")
+                        except Exception as e:
+                            st.error(f"❌ Erro de conexão: {e}")
