@@ -587,7 +587,7 @@ if modo == "📊 Visualizar Base":
             st.markdown(f"### 🛠️ Central de Operações Dinâmicas ({qtd_selecionada} item(ns) selecionado(s))")
             st.caption(f"IDs detectados: {', '.join(ids_selecionados)}")
             
-            # Botão de Exclusão unificado
+            # Botão de Exclusão unificado no topo
             with st.popover("🗑️ Remover Registro(s) Selecionado(s)", use_container_width=True):
                 st.markdown(f"<p style='color:#03170a;'>⚠️ <b>CRÍTICO:</b> Deseja apagar de forma definitiva o(s) registro(s) de ID: <b>{', '.join(ids_selecionados)}</b> no SharePoint?</p>", unsafe_allow_html=True)
                 if st.button("Sim, confirmar destruição permanente!", type="primary", key="btn_del_lote_tabela_final"):
@@ -622,7 +622,7 @@ if modo == "📊 Visualizar Base":
             # =================================================================
             if qtd_selecionada == 1:
                 registro_alvo = df_linhas_selecionadas.iloc[0]
-                st.markdown(f"#### 📝 Edição do Registro (ID: **{id_referencia}**)")
+                st.markdown(f"#### 📝 Edição Individual do Registro (ID: **{id_referencia}**)")
                 
                 idx_nivel_padrao = 0 if str(registro_alvo.get("Nível", "")) == "Ação" else 1
                 nivel_selecionado = st.selectbox("O que deseja editar?", ["Ação", "Atividade"], index=idx_nivel_padrao, key=f"t1_ed_nivel_{id_referencia}")
@@ -630,7 +630,7 @@ if modo == "📊 Visualizar Base":
                 st.markdown("#### 🔗 Vinculação Automática com o Catálogo de Ações PNAPA")
                 if not df_pnapas.empty:
                     anos_aux_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
-                    ano_padrao_form = int(registro_alvo["Ano da Ação"]) if pd.notna(registro_alvo.get("Ano da Ação")) else anos_aux_disponiveis[0]
+                    ano_padrao_form = int(pd.to_numeric(registro_alvo.get("Ano da Ação"), errors='coerce')) if pd.notna(registro_alvo.get("Ano da Ação")) else anos_aux_disponiveis[0]
                     try: idx_ano_form = anos_aux_disponiveis.index(ano_padrao_form)
                     except ValueError: idx_ano_form = 0
                         
@@ -639,35 +639,35 @@ if modo == "📊 Visualizar Base":
                     
                     if not df_pnapas_ano.empty:
                         lista_opcoes_vinc = (df_pnapas_ano["Acao_Ano"].astype(str) + " - " + df_pnapas_ano["Nome_Acao_Apelido"].astype(str)).tolist()
-                        num_acao_gravada = str(registro_alvo.get("Número da Ação PNAPA", ""))
+                        num_acao_gravada = str(registro_alvo.get("Número da Ação PNAPA", "")).strip()
                         idx_pna_vinc = 0
                         for i, opc in enumerate(lista_opcoes_vinc):
-                            if opc.startswith(num_acao_gravada + "-"):
+                            if opc.startswith(num_acao_gravada + " - ") or opc.startswith(num_acao_gravada + "-") or opc.startswith(num_acao_gravada):
                                 idx_pna_vinc = i
                                 break
                         
                         opcao_vinc_sel = st.selectbox("Selecione a Ação PNAPA correspondente:", lista_opcoes_vinc, index=idx_pna_vinc, key=f"t1_ed_sel_pna_{id_referencia}")
                         
-                        acao_ano_detectado = opcao_vinc_sel.split(" - ")[0]
+                        acao_ano_detectado = opcao_vinc_sel.split(" - ")[0].strip()
                         dados_aux_linha = df_pnapas_ano[df_pnapas_ano["Acao_Ano"].astype(str) == acao_ano_detectado].iloc[0]
                         
                         val_ano = int(dados_aux_linha["Ano"])
-                        # 🚀 AJUSTADO: Puxa o código completo com o ano (ex: CEN001-2026)
                         val_num_acao = str(dados_aux_linha.get("Acao_Ano", dados_aux_linha["Num_Acao_PNAPA"]))
                         val_nome_acao = str(dados_aux_linha["Nome_Acao_Completo"])
                         val_indicador = str(dados_aux_linha["Indicador"])
+                        val_importancia_raw = str(dados_aux_linha.get("Importância", "Ordinária"))
+                        importancia = "Alta" if val_importancia_raw == "Estratégica" else ("Baixa" if val_importancia_raw == "Ordinária" else "Média")
                         
                         st.success(f"✅ Dados Vinculados: Código {val_num_acao} | {val_nome_acao[:60]}...")
                     else:
                         st.warning("⚠️ Nenhuma ação cadastrada para este ano no catálogo auxiliar.")
-                        val_ano, val_num_acao, val_nome_acao, val_indicador = None, "", "", ""
+                        val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Baixa"
                 else:
                     st.error("⚠️ O catálogo auxiliar de Ações PNAPA está vazio.")
-                    val_ano, val_num_acao, val_nome_acao, val_indicador = None, "", "", ""
+                    val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Baixa"
 
                 st.markdown("---")
                 
-                # Datas de fallback
                 dt_ini_cv = pd.to_datetime(registro_alvo.get("Data de Início"), errors='coerce')
                 val_dt_inicio = dt_ini_cv.date() if pd.notna(dt_ini_cv) else date.today()
                 dt_fim_cv = pd.to_datetime(registro_alvo.get("Data de Término"), errors='coerce')
@@ -675,9 +675,6 @@ if modo == "📊 Visualizar Base":
 
                 # --- SE FOR AÇÃO ---
                 if nivel_selecionado == "Ação":
-                    val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária")) if 'dados_aux_linha' in locals() else "Ordinária"
-                    importancia = "Alta" if val_importancia_automatica == "Estratégica" else ("Baixa" if val_importancia_automatica == "Ordinária" else "Média")
-
                     aba1, aba2, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "4. Cronograma & Custos", "5. Justificativas"])
                     
                     with aba1:
@@ -749,9 +746,6 @@ if modo == "📊 Visualizar Base":
                         resultado_indicador = st.text_input("Resultado do Indicador", value=str(registro_alvo.get("Resultado_Indicador", "")), key=f"t1_res_ind_{id_referencia}")
                         doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI)", value=str(registro_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_doc_{id_referencia}")
                         uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
-                        
-                        val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária")) if 'dados_aux_linha' in locals() else "Ordinária"
-                        importancia = "Alta" if val_importancia_automatica == "Estratégica" else ("Baixa" if val_importancia_automatica == "Ordinária" else "Média")
                         st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
                         
                         tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, index=LISTA_TEMAS.index(registro_alvo["Tema da Atividade"]) if registro_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_tema_atv_{id_referencia}")
@@ -862,13 +856,52 @@ if modo == "📊 Visualizar Base":
                 mesma_atividade_compartilhada = (len(acoes_unicas) == 1 and len(nomes_atv_unicos) == 1 and nomes_atv_unicos[0] != "")
 
                 # -------------------------------------------------------------
-                # CENÁRIO 2: MESMA AÇÃO E MESMA ATIVIDADE (TODOS OS CAMPOS EXCETO RH)
+                # CENÁRIO 2: MESMA AÇÃO E MESMA ATIVIDADE (INCLUI TROCA DE AÇÃO PNAPA)
                 # -------------------------------------------------------------
                 if mesma_atividade_compartilhada:
                     ref_lote = df_linhas_selecionadas.iloc[0]
-                    st.info(f"👥 **Edição em Lote de Atividade Compartilhada** ({qtd_selecionada} servidores selecionados). Os dados comuns serão atualizados e os Recursos Humanos de cada servidor serão preservados.")
+                    st.info(f"👥 **Edição em Lote de Atividade Compartilhada** ({qtd_selecionada} servidores selecionados). Você pode alterar a Ação PNAPA vinculada e os dados gerais. Os Recursos Humanos de cada servidor serão preservados.")
                     
-                    st.markdown(f"**Ação PNAPA:** {ref_lote.get('Número da Ação PNAPA', '')} - {ref_lote.get('Nome da Ação PNAPA', '')}")
+                    st.markdown("#### 🔗 Vinculação Automática com o Catálogo de Ações PNAPA")
+                    if not df_pnapas.empty:
+                        anos_aux_disp = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
+                        ano_padrao_lote = int(pd.to_numeric(ref_lote.get("Ano da Ação"), errors='coerce')) if pd.notna(ref_lote.get("Ano da Ação")) else anos_aux_disp[0]
+                        try: idx_ano_lote = anos_aux_disp.index(ano_padrao_lote)
+                        except ValueError: idx_ano_lote = 0
+                            
+                        ano_vinc_lt = st.selectbox("Selecione o Ano para filtrar as Ações:", anos_aux_disp, index=idx_ano_lote, key="lt_comp_ano_pna")
+                        df_pnapas_ano_lt = df_pnapas[df_pnapas["Ano"].astype(int) == ano_vinc_lt]
+                        
+                        if not df_pnapas_ano_lt.empty:
+                            lista_opcoes_vinc_lt = (df_pnapas_ano_lt["Acao_Ano"].astype(str) + " - " + df_pnapas_ano_lt["Nome_Acao_Apelido"].astype(str)).tolist()
+                            num_acao_gravada_lt = str(ref_lote.get("Número da Ação PNAPA", "")).strip()
+                            idx_pna_vinc_lt = 0
+                            for i, opc in enumerate(lista_opcoes_vinc_lt):
+                                if opc.startswith(num_acao_gravada_lt + " - ") or opc.startswith(num_acao_gravada_lt + "-") or opc.startswith(num_acao_gravada_lt):
+                                    idx_pna_vinc_lt = i
+                                    break
+                            
+                            opcao_vinc_lt_sel = st.selectbox("Selecione a Ação PNAPA correspondente:", lista_opcoes_vinc_lt, index=idx_pna_vinc_lt, key="lt_comp_sel_pna")
+                            
+                            acao_ano_detectado_lt = opcao_vinc_lt_sel.split(" - ")[0].strip()
+                            dados_aux_lt = df_pnapas_ano_lt[df_pnapas_ano_lt["Acao_Ano"].astype(str) == acao_ano_detectado_lt].iloc[0]
+                            
+                            val_ano_lt = int(dados_aux_lt["Ano"])
+                            val_num_acao_lt = str(dados_aux_lt.get("Acao_Ano", dados_aux_lt["Num_Acao_PNAPA"]))
+                            val_nome_acao_lt = str(dados_aux_lt["Nome_Acao_Completo"])
+                            val_ind_lt = str(dados_aux_lt["Indicador"])
+                            val_imp_raw_lt = str(dados_aux_lt.get("Importância", "Ordinária"))
+                            val_imp_lt = "Alta" if val_imp_raw_lt == "Estratégica" else ("Baixa" if val_imp_raw_lt == "Ordinária" else "Média")
+                            
+                            st.success(f"✅ Dados Vinculados: Código {val_num_acao_lt} | {val_nome_acao_lt[:60]}...")
+                        else:
+                            st.warning("⚠️ Nenhuma ação cadastrada para este ano no catálogo auxiliar.")
+                            val_ano_lt, val_num_acao_lt, val_nome_acao_lt, val_ind_lt, val_imp_lt = None, "", "", "", "Baixa"
+                    else:
+                        st.error("⚠️ O catálogo auxiliar de Ações PNAPA está vazio.")
+                        val_ano_lt, val_num_acao_lt, val_nome_acao_lt, val_ind_lt, val_imp_lt = None, "", "", "", "Baixa"
+
+                    st.markdown("---")
                     
                     dt_ini_cv = pd.to_datetime(ref_lote.get("Data de Início"), errors='coerce')
                     val_dt_inicio = dt_ini_cv.date() if pd.notna(dt_ini_cv) else date.today()
@@ -878,14 +911,21 @@ if modo == "📊 Visualizar Base":
                     aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Localização (Geral)", "4. Cronograma & Custos", "5. Observações"])
                     
                     with aba1:
+                        st.text_input("Ano da Ação (Automático)", value=str(val_ano_lt if val_ano_lt else ""), disabled=True)
+                        st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao_lt, disabled=True)
+                        st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao_lt, disabled=True)
+                        
                         ed_nome_atv = st.text_input("Nome da Atividade", value=str(ref_lote.get("Nome da Atividade", "")), key="lt_comp_nome")
                         lista_and = ["Prevista", "Concluída"]
                         idx_and = lista_and.index(ref_lote["Andamento"]) if ref_lote.get("Andamento") in lista_and else 0
                         ed_andamento = st.selectbox("Andamento", lista_and, index=idx_and, key="lt_comp_and")
 
                     with aba2:
+                        st.text_input("Indicador (Automático)", value=val_ind_lt, disabled=True)
                         ed_res_ind = st.text_input("Resultado do Indicador", value=str(ref_lote.get("Resultado_Indicador", "")), key="lt_comp_res_ind")
                         ed_doc = st.text_input("Doc_Probatorio_Exec (SEI)", value=str(ref_lote.get("Doc_Probatorio_Exec", "")), key="lt_comp_doc")
+                        st.text_input("Importância da Atividade (Herdada)", value=val_imp_lt, disabled=True)
+                        
                         ed_tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, index=LISTA_TEMAS.index(ref_lote["Tema da Atividade"]) if ref_lote.get("Tema da Atividade") in LISTA_TEMAS else 0, key="lt_comp_tema")
                         ed_obj = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(ref_lote["Objetivo da Atividade"]) if ref_lote.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key="lt_comp_obj")
                         ed_tipo = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(ref_lote["Tipo de Atividade"]) if ref_lote.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key="lt_comp_tipo")
@@ -945,6 +985,14 @@ if modo == "📊 Visualizar Base":
                             p_item["Acao"] = "Editar"
                             p_item["Id"] = str(row_orig["Id"])
                             
+                            # 🚀 ATUALIZAÇÃO DA AÇÃO PNAPA VINCULADA:
+                            p_item["Ano da Ação"] = int(val_ano_lt) if val_ano_lt else row_orig.get("Ano da Ação", 2026)
+                            p_item["Número da Ação PNAPA"] = str(val_num_acao_lt) if val_num_acao_lt else str(row_orig.get("Número da Ação PNAPA", ""))
+                            p_item["Nome da Ação PNAPA"] = str(val_nome_acao_lt) if val_nome_acao_lt else str(row_orig.get("Nome da Ação PNAPA", ""))
+                            p_item["Indicador"] = str(val_ind_lt) if val_ind_lt else str(row_orig.get("Indicador", ""))
+                            p_item["Importância da Atividade"] = str(val_imp_lt)
+                            
+                            # Demais campos da atividade
                             p_item["Nome da Atividade"] = str(ed_nome_atv).strip()
                             p_item["Andamento"] = str(ed_andamento)
                             p_item["Resultado_Indicador"] = str(ed_res_ind).strip()
