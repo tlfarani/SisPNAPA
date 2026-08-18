@@ -190,25 +190,47 @@ def executar_api_equipes(dados_json):
         return []
     except: return []
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def carregar_sugestoes():
-    """Lê os registros da planilha Sugestoes.xlsx via Power Automate."""
+    """Lê os registros da planilha Sugestoes.xlsx via Power Automate com sanitização."""
     try:
         r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler"}, timeout=15)
         if r.status_code == 200:
             dados = r.json()
-            # Trata se o retorno for lista pura ou se vier envelopado
             lista_itens = dados.get("value", dados) if isinstance(dados, dict) else dados
-            if lista_itens:
+            
+            if isinstance(lista_itens, list) and len(lista_itens) > 0:
                 df = pd.DataFrame(lista_itens)
-                # Garante todas as colunas esperadas
+                
+                # 1. Limpeza de cabeçalhos (remove espaços extras e caracteres ocultos)
+                df.columns = [str(c).replace('\xa0', ' ').strip() for c in df.columns]
+                
+                # 2. Mapeamento de tolerância (espaço vs underscore)
+                mapa_cols = {
+                    "Data Registro": "Data_Registro",
+                    "UF Autor": "UF_Autor",
+                    "Módulo": "Modulo",
+                    "Título": "Titulo",
+                    "Descrição": "Descricao",
+                    "Resposta Admin": "Resposta_Admin",
+                    "Resposta_do_Admin": "Resposta_Admin"
+                }
+                df = df.rename(columns=mapa_cols)
+                
+                # 3. Garante todas as colunas padrão
                 cols_padrao = ["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"]
                 for c in cols_padrao:
                     if c not in df.columns:
                         df[c] = ""
-                return df
+                
+                # 4. Remove linhas em branco que o Excel possa ter retornado
+                df = df[df["Id"].astype(str).str.strip() != ""]
+                df = df[df["Id"].astype(str).str.lower() != "nan"]
+                
+                # 5. Ordena pelas sugestões mais recentes primeiro
+                return df.sort_values(by="Id", ascending=False).reset_index(drop=True)
     except Exception as e:
-        st.sidebar.warning(f"Aviso: Não foi possível sincronizar sugestões ({e})")
+        st.sidebar.warning(f"Aviso: Sincronização de sugestões ({e})")
     
     return pd.DataFrame(columns=["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"])
 
@@ -354,11 +376,10 @@ else:
     else:
         st.sidebar.info("👁️ Perfil: Somente Visualização")
 
-# Montagem Dinâmica do Menu Lateral
+# Montagem Dinâmica do Menu Lateral (Garantindo Sugestões como a ÚLTIMA opção)
 opcoes_menu = [
     "📈 Dashboards Executivos", 
-    "📊 Visualizar Base", 
-    "💡 Sugestões & Melhorias"  # <- Liberado para todos os testadores
+    "📊 Visualizar Base"
 ]
 
 # Páginas com restrição operacional (Admin e Editor Regional)
@@ -369,6 +390,9 @@ if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
         "👥 Gerenciar Equipes", 
         "🗂️ Gerenciar Ações PNAPA"
     ])
+
+# 🚀 Sugestões sempre como o último item para todos os perfis:
+opcoes_menu.append("💡 Sugestões & Melhorias")
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
 modo = st.sidebar.radio("Navegação:", opcoes_menu)
