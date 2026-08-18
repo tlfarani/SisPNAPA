@@ -388,18 +388,23 @@ if modo == "📊 Visualizar Base":
             ano_sel = st.selectbox("📅 Ano da Ação:", ["Todos"] + anos_disp, key="f_ano")
             
         with col_f2:
-            # 🚀 NOVO FILTRO: Número da Ação (Acao_Ano) + Nome da Ação
-            df_temp_acoes = df_filtros[df_filtros["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_sel)] if ano_sel != "Todos" else df_filtros
-            
-            lista_acoes_opcoes = []
-            for _, r in df_temp_acoes.iterrows():
-                num_pna = str(r.get("Número da Ação PNAPA", "")).strip()
-                nome_pna = str(r.get("Nome da Ação PNAPA", "")).strip()
-                if num_pna and num_pna.lower() != "nan":
-                    rotulo = f"{num_pna} - {nome_pna}" if nome_pna else num_pna
-                    lista_acoes_opcoes.append(rotulo)
-                    
-            acoes_disp = sorted(list(set(lista_acoes_opcoes)))
+            # 🚀 GERAÇÃO PADRONIZADA A PARTIR DO CATÁLOGO OFICIAL (df_pnapas)
+            if not df_pnapas.empty:
+                df_pna_cat = df_pnapas.copy()
+                if ano_sel != "Todos":
+                    try:
+                        df_pna_cat = df_pna_cat[df_pna_cat["Ano"].astype(int) == int(ano_sel)]
+                    except:
+                        pass
+                
+                # Monta a lista limpa e canônica: 'Acao_Ano - Nome_Acao_Apelido'
+                acoes_disp = sorted(
+                    (df_pna_cat["Acao_Ano"].astype(str) + " - " + df_pna_cat["Nome_Acao_Apelido"].astype(str)).unique().tolist()
+                )
+            else:
+                # Fallback caso o catálogo auxiliar esteja inacessível
+                acoes_disp = sorted(df_filtros["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
+
             acao_pna_sel = st.selectbox("🗂️ Ação PNAPA (Acao_Ano):", ["Todas"] + acoes_disp, key=f"f_acao_pna_{ano_sel}")
 
         with col_f3:
@@ -469,8 +474,17 @@ if modo == "📊 Visualizar Base":
         # =================================================================
         df_exibicao = df_trabalho.copy()
         
-        if ano_sel != "Todos": 
-            df_exibicao = df_exibicao[df_exibicao["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_sel)]
+        # 🚀 FILTRAGEM COMPATÍVEL COM REGISTROS NOVOS E ANTIGOS
+        if acao_pna_sel != "Todas":
+            cod_acao_filtrar = acao_pna_sel.split(" - ")[0].strip()
+            cod_prefixo_puro = cod_acao_filtrar.split("-")[0].strip()
+            
+            # Filtra linhas gravadas como 'CEN001-2026' ou legadas como 'CEN001'
+            mascara_acao = (
+                (df_exibicao["Número da Ação PNAPA"].astype(str).str.strip() == cod_acao_filtrar) |
+                (df_exibicao["Número da Ação PNAPA"].astype(str).str.strip() == cod_prefixo_puro)
+            )
+            df_exibicao = df_exibicao[mascara_acao]
             
         # 🚀 APLICAÇÃO DO NOVO FILTRO DE AÇÃO PNAPA:
         if acao_pna_sel != "Todas":
