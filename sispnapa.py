@@ -190,27 +190,44 @@ def executar_api_equipes(dados_json):
         return []
     except: return []
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=15, show_spinner=False)
 def carregar_sugestoes():
-    """Lê os registros da planilha Sugestoes.xlsx via Power Automate."""
+    """Lê os registros da planilha Sugestoes.xlsx via Power Automate com sanitização."""
+    cols_padrao = ["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"]
     try:
-        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler"}, timeout=15)
+        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler", "Id": ""}, timeout=15)
         if r.status_code == 200:
             dados = r.json()
-            # Trata se o retorno for lista pura ou se vier envelopado
             lista_itens = dados.get("value", dados) if isinstance(dados, dict) else dados
-            if lista_itens:
+            
+            if isinstance(lista_itens, list) and len(lista_itens) > 0:
                 df = pd.DataFrame(lista_itens)
-                # Garante todas as colunas esperadas
-                cols_padrao = ["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"]
+                
+                # 1. Limpeza de cabeçalhos
+                df.columns = [str(c).replace('\xa0', ' ').strip() for c in df.columns]
+                
+                # 2. Garante as colunas necessárias
                 for c in cols_padrao:
                     if c not in df.columns:
                         df[c] = ""
+                
+                # 3. Descarta linhas em branco/nulas do Excel
+                df = df[df["Id"].notna()]
+                df["Id_Str"] = df["Id"].astype(str).str.strip()
+                df = df[~df["Id_Str"].isin(["", "nan", "None"])]
+                df = df.drop(columns=["Id_Str"])
+                
+                # 4. Converte Id para número e ordena pelo mais recente
+                df["Id_Num"] = pd.to_numeric(df["Id"], errors='coerce').fillna(0)
+                df = df.sort_values(by="Id_Num", ascending=False).drop(columns=["Id_Num"]).reset_index(drop=True)
+                
                 return df
+        else:
+            st.error(f"⚠️ O Power Automate recusou a leitura de sugestões (Status {r.status_code}): {r.text}")
     except Exception as e:
-        st.sidebar.warning(f"Aviso: Não foi possível sincronizar sugestões ({e})")
+        st.error(f"⚠️ Erro de conexão ao carregar sugestões: {e}")
     
-    return pd.DataFrame(columns=["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"])
+    return pd.DataFrame(columns=cols_padrao)
 
 # Função de Leitura Blindada contra Chaves Ausentes do Power Automate
 def carregar_dados_da_nuvem():
@@ -354,11 +371,10 @@ else:
     else:
         st.sidebar.info("👁️ Perfil: Somente Visualização")
 
-# Montagem Dinâmica do Menu Lateral
+# Montagem Dinâmica do Menu Lateral (Garantindo Sugestões como a ÚLTIMA opção)
 opcoes_menu = [
     "📈 Dashboards Executivos", 
-    "📊 Visualizar Base", 
-    "💡 Sugestões & Melhorias"  # <- Liberado para todos os testadores
+    "📊 Visualizar Base"
 ]
 
 # Páginas com restrição operacional (Admin e Editor Regional)
@@ -369,6 +385,9 @@ if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
         "👥 Gerenciar Equipes", 
         "🗂️ Gerenciar Ações PNAPA"
     ])
+
+# 🚀 Sugestões sempre como o último item para todos os perfis:
+opcoes_menu.append("💡 Sugestões & Melhorias")
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
 modo = st.sidebar.radio("Navegação:", opcoes_menu)
@@ -1913,8 +1932,8 @@ elif modo == "💡 Sugestões & Melhorias":
     
     # 1. Cartões de Métricas no Topo
     total_feedbacks = len(df_sugestoes)
-    abertos = len(df_sugestoes[df_sugestoes["Status"].isin(["Aberto", "Em Desenvolvimento"])]) if not df_sugestoes.empty else 0
-    concluidos = len(df_sugestoes[df_sugestoes["Status"] == "Concluído"]) if not df_sugestoes.empty else 0
+    abertos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip().isin(["Aberto", "Em Desenvolvimento"])]) if not df_sugestoes.empty else 0
+    concluidos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip() == "Concluído"]) if not df_sugestoes.empty else 0
     
     c_m1, c_m2, c_m3 = st.columns(3)
     c_m1.metric("📋 Total de Sugestões", f"{total_feedbacks}")
@@ -1986,13 +2005,15 @@ elif modo == "💡 Sugestões & Melhorias":
                     "Resposta_Admin": ""
                 }
                 
-                with st.spinner("Gravando no SharePoint..."):
+                with st.spinner("Gravando no SharePoint e indexando na planilha..."):
                     try:
                         r = requests.post(URL_FLOW_SUGESTOES, json=payload_sugestao, timeout=20)
                         if r.status_code in [200, 202]:
+                            # 🚀 Tempo seguro para o Excel Online gravar a linha antes do reload
+                            time.sleep(2.5)
                             st.cache_data.clear()
-                            st.success("🎉 Sugestão registrada com sucesso! A equipe técnica já pode visualizá-la.")
-                            time.sleep(1.5)
+                            st.success("🎉 Sugestão registrada com sucesso! Ela já consta no quadro de acompanhamento.")
+                            time.sleep(1)
                             st.rerun()
                         else:
                             st.error(f"❌ O Power Automate rejeitou a solicitação (Status {r.status_code}).")
@@ -2003,10 +2024,16 @@ elif modo == "💡 Sugestões & Melhorias":
     # ABA 2: QUADRO GERAL & PAINEL DE GOVERNANÇA (ADMIN)
     # =================================================================
     with tab_quadro:
-        st.markdown("##### 📌 Acompanhamento Geral das Demandas")
+        c_q_tit, c_q_ref = st.columns([4, 1])
+        with c_q_tit:
+            st.markdown("##### 📌 Acompanhamento Geral das Demandas")
+        with c_q_ref:
+            if st.button("🔄 Atualizar Lista", key="btn_ref_sug_tab"):
+                st.cache_data.clear()
+                st.rerun()
         
         if df_sugestoes.empty:
-            st.info("ℹ️ Nenhuma sugestão cadastrada até o momento. Seja o primeiro a colaborar!")
+            st.info("ℹ️ Nenhuma sugestão carregada no momento. Caso tenha acabado de enviar, clique em '🔄 Atualizar Lista'.")
         else:
             # Filtros visuais da tabela
             c_f_st, c_f_pr = st.columns(2)
@@ -2017,9 +2044,9 @@ elif modo == "💡 Sugestões & Melhorias":
                 
             df_sug_exib = df_sugestoes.copy()
             if filtro_status != "Todos":
-                df_sug_exib = df_sug_exib[df_sug_exib["Status"] == filtro_status]
+                df_sug_exib = df_sug_exib[df_sug_exib["Status"].astype(str).str.strip() == filtro_status]
             if filtro_prio != "Todas":
-                df_sug_exib = df_sug_exib[df_sug_exib["Prioridade"] == filtro_prio]
+                df_sug_exib = df_sug_exib[df_sug_exib["Prioridade"].astype(str).str.strip() == filtro_prio]
                 
             cols_exib = [c for c in ["Id", "Data_Registro", "Prioridade", "Status", "Modulo", "Titulo", "Descricao", "Autor", "Resposta_Admin"] if c in df_sug_exib.columns]
             st.dataframe(df_sug_exib[cols_exib], use_container_width=True, hide_index=True)
@@ -2040,11 +2067,11 @@ elif modo == "💡 Sugestões & Melhorias":
                     
                     c_adm_pr, c_adm_st = st.columns(2)
                     with c_adm_pr:
-                        prio_atual = str(sug_linha_alvo.get("Prioridade", "Média"))
+                        prio_atual = str(sug_linha_alvo.get("Prioridade", "Média")).strip()
                         idx_pr = ["Alta", "Média", "Baixa"].index(prio_atual) if prio_atual in ["Alta", "Média", "Baixa"] else 1
                         nova_prio_adm = st.selectbox("Definir Prioridade Oficial:", ["Alta", "Média", "Baixa"], index=idx_pr, key="adm_sug_prio")
                     with c_adm_st:
-                        status_atual = str(sug_linha_alvo.get("Status", "Aberto"))
+                        status_atual = str(sug_linha_alvo.get("Status", "Aberto")).strip()
                         lista_st_opcs = ["Aberto", "Em Desenvolvimento", "Concluído", "Descartado"]
                         idx_st = lista_st_opcs.index(status_atual) if status_atual in lista_st_opcs else 0
                         novo_status_adm = st.selectbox("Definir Status de Atendimento:", lista_st_opcs, index=idx_st, key="adm_sug_status")
@@ -2059,24 +2086,32 @@ elif modo == "💡 Sugestões & Melhorias":
                     c_btn_salvar, c_btn_excluir = st.columns([3, 1])
                     with c_btn_salvar:
                         if st.button("💾 Gravar Atualização no SharePoint", type="primary", key="btn_salvar_gestao_sug"):
+                            # 🚀 Envio do payload completo para evitar erro 502 de campos nulos no Excel
                             payload_edt_sug = {
                                 "Acao": "Editar",
                                 "Id": str(id_gestao_sel),
+                                "Data_Registro": str(sug_linha_alvo.get("Data_Registro", "")),
+                                "Autor": str(sug_linha_alvo.get("Autor", "")),
+                                "UF_Autor": str(sug_linha_alvo.get("UF_Autor", "")),
+                                "Modulo": str(sug_linha_alvo.get("Modulo", "")),
+                                "Titulo": str(sug_linha_alvo.get("Titulo", "")),
+                                "Descricao": str(sug_linha_alvo.get("Descricao", "")),
                                 "Prioridade": str(nova_prio_adm),
                                 "Status": str(novo_status_adm),
                                 "Resposta_Admin": str(nova_resp_adm).strip()
                             }
                             
-                            with st.spinner("Atualizando sugestão..."):
+                            with st.spinner("Atualizando sugestão no SharePoint..."):
                                 try:
                                     r = requests.post(URL_FLOW_SUGESTOES, json=payload_edt_sug, timeout=20)
                                     if r.status_code in [200, 202]:
+                                        time.sleep(2)
                                         st.cache_data.clear()
-                                        st.success(f"✅ Sugestão ID {id_gestao_sel} atualizada!")
-                                        time.sleep(1.5)
+                                        st.success(f"✅ Sugestão ID {id_gestao_sel} atualizada com sucesso!")
+                                        time.sleep(1)
                                         st.rerun()
                                     else:
-                                        st.error(f"❌ Erro ao atualizar (Status {r.status_code}).")
+                                        st.error(f"❌ Erro ao atualizar (Status {r.status_code}): {r.text}")
                                 except Exception as e:
                                     st.error(f"❌ Erro de conexão: {e}")
 
@@ -2087,9 +2122,10 @@ elif modo == "💡 Sugestões & Melhorias":
                                 try:
                                     r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Excluir", "Id": str(id_gestao_sel)}, timeout=20)
                                     if r.status_code in [200, 202]:
+                                        time.sleep(2)
                                         st.cache_data.clear()
                                         st.success("Sugestão excluída.")
-                                        time.sleep(1.2)
+                                        time.sleep(1)
                                         st.rerun()
                                 except Exception as e:
                                     st.error(f"Erro: {e}")
