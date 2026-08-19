@@ -273,6 +273,19 @@ def converter_para_data_segura(valor):
     dt = pd.to_datetime(val_str, errors='coerce', dayfirst=True)
     return dt.date() if pd.notna(dt) else date.today()
 
+def classificar_nivel_acao(dias):
+    try:
+        dias = float(dias)
+    except:
+        return "Indefinido"
+    
+    if dias <= 5:
+        return "Nível 1 (Leve)"
+    elif dias < 20:
+        return "Nível 2 (Médio)"
+    else:
+        return "Nível 3 (Intensivo)"
+
 # Carregamento das tabelas de apoio (Unidades, Servidores e Ações PNAPA)
 @st.cache_data(ttl=60)
 def carregar_bases_vias_power_automate():
@@ -504,6 +517,30 @@ if modo == "📈 Dashboards Executivos":
             df_uf_cont = df_atual[df_atual["UF_Acao_PNAPA"] != ""]["UF_Acao_PNAPA"].value_counts().reset_index()
             df_uf_cont.columns = ["UF", "Quantidade"]
             st.bar_chart(df_uf_cont.set_index("UF"))
+
+        # 🚀 Nova seção de Governança de Carga
+        st.markdown("---")
+        st.markdown("### ⚖️ Governança de Carga de Trabalho (Nível das Ações)")
+        
+        # Aplica a classificação
+        df_dashboard = df_atual[df_atual["Nível"] == "Ação"].copy()
+        df_dashboard["Nivel_Carga"] = df_dashboard["Dias_Gastos_Plan"].apply(classificar_nivel_acao)
+        
+        # Exibe resumo de carga por coordenador (Ponto Focal)
+        col_g3, col_g4 = st.columns(2)
+        with col_g3:
+            st.markdown("#### Carga por Coordenador")
+            df_carga = df_dashboard.groupby(["Servidor", "Nivel_Carga"]).size().unstack(fill_value=0)
+            st.dataframe(df_carga, use_container_width=True)
+        
+        with col_g4:
+            st.info("""
+            **Regra de Planejamento:**
+            - **Nível 1:** Até 5 dias (Esforço leve).
+            - **Nível 2:** 6 a 19 dias (Esforço médio).
+            - **Nível 3:** 20+ dias (Esforço intensivo).
+            *Recomendação: Coordenadores estaduais devem evitar acumular mais de 2 ações de Nível 3.*
+            """)
             
         st.info("💡 **Espaço para Novos Gráficos:** Novos indicadores analíticos podem ser plugados diretamente nesta página.")
 
@@ -1207,7 +1244,12 @@ elif modo == "➕ Inserir Nova Linha":
         with aba4:
             dt_inicio = st.date_input("Data de Início:", value=val_dt_inicio, format="DD/MM/YYYY", key="pna_dt_ini_acao")
             dt_termino = st.date_input("Data de Término:", value=val_dt_termino, format="DD/MM/YYYY", key="pna_dt_fim_acao")
+            
             dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
+            # 🚀 Feedback imediato do Nível
+            nivel_calculado = classificar_nivel_acao(dias_plan)
+            st.metric("Classificação de Esforço:", nivel_calculado)
+            
             origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, key="pna_orig_acao")
             
             st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
