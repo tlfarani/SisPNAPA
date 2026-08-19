@@ -109,6 +109,22 @@ def executar_envio_sharepoint(lista_payloads):
     else:
         st.error("❌ Falha crítica: O Power Automate rejeitou a carga em lote.")
 
+def obter_float_limpo(val):
+    """Converte qualquer formato (string vazia, None, NaN, formato BR com vírgula) para float de forma segura."""
+    if pd.isna(val) or val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    val_str = str(val).strip().replace("R$", "").replace(" ", "")
+    if val_str == "" or val_str.lower() in ["none", "nan", "nat"]:
+        return 0.0
+    if "," in val_str and "." in val_str:
+        val_str = val_str.replace(".", "").replace(",", ".")
+    elif "," in val_str:
+        val_str = val_str.replace(",", ".")
+    num = pd.to_numeric(val_str, errors='coerce')
+    return 0.0 if pd.isna(num) else float(num)
+
 def payload_gerador(
     val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
     nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
@@ -126,6 +142,17 @@ def payload_gerador(
         id_final = str(id_atual)
         acao_switch = "Editar"
 
+    # 🛡️ Sanitização blindada de todos os valores numéricos
+    d_plan = obter_float_limpo(dias_plan)
+    d_exec = obter_float_limpo(dias_exec)
+    rp_d = obter_float_limpo(rec_p_diarias)
+    rp_p = obter_float_limpo(rec_p_passagens)
+    rp_o = obter_float_limpo(rec_p_outras)
+    re_d = obter_float_limpo(rec_e_diarias)
+    re_p = obter_float_limpo(rec_e_passagens)
+    re_o = obter_float_limpo(rec_e_outras)
+    meta_ind = obter_float_limpo(meta_indicador) if str(meta_indicador).strip() != "" else ""
+
     return {
         "Acao": acao_switch,
         "Id": id_final,
@@ -139,7 +166,7 @@ def payload_gerador(
         "Nome da Atividade": str(nome_atividade),
         "Andamento": str(andamento),
         "Indicador": str(val_indicador),
-        "Meta_Indicador": str(meta_indicador),
+        "Meta_Indicador": str(meta_ind),
         "Resultado_Indicador": str(resultado_indicador),
         "Doc_Probatorio_Exec": str(doc_probatorio),
         "UF_Acao_PNAPA": str(uf_acao),
@@ -159,17 +186,17 @@ def payload_gerador(
         "Municipio Onde Ocorreu/Ocorrerá a Ação": str(municipio),
         "Data de Início": str(dt_inicio),
         "Data de Término": str(dt_termino),
-        "Dias_Gastos_Plan": float(dias_plan),
-        "Dias_Gastos_Exec": float(dias_exec),
+        "Dias_Gastos_Plan": d_plan,
+        "Dias_Gastos_Exec": d_exec,
         "Origem do Recurso": str(origem_recurso),
-        "Rec_Plan_Diarias": float(rec_p_diarias),
-        "Rec_Plan_Passagens": float(rec_p_passagens),
-        "Rec_Plan_Outras_Despesas": float(rec_p_outras),
-        "Rec_Plan_Total": float(rec_p_diarias + rec_p_passagens + rec_p_outras),
-        "Rec_Exec_Diarias": float(rec_e_diarias),
-        "Rec_Exec_Passagens": float(rec_e_passagens),
-        "Rec_Exec_Outras_Despesas": float(rec_e_outras),
-        "Rec_Exec_Total": float(rec_e_diarias + rec_e_passagens + rec_e_outras),
+        "Rec_Plan_Diarias": rp_d,
+        "Rec_Plan_Passagens": rp_p,
+        "Rec_Plan_Outras_Despesas": rp_o,
+        "Rec_Plan_Total": float(rp_d + rp_p + rp_o),
+        "Rec_Exec_Diarias": re_d,
+        "Rec_Exec_Passagens": re_p,
+        "Rec_Exec_Outras_Despesas": re_o,
+        "Rec_Exec_Total": float(re_d + re_p + re_o),
         "Observações": str(obs),
         "Justificativa_Acao_PNAPA": str(justificativa)
     }
@@ -1581,55 +1608,57 @@ elif modo == "📊 Visualizar Base":
                                         v_nome_acao = edicoes_lote.get("Nome da Ação PNAPA", row.get("Nome da Ação PNAPA", ""))
                                         v_indicador = edicoes_lote.get("Indicador", row.get("Indicador", ""))
                                         v_imp = edicoes_lote.get("Importância da Atividade", row.get("Importância da Atividade", "Ordinária"))
-                                        v_uf_acao = row.get("UF_Acao_PNAPA", "")
-                                        v_papel = row.get("Papel_Institucional", "")
+                                        v_uf_acao = str(row.get("UF_Acao_PNAPA", uf_usuario)).strip()
+                                        v_papel = str(row.get("Papel_Institucional", "")).strip()
                                         
-                                        v_cod_atv = edicoes_lote.get("Codigo_Atividade", row.get("Codigo_Atividade", ""))
-                                        v_nome_atv = edicoes_lote.get("Nome da Atividade", row.get("Nome da Atividade", ""))
-                                        v_and = edicoes_lote.get("Andamento", row.get("Andamento", "Prevista"))
-                                        v_res_ind = edicoes_lote.get("Resultado_Indicador", row.get("Resultado_Indicador", ""))
-                                        v_doc = edicoes_lote.get("Doc_Probatorio_Exec", row.get("Doc_Probatorio_Exec", ""))
-                                        v_tema = edicoes_lote.get("Tema da Atividade", row.get("Tema da Atividade", ""))
-                                        v_obj = edicoes_lote.get("Objetivo da Atividade", row.get("Objetivo da Atividade", ""))
-                                        v_tipo = edicoes_lote.get("Tipo de Atividade", row.get("Tipo de Atividade", ""))
-                                        v_perigo = edicoes_lote.get("Periculosidade/Insalubridade", row.get("Periculosidade/Insalubridade", "Não se Aplica"))
+                                        v_cod_atv = edicoes_lote.get("Codigo_Atividade", str(row.get("Codigo_Atividade", "")).strip())
+                                        v_nome_atv = edicoes_lote.get("Nome da Atividade", str(row.get("Nome da Atividade", "")).strip())
+                                        v_and = edicoes_lote.get("Andamento", str(row.get("Andamento", "Prevista")).strip())
+                                        v_res_ind = edicoes_lote.get("Resultado_Indicador", str(row.get("Resultado_Indicador", "")).strip())
+                                        v_doc = edicoes_lote.get("Doc_Probatorio_Exec", str(row.get("Doc_Probatorio_Exec", "")).strip())
+                                        v_tema = edicoes_lote.get("Tema da Atividade", str(row.get("Tema da Atividade", "Dutos")).strip())
+                                        v_obj = edicoes_lote.get("Objetivo da Atividade", str(row.get("Objetivo da Atividade", "Atendimento a Acidentes")).strip())
+                                        v_tipo = edicoes_lote.get("Tipo de Atividade", str(row.get("Tipo de Atividade", "Operação")).strip())
+                                        v_perigo = edicoes_lote.get("Periculosidade/Insalubridade", str(row.get("Periculosidade/Insalubridade", "Não se Aplica")).strip())
                                         
-                                        v_srv = edicoes_lote.get("Servidor", row.get("Servidor", ""))
-                                        v_func = edicoes_lote.get("Coordenador_Operacao", row.get("Coordenador_Operacao", ""))
-                                        v_pcdp = edicoes_lote.get("Número da PCDP", row.get("Número da PCDP", ""))
+                                        v_srv = edicoes_lote.get("Servidor", str(row.get("Servidor", "")).strip())
+                                        v_func = edicoes_lote.get("Coordenador_Operacao", str(row.get("Coordenador_Operacao", "Apoio de Campo")).strip())
+                                        v_pcdp = edicoes_lote.get("Número da PCDP", str(row.get("Número da PCDP", "")).strip())
                                         
                                         if "Servidor" in edicoes_lote:
                                             df_srv_lt = df_servidores[df_servidores["Servidor"] == v_srv]
                                             if not df_srv_lt.empty:
-                                                v_uf_srv = df_srv_lt.iloc[0].get("UF_Servidor", "")
-                                                v_lot = df_srv_lt.iloc[0].get("Lotacao", "")
-                                                v_eq = df_srv_lt.iloc[0].get("Equipe_Emergencias", "Não")
+                                                v_uf_srv = str(df_srv_lt.iloc[0].get("UF_Servidor", ""))
+                                                v_lot = str(df_srv_lt.iloc[0].get("Lotacao", ""))
+                                                v_eq = str(df_srv_lt.iloc[0].get("Equipe_Emergencias", "Não"))
                                             else:
                                                 v_uf_srv, v_lot, v_eq = "", "", "Não"
                                         else:
-                                            v_uf_srv = row.get("UF_Servidor", "")
-                                            v_lot = row.get("Lotação", "")
-                                            v_eq = row.get("Faz parte da Equipe de Emergências", "Não")
+                                            v_uf_srv = str(row.get("UF_Servidor", ""))
+                                            v_lot = str(row.get("Lotação", ""))
+                                            v_eq = str(row.get("Faz parte da Equipe de Emergências", "Não"))
                                             
-                                        v_pais = row.get("País", "Brasil")
-                                        v_uf_oc = edicoes_lote.get("UF Onde Ocorreu/Ocorrerá a Ação", row.get("UF Onde Ocorreu/Ocorrerá a Ação", ""))
-                                        v_est_oc = edicoes_lote.get("Estado_Local_Acao", row.get("Estado_Local_Acao", ""))
-                                        v_mun_oc = edicoes_lote.get("Municipio Onde Ocorreu/Ocorrerá a Ação", row.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
+                                        v_pais = "Brasil"
+                                        v_uf_oc = edicoes_lote.get("UF Onde Ocorreu/Ocorrerá a Ação", str(row.get("UF Onde Ocorreu/Ocorrerá a Ação", "SP")))
+                                        v_est_oc = edicoes_lote.get("Estado_Local_Acao", str(row.get("Estado_Local_Acao", "São Paulo")))
+                                        v_mun_oc = edicoes_lote.get("Municipio Onde Ocorreu/Ocorrerá a Ação", str(row.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")))
                                         
                                         v_dti = edicoes_lote.get("Data de Início", converter_para_data_segura(row.get("Data de Início")))
                                         v_dtf = edicoes_lote.get("Data de Término", converter_para_data_segura(row.get("Data de Término")))
-                                        v_dpl = edicoes_lote.get("Dias_Gastos_Plan", row.get("Dias_Gastos_Plan", 0.0))
-                                        v_dex = edicoes_lote.get("Dias_Gastos_Exec", row.get("Dias_Gastos_Exec", 0.0))
-                                        v_origem = edicoes_lote.get("Origem do Recurso", row.get("Origem do Recurso", ""))
                                         
-                                        v_rpd = edicoes_lote.get("Rec_Plan_Diarias", row.get("Rec_Plan_Diarias", 0.0))
-                                        v_rpp = edicoes_lote.get("Rec_Plan_Passagens", row.get("Rec_Plan_Passagens", 0.0))
-                                        v_rpo = edicoes_lote.get("Rec_Plan_Outras_Despesas", row.get("Rec_Plan_Outras_Despesas", 0.0))
-                                        v_red = edicoes_lote.get("Rec_Exec_Diarias", row.get("Rec_Exec_Diarias", 0.0))
-                                        v_rep = edicoes_lote.get("Rec_Exec_Passagens", row.get("Rec_Exec_Passagens", 0.0))
-                                        v_reo = edicoes_lote.get("Rec_Exec_Outras_Despesas", row.get("Rec_Exec_Outras_Despesas", 0.0))
+                                        # Conversão segura de todos os numéricos da linha
+                                        v_dpl = obter_float_limpo(edicoes_lote.get("Dias_Gastos_Plan", row.get("Dias_Gastos_Plan", 0.0)))
+                                        v_dex = obter_float_limpo(edicoes_lote.get("Dias_Gastos_Exec", row.get("Dias_Gastos_Exec", 0.0)))
+                                        v_origem = edicoes_lote.get("Origem do Recurso", str(row.get("Origem do Recurso", "SP")))
                                         
-                                        v_obs = edicoes_lote.get("Observações", row.get("Observações", ""))
+                                        v_rpd = obter_float_limpo(edicoes_lote.get("Rec_Plan_Diarias", row.get("Rec_Plan_Diarias", 0.0)))
+                                        v_rpp = obter_float_limpo(edicoes_lote.get("Rec_Plan_Passagens", row.get("Rec_Plan_Passagens", 0.0)))
+                                        v_rpo = obter_float_limpo(edicoes_lote.get("Rec_Plan_Outras_Despesas", row.get("Rec_Plan_Outras_Despesas", 0.0)))
+                                        v_red = obter_float_limpo(edicoes_lote.get("Rec_Exec_Diarias", row.get("Rec_Exec_Diarias", 0.0)))
+                                        v_rep = obter_float_limpo(edicoes_lote.get("Rec_Exec_Passagens", row.get("Rec_Exec_Passagens", 0.0)))
+                                        v_reo = obter_float_limpo(edicoes_lote.get("Rec_Exec_Outras_Despesas", row.get("Rec_Exec_Outras_Despesas", 0.0)))
+                                        
+                                        v_obs = edicoes_lote.get("Observações", str(row.get("Observações", "")))
                                         
                                         payload_linha = payload_gerador(
                                             v_ano, v_num_acao, v_nome_acao, v_indicador, "Atividade",
