@@ -1283,7 +1283,6 @@ elif modo == "📊 Visualizar Base":
 
                             st.markdown("##### 🏷️ Código e Agrupador da Atividade")
                             if st.checkbox("Alterar Código da Atividade/Missão?", key="chk_cod_lt"):
-                                # Ação base a ser pesquisada (a nova se marcada, ou a original da 1ª linha)
                                 acao_base_lt = edicoes_lote.get("Número da Ação PNAPA", str(df_at_sel.iloc[0].get("Número da Ação PNAPA", "")).strip())
                                 uf_base_lt = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
                                 
@@ -1329,14 +1328,10 @@ elif modo == "📊 Visualizar Base":
                                     else:
                                         sel_cod_exist_lt = st.selectbox("Selecione a Atividade Existente:", opcoes_atvs_existentes_lt, key="in_cod_lt_sel")
                                         edicoes_lote["Codigo_Atividade"] = sel_cod_exist_lt.split(" — ")[0].strip()
-                                        
-                                        # Botão opcional para puxar o nome da atividade selecionada no dropdown
                                         if st.button("Puxar 'Nome da Atividade' vinculada", key="btn_puxar_nome_lt"):
                                             st.session_state["lote_nome_puxado"] = mapa_dados_atv_lt[sel_cod_exist_lt]
 
-                            # Recupera o nome puxado do state, se existir
                             val_nome_lt_ui = st.session_state.get("lote_nome_puxado", "")
-                            
                             if st.checkbox("Alterar Nome da Atividade / Operação?", key="chk_nome_lt"):
                                 edicoes_lote["Nome da Atividade"] = st.text_input("Novo Nome da Atividade:", value=val_nome_lt_ui, key="in_nome_lt").strip()
                             if st.checkbox("Alterar Andamento?", key="chk_and_lt"):
@@ -1378,9 +1373,9 @@ elif modo == "📊 Visualizar Base":
                             col_ld1, col_ld2 = st.columns(2)
                             with col_ld1:
                                 if st.checkbox("Alterar Data de Início?", key="chk_dti_lt"):
-                                    edicoes_lote["Data de Início"] = str(st.date_input("Nova Data de Início:", format="DD/MM/YYYY", key="in_dti_lt"))
+                                    edicoes_lote["Data de Início"] = st.date_input("Nova Data de Início:", format="DD/MM/YYYY", key="in_dti_lt")
                                 if st.checkbox("Alterar Data de Término?", key="chk_dtf_lt"):
-                                    edicoes_lote["Data de Término"] = str(st.date_input("Nova Data de Término:", format="DD/MM/YYYY", key="in_dtf_lt"))
+                                    edicoes_lote["Data de Término"] = st.date_input("Nova Data de Término:", format="DD/MM/YYYY", key="in_dtf_lt")
                                 if st.checkbox("Alterar Origem do Recurso?", key="chk_orig_lt"):
                                     edicoes_lote["Origem do Recurso"] = st.selectbox("Nova Origem do Recurso:", LISTA_ORIGENS_RECURSO, key="in_orig_lt")
                             with col_ld2:
@@ -1413,54 +1408,94 @@ elif modo == "📊 Visualizar Base":
                         st.markdown("---")
                         st.markdown("### 📋 Resumo das Alterações (Serão aplicadas a todas as linhas selecionadas)")
                         if edicoes_lote:
-                            st.json(edicoes_lote)
+                            st.json({k: str(v) if isinstance(v, (date, datetime)) else v for k, v in edicoes_lote.items()})
                             
                             if st.button("🚀 Confirmar e Aplicar Alterações em Massa", type="primary", key="btn_confirm_lote_at"):
                                 payloads_lote = []
                                 bloqueio_lote = False
                                 
-                                # Validação: Se tentar colocar a função de Coordenador em lote e já houver código igual nas linhas
                                 if edicoes_lote.get("Coordenador_Operacao") == "Coordenador de Campo":
                                     codigos_no_lote = df_at_sel["Codigo_Atividade"].unique()
                                     if "Codigo_Atividade" in edicoes_lote or len(codigos_no_lote) == 1:
                                         if qtd_at_sel > 1:
-                                            st.error("⛔ **Conflito de Liderança:** Você não pode definir 'Coordenador de Campo' para múltiplos servidores da mesma atividade em lote. Apenas um servidor pode coordenar a atividade.")
+                                            st.error("⛔ **Conflito de Liderança:** Você não pode definir 'Coordenador de Campo' para múltiplos servidores em lote. Apenas um servidor pode coordenar a atividade.")
                                             bloqueio_lote = True
 
                                 if not bloqueio_lote:
                                     for _, row in df_at_sel.iterrows():
-                                        # Pega os dados originais
-                                        p = {col: row[col] for col in df_atual.columns if col in row}
-                                        p["Acao"] = "Editar"
-                                        p["Id"] = str(row["Id"])
+                                        # Mescla os valores originais com os editados
+                                        v_ano = edicoes_lote.get("Ano da Ação", row.get("Ano da Ação", 2026))
+                                        v_num_acao = edicoes_lote.get("Número da Ação PNAPA", row.get("Número da Ação PNAPA", ""))
+                                        v_nome_acao = edicoes_lote.get("Nome da Ação PNAPA", row.get("Nome da Ação PNAPA", ""))
+                                        v_indicador = edicoes_lote.get("Indicador", row.get("Indicador", ""))
+                                        v_imp = edicoes_lote.get("Importância da Atividade", row.get("Importância da Atividade", "Ordinária"))
+                                        v_uf_acao = row.get("UF_Acao_PNAPA", "")
+                                        v_papel = row.get("Papel_Institucional", "")
                                         
-                                        # Aplica APENAS os campos marcados nos checkboxes
-                                        p.update(edicoes_lote)
+                                        v_cod_atv = edicoes_lote.get("Codigo_Atividade", row.get("Codigo_Atividade", ""))
+                                        v_nome_atv = edicoes_lote.get("Nome da Atividade", row.get("Nome da Atividade", ""))
+                                        v_and = edicoes_lote.get("Andamento", row.get("Andamento", "Prevista"))
+                                        v_res_ind = edicoes_lote.get("Resultado_Indicador", row.get("Resultado_Indicador", ""))
+                                        v_doc = edicoes_lote.get("Doc_Probatorio_Exec", row.get("Doc_Probatorio_Exec", ""))
+                                        v_tema = edicoes_lote.get("Tema da Atividade", row.get("Tema da Atividade", ""))
+                                        v_obj = edicoes_lote.get("Objetivo da Atividade", row.get("Objetivo da Atividade", ""))
+                                        v_tipo = edicoes_lote.get("Tipo de Atividade", row.get("Tipo de Atividade", ""))
+                                        v_perigo = edicoes_lote.get("Periculosidade/Insalubridade", row.get("Periculosidade/Insalubridade", "Não se Aplica"))
                                         
-                                        # Trata a atualização de dados herdados do servidor caso o RH tenha sido modificado
+                                        v_srv = edicoes_lote.get("Servidor", row.get("Servidor", ""))
+                                        v_func = edicoes_lote.get("Coordenador_Operacao", row.get("Coordenador_Operacao", ""))
+                                        v_pcdp = edicoes_lote.get("Número da PCDP", row.get("Número da PCDP", ""))
+                                        
                                         if "Servidor" in edicoes_lote:
-                                            novo_srv = edicoes_lote["Servidor"]
-                                            df_srv_lt = df_servidores[df_servidores["Servidor"] == novo_srv]
+                                            df_srv_lt = df_servidores[df_servidores["Servidor"] == v_srv]
                                             if not df_srv_lt.empty:
-                                                p["UF_Servidor"] = str(df_srv_lt.iloc[0].get("UF_Servidor", ""))
-                                                p["Lotação"] = str(df_srv_lt.iloc[0].get("Lotacao", ""))
-                                                p["Faz parte da Equipe de Emergências"] = str(df_srv_lt.iloc[0].get("Equipe_Emergencias", "Não"))
+                                                v_uf_srv = df_srv_lt.iloc[0].get("UF_Servidor", "")
+                                                v_lot = df_srv_lt.iloc[0].get("Lotacao", "")
+                                                v_eq = df_srv_lt.iloc[0].get("Equipe_Emergencias", "Não")
+                                            else:
+                                                v_uf_srv, v_lot, v_eq = "", "", "Não"
+                                        else:
+                                            v_uf_srv = row.get("UF_Servidor", "")
+                                            v_lot = row.get("Lotação", "")
+                                            v_eq = row.get("Faz parte da Equipe de Emergências", "Não")
+                                            
+                                        v_pais = row.get("País", "Brasil")
+                                        v_uf_oc = edicoes_lote.get("UF Onde Ocorreu/Ocorrerá a Ação", row.get("UF Onde Ocorreu/Ocorrerá a Ação", ""))
+                                        v_est_oc = edicoes_lote.get("Estado_Local_Acao", row.get("Estado_Local_Acao", ""))
+                                        v_mun_oc = edicoes_lote.get("Municipio Onde Ocorreu/Ocorrerá a Ação", row.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
                                         
-                                        # Recalcula totais financeiros se algum campo de custo foi marcado
-                                        if any(k in edicoes_lote for k in ["Rec_Plan_Diarias", "Rec_Plan_Passagens", "Rec_Plan_Outras_Despesas"]):
-                                            p["Rec_Plan_Total"] = float(p.get("Rec_Plan_Diarias", 0)) + float(p.get("Rec_Plan_Passagens", 0)) + float(p.get("Rec_Plan_Outras_Despesas", 0))
+                                        v_dti = edicoes_lote.get("Data de Início", converter_para_data_segura(row.get("Data de Início")))
+                                        v_dtf = edicoes_lote.get("Data de Término", converter_para_data_segura(row.get("Data de Término")))
+                                        v_dpl = edicoes_lote.get("Dias_Gastos_Plan", row.get("Dias_Gastos_Plan", 0.0))
+                                        v_dex = edicoes_lote.get("Dias_Gastos_Exec", row.get("Dias_Gastos_Exec", 0.0))
+                                        v_origem = edicoes_lote.get("Origem do Recurso", row.get("Origem do Recurso", ""))
                                         
-                                        if any(k in edicoes_lote for k in ["Rec_Exec_Diarias", "Rec_Exec_Passagens", "Rec_Exec_Outras_Despesas"]):
-                                            p["Rec_Exec_Total"] = float(p.get("Rec_Exec_Diarias", 0)) + float(p.get("Rec_Exec_Passagens", 0)) + float(p.get("Rec_Exec_Outras_Despesas", 0))
+                                        v_rpd = edicoes_lote.get("Rec_Plan_Diarias", row.get("Rec_Plan_Diarias", 0.0))
+                                        v_rpp = edicoes_lote.get("Rec_Plan_Passagens", row.get("Rec_Plan_Passagens", 0.0))
+                                        v_rpo = edicoes_lote.get("Rec_Plan_Outras_Despesas", row.get("Rec_Plan_Outras_Despesas", 0.0))
+                                        v_red = edicoes_lote.get("Rec_Exec_Diarias", row.get("Rec_Exec_Diarias", 0.0))
+                                        v_rep = edicoes_lote.get("Rec_Exec_Passagens", row.get("Rec_Exec_Passagens", 0.0))
+                                        v_reo = edicoes_lote.get("Rec_Exec_Outras_Despesas", row.get("Rec_Exec_Outras_Despesas", 0.0))
                                         
-                                        # Sanitização final
-                                        payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p.items()}
-                                        payloads_lote.append(payload_sanit)
+                                        v_obs = edicoes_lote.get("Observações", row.get("Observações", ""))
+                                        
+                                        payload_linha = payload_gerador(
+                                            v_ano, v_num_acao, v_nome_acao, v_indicador, "Atividade",
+                                            v_nome_atv, v_and, v_res_ind, v_doc, v_uf_acao,
+                                            v_imp, v_tema, v_obj, v_tipo, v_perigo, v_srv,
+                                            v_uf_srv, v_lot, v_eq, v_pcdp, v_pais, v_uf_oc,
+                                            v_est_oc, v_mun_oc, v_dti, v_dtf, v_dpl, v_dex,
+                                            v_origem, v_rpd, v_rpp, v_rpo, v_red,
+                                            v_rep, v_reo, v_obs, "", str(row["Id"]), "📝 Editar Linha Existente", df_atual,
+                                            papel_institucional=v_papel, coordenador_operacao=v_func, meta_indicador="",
+                                            codigo_atividade=v_cod_atv
+                                        )
+                                        payloads_lote.append(payload_linha)
                                     
                                     executar_envio_sharepoint(payloads_lote)
                                     st.session_state["selecoes_atividades"] = {}
                                     st.session_state["version_ed_at"] += 1
-                                    st.session_state.pop("lote_nome_puxado", None) # limpa a variável auxiliar
+                                    st.session_state.pop("lote_nome_puxado", None)
                                     st.rerun()
                         else:
                             st.info("💡 Nenhum campo foi marcado para edição. Marque as opções acima para visualizar o resumo e habilitar a gravação.")
