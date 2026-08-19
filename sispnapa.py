@@ -2098,15 +2098,15 @@ elif modo == "👥 Gerenciar Equipes":
                 st.success(f"Acesso revogado com sucesso!")
                 st.rerun()
 
-# --- TELA AUXILIAR: GERENCIAR AÇÕES PNAPA ---
+# --- TELA AUXILIAR: GERENCIAR AÇÕES PNAPA (COM PREENCHIMENTO REATIVO E CASCATA) ---
 elif modo == "🗂️ Gerenciar Ações PNAPA":
     st.markdown("<h3 style='color: #03170a;'>🗂️ Catálogo Oficial de Ações PNAPA</h3>", unsafe_allow_html=True)
-    st.caption("Tabela auxiliar corporativa para vinculação e padronização das atividades operacionais.")
+    st.caption("Tabela auxiliar corporativa para vinculação, metas e padronização das atividades operacionais.")
     
     # 🔒 VERIFICAÇÃO DE PERMISSÃO ADMINISTRATIVA
     pode_administrar_catalogo = (perfil_usuario == "Administrador") and acesso_liberado
 
-    # 1. VISUALIZAÇÃO DA TABELA (DISPONÍVEL PARA TODOS OS PERFIS COM ACESSO À TELA)
+    # 1. VISUALIZAÇÃO DA TABELA (DISPONÍVEL PARA TODOS OS PERFIS)
     if df_pnapas.empty:
         st.warning("⚠️ O catálogo de Ações PNAPA está vazio no momento.")
     else:
@@ -2127,7 +2127,9 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             "🗑️ Excluir Ação"
         ])
         
-        # --- ABA 1: CADASTRAR NOVA AÇÃO ---
+        # =================================================================
+        # ABA 1: CADASTRAR NOVA AÇÃO
+        # =================================================================
         with tab_cad_pna:
             st.markdown("##### ➕ Nova Ação PNAPA")
             c_ano, c_num = st.columns(2)
@@ -2136,26 +2138,27 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             with c_num:
                 novo_num_pna = st.text_input("Código/Número (Ex: CEN001)", value="", key="cad_pna_num").strip().upper()
                 
-            novo_nome_comp = st.text_input("Nome Completo da Ação (Descrição Oficial)", key="cad_pna_nome_comp").strip()
-            novo_nome_apelido = st.text_input("Nome Resumido / Apelido (Exibição Amigável)", key="cad_pna_nome_apelido").strip()
+            novo_nome_comp = st.text_input("Nome Completo da Ação (Descrição Oficial):", key="cad_pna_nome_comp").strip()
+            novo_nome_apelido = st.text_input("Nome Resumido / Apelido (Exibição Amigável):", key="cad_pna_nome_apelido").strip()
             
             c_ind, c_imp = st.columns(2)
             with c_ind:
-                novo_indicador = st.text_input("Indicador Associado", key="cad_pna_ind").strip()
+                novo_indicador = st.text_input("Indicador Associado:", key="cad_pna_ind").strip()
             with c_imp:
-                nova_importancia = st.selectbox("Importância Padrão", ["Ordinária", "Estratégica"], key="cad_pna_imp")
+                nova_importancia = st.selectbox("Importância Padrão:", ["Ordinária", "Estratégica"], key="cad_pna_imp")
                 
             if st.button("🚀 Gravar Nova Ação no Catálogo", type="primary", key="btn_gravar_nova_acao_pna"):
                 if not novo_num_pna or not novo_nome_comp:
                     st.error("⚠️ O Código e o Nome Completo da Ação são obrigatórios.")
                 else:
                     chave_acao_ano = f"{novo_num_pna}-{novo_ano_pna}"
-                    id_novo_pna = int(pd.to_numeric(df_pnapas["Id"], errors='coerce').max() + 1) if not df_pnapas.empty else 1
+                    id_col_nome = "ID_PNAPA" if "ID_PNAPA" in df_pnapas.columns else "Id"
+                    id_novo_pna = int(pd.to_numeric(df_pnapas[id_col_nome], errors='coerce').max() + 1) if not df_pnapas.empty else 1
                     
                     payload_nova_acao = {
-                        "Tabela": "Acoes",
                         "Acao": "Inserir",
                         "Id": str(id_novo_pna),
+                        "ID_PNAPA": id_novo_pna,
                         "Ano": int(novo_ano_pna),
                         "Num_Acao_PNAPA": novo_num_pna,
                         "Acao_Ano": chave_acao_ano,
@@ -2167,85 +2170,215 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     
                     with st.spinner("Gravando no catálogo do SharePoint..."):
                         try:
-                            r = requests.post(URL_FLOW_AUXILIARES, json=payload_nova_acao, timeout=20)
+                            r = requests.post(URL_FLOW_PNAPAS, json=payload_nova_acao, timeout=20)
                             if r.status_code in [200, 202]:
+                                time.sleep(2)
                                 st.cache_data.clear()
                                 st.success(f"✅ Ação **{chave_acao_ano}** cadastrada com sucesso!")
-                                time.sleep(1.5)
+                                time.sleep(1)
                                 st.rerun()
                             else:
                                 st.error("❌ Falha na resposta do Power Automate.")
                         except Exception as e:
                             st.error(f"❌ Erro de conexão: {e}")
 
-        # --- ABA 2: EDITAR AÇÃO EXISTENTE ---
+        # =================================================================
+        # ABA 2: EDITAR AÇÃO EXISTENTE (REATIVO E CASCATA COMPLETA)
+        # =================================================================
         with tab_edt_pna:
             st.markdown("##### 📝 Atualizar Dados de Ação PNAPA")
             if not df_pnapas.empty:
-                lista_acoes_edt = (df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()
-                acao_edt_sel = st.selectbox("Selecione a Ação para Editar:", lista_acoes_edt, key="edt_pna_sel")
+                # 1. Lista de seleção
+                lista_acoes_edt = sorted((df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist())
+                acao_edt_sel = st.selectbox("Selecione a Ação para visualizar/alterar:", lista_acoes_edt, key="edt_pna_sel")
                 
                 cod_alvo_edt = acao_edt_sel.split(" - ")[0].strip()
                 dados_alvo_edt = df_pnapas[df_pnapas["Acao_Ano"].astype(str) == cod_alvo_edt].iloc[0]
                 
-                e_ano = st.number_input("Ano", min_value=2020, max_value=2040, value=int(dados_alvo_edt["Ano"]), step=1, key="edt_pna_ano")
-                e_num = st.text_input("Código (Num_Acao_PNAPA)", value=str(dados_alvo_edt["Num_Acao_PNAPA"]), key="edt_pna_num").strip().upper()
-                e_comp = st.text_input("Nome Completo", value=str(dados_alvo_edt.get("Nome_Acao_Completo", "")), key="edt_pna_comp")
-                e_apelido = st.text_input("Nome Resumido / Apelido", value=str(dados_alvo_edt.get("Nome_Acao_Apelido", "")), key="edt_pna_apelido")
-                e_ind = st.text_input("Indicador", value=str(dados_alvo_edt.get("Indicador", "")), key="edt_pna_ind")
+                id_col_nome = "ID_PNAPA" if "ID_PNAPA" in dados_alvo_edt else "Id"
+                id_pna_edit = int(float(dados_alvo_edt[id_col_nome]))
                 
-                imp_atual = str(dados_alvo_edt.get("Importância", "Ordinária"))
-                idx_imp = 1 if imp_atual == "Estratégica" else 0
-                e_imp = st.selectbox("Importância", ["Ordinária", "Estratégica"], index=idx_imp, key="edt_pna_imp")
-                
-                if st.button("💾 Salvar Alterações na Ação", type="primary", key="btn_salvar_edt_pna"):
-                    payload_edt = {
-                        "Tabela": "Acoes",
-                        "Acao": "Editar",
-                        "Id": str(dados_alvo_edt["Id"]),
-                        "Ano": int(e_ano),
-                        "Num_Acao_PNAPA": e_num,
-                        "Acao_Ano": f"{e_num}-{e_ano}",
-                        "Nome_Acao_Completo": e_comp,
-                        "Nome_Acao_Apelido": e_apelido,
-                        "Indicador": e_ind,
-                        "Importância": e_imp
-                    }
-                    with st.spinner("Atualizando ação no SharePoint..."):
-                        try:
-                            r = requests.post(URL_FLOW_AUXILIARES, json=payload_edt, timeout=20)
-                            if r.status_code in [200, 202]:
-                                st.cache_data.clear()
-                                st.success("✅ Ação atualizada com sucesso!")
-                                time.sleep(1.5)
-                                st.rerun()
-                            else:
-                                st.error("❌ Falha na resposta do Power Automate.")
-                        except Exception as e:
-                            st.error(f"❌ Erro de conexão: {e}")
+                # Valores atuais brutos
+                val_atual_ano = int(dados_alvo_edt.get("Ano", 2026))
+                val_atual_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip().upper()
+                val_atual_comp = str(dados_alvo_edt.get("Nome_Acao_Completo", "")).strip()
+                val_atual_apelido = str(dados_alvo_edt.get("Nome_Acao_Apelido", "")).strip()
+                val_atual_ind = str(dados_alvo_edt.get("Indicador", "")).strip()
+                val_atual_imp = str(dados_alvo_edt.get("Importância", "Ordinária")).strip()
 
-        # --- ABA 3: EXCLUIR AÇÃO ---
+                st.markdown(f"#### 🗂️ Ficha da Ação: **{cod_alvo_edt}** `(ID: {id_pna_edit})`")
+                st.caption("Modificações nesta ação serão refletidas em cascata em todas as atividades vinculadas na base principal.")
+
+                # Campos com chaves dinâmicas atreladas ao ID
+                c_e_ano, c_e_num = st.columns(2)
+                with c_e_ano:
+                    e_ano = st.number_input(
+                        "Ano da Ação:", 
+                        min_value=2020, 
+                        max_value=2040, 
+                        value=val_atual_ano, 
+                        step=1, 
+                        key=f"edt_pna_ano_{id_pna_edit}"
+                    )
+                with c_e_num:
+                    e_num = st.text_input(
+                        "Código/Número (Ex: CEN001):", 
+                        value=val_atual_num, 
+                        key=f"edt_pna_num_{id_pna_edit}"
+                    ).strip().upper()
+
+                e_comp = st.text_input(
+                    "Nome Completo da Ação (Descrição Oficial):", 
+                    value=val_atual_comp, 
+                    key=f"edt_pna_comp_{id_pna_edit}"
+                ).strip()
+                
+                e_apelido = st.text_input(
+                    "Nome Resumido / Apelido (Exibição Amigável):", 
+                    value=val_atual_apelido, 
+                    key=f"edt_pna_apelido_{id_pna_edit}"
+                ).strip()
+
+                c_e_ind, c_e_imp = st.columns(2)
+                with c_e_ind:
+                    e_ind = st.text_input(
+                        "Indicador Associado:", 
+                        value=val_atual_ind, 
+                        key=f"edt_pna_ind_{id_pna_edit}"
+                    ).strip()
+                with c_e_imp:
+                    idx_imp = 1 if val_atual_imp == "Estratégica" else 0
+                    e_imp = st.selectbox(
+                        "Importância Padrão:", 
+                        ["Ordinária", "Estratégica"], 
+                        index=idx_imp, 
+                        key=f"edt_pna_imp_{id_pna_edit}"
+                    )
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- DISPARO DA ATUALIZAÇÃO EM CASCATA ---
+                from concurrent.futures import ThreadPoolExecutor
+
+                if st.button("💾 Salvar Alterações e Sincronizar Base Principal", type="primary", key=f"btn_salvar_edt_pna_{id_pna_edit}"):
+                    if not e_num or not e_comp:
+                        st.error("⚠️ O Código e o Nome Completo da Ação são obrigatórios.")
+                    else:
+                        nova_chave_acao_ano = f"{e_num}-{e_ano}"
+                        novo_nome_display = e_apelido if e_apelido else e_comp
+                        nova_imp_macro = "Alta" if e_imp == "Estratégica" else ("Baixa" if e_imp == "Ordinária" else "Média")
+
+                        # 1. Atualiza o Catálogo de Ações no SharePoint
+                        payload_edt = {
+                            "Acao": "Editar",
+                            "Id": str(id_pna_edit),
+                            "ID_PNAPA": id_pna_edit,
+                            "Ano": int(e_ano),
+                            "Num_Acao_PNAPA": e_num,
+                            "Acao_Ano": nova_chave_acao_ano,
+                            "Nome_Acao_Completo": e_comp,
+                            "Nome_Acao_Apelido": novo_nome_display,
+                            "Indicador": e_ind,
+                            "Importância": e_imp
+                        }
+                        
+                        with st.spinner(f"1/2 Atualizando Ação '{nova_chave_acao_ano}' no Catálogo..."):
+                            try:
+                                requests.post(URL_FLOW_PNAPAS, json=payload_edt, timeout=20)
+                            except Exception as e:
+                                st.error(f"Erro ao conectar ao catálogo: {e}")
+
+                        # 2. Localiza atividades vinculadas na Planilha Principal (pelo código antigo)
+                        cod_antigo_acao_ano = str(dados_alvo_edt.get("Acao_Ano", "")).strip()
+                        cod_antigo_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip()
+
+                        linhas_macro_afetadas = df_atual[
+                            (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_antigo_acao_ano) |
+                            (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_antigo_num)
+                        ]
+                        qtd_macro_afetadas = len(linhas_macro_afetadas)
+                        sucessos_macro = 0
+
+                        if qtd_macro_afetadas > 0:
+                            with st.spinner(f"2/2 Sincronizando {qtd_macro_afetadas} registro(s) vinculados na Planilha Principal..."):
+                                payloads_cascata_pna = []
+                                for _, row_orig in linhas_macro_afetadas.iterrows():
+                                    p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                                    p_item["Acao"] = "Editar"
+                                    p_item["Id"] = str(row_orig["Id"])
+                                    
+                                    # 🚀 Atualiza metadados da Ação na linha macro
+                                    p_item["Ano da Ação"] = int(e_ano)
+                                    p_item["Número da Ação PNAPA"] = str(nova_chave_acao_ano)
+                                    p_item["Nome da Ação PNAPA"] = str(novo_nome_display)
+                                    p_item["Indicador"] = str(e_ind)
+                                    p_item["Importância da Atividade"] = str(nova_imp_macro)
+                                    
+                                    payload_sanit = {
+                                        k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) 
+                                        for k, v in p_item.items()
+                                    }
+                                    payloads_cascata_pna.append(payload_sanit)
+
+                                def enviar_req_pna_macro(p):
+                                    try:
+                                        r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
+                                        return 1 if r.status_code in [200, 202] else 0
+                                    except:
+                                        return 0
+
+                                with ThreadPoolExecutor(max_workers=10) as executor:
+                                    resultados = list(executor.map(enviar_req_pna_macro, payloads_cascata_pna))
+                                    sucessos_macro = sum(resultados)
+
+                        # 3. Limpeza de cache e feedback
+                        time.sleep(2.0)
+                        st.cache_data.clear()
+                        if "df" in st.session_state:
+                            del st.session_state.df
+
+                        msg_sucesso = f"🎉 Ação **{nova_chave_acao_ano}** atualizada com sucesso!"
+                        if qtd_macro_afetadas > 0:
+                            msg_sucesso += f" ({sucessos_macro}/{qtd_macro_afetadas} atividades/ações na base principal migradas em cascata)."
+                        st.success(msg_sucesso)
+                        
+                        time.sleep(1.5)
+                        st.rerun()
+
+        # =================================================================
+        # ABA 3: EXCLUIR AÇÃO (COM VERIFICAÇÃO DE DEPENDÊNCIAS)
+        # =================================================================
         with tab_exc_pna:
             st.markdown("##### 🗑️ Exclusão de Ação PNAPA")
             if not df_pnapas.empty:
-                lista_acoes_del = (df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()
-                acao_del_sel = st.selectbox("Selecione a Ação para Excluir:", lista_acoes_del, key="del_pna_sel")
+                lista_acoes_del = sorted((df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist())
+                acao_del_sel = st.selectbox("Selecione a Ação para EXCLUIR:", lista_acoes_del, key="del_pna_sel")
                 
                 cod_alvo_del = acao_del_sel.split(" - ")[0].strip()
                 dados_alvo_del = df_pnapas[df_pnapas["Acao_Ano"].astype(str) == cod_alvo_del].iloc[0]
+                id_col_del = "ID_PNAPA" if "ID_PNAPA" in dados_alvo_del else "Id"
+                id_pna_del = int(float(dados_alvo_del[id_col_del]))
                 
-                st.warning(f"⚠️ **Atenção:** A exclusão da ação **{cod_alvo_del}** removerá este item do catálogo auxiliar de vinculação.")
+                # Verificação de dependências na Planilha Principal
+                linhas_dependentes = df_atual[
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_alvo_del) |
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == str(dados_alvo_del.get("Num_Acao_PNAPA", "")).strip())
+                ]
                 
-                if st.button("🔥 Confirmar Exclusão Permanente da Ação", type="primary", key="btn_confirmar_del_pna"):
+                if not linhas_dependentes.empty:
+                    st.warning(f"⚠️ **Atenção:** Existem **{len(linhas_dependentes)} registro(s)** vinculados a esta Ação na Planilha Principal. Excluí-la do catálogo impedirá novas vinculações.")
+                
+                if st.button("🔥 Confirmar Exclusão Permanente", type="primary", disabled=not st.checkbox(f"Confirmo que desejo excluir a ação {cod_alvo_del}", key=f"chk_del_pna_{id_pna_del}")):
                     payload_del_pna = {
-                        "Tabela": "Acoes",
                         "Acao": "Excluir",
-                        "Id": str(dados_alvo_del["Id"])
+                        "Id": str(id_pna_del),
+                        "ID_PNAPA": id_pna_del
                     }
                     with st.spinner("Removendo ação do catálogo..."):
                         try:
-                            r = requests.post(URL_FLOW_AUXILIARES, json=payload_del_pna, timeout=20)
+                            r = requests.post(URL_FLOW_PNAPAS, json=payload_del_pna, timeout=20)
                             if r.status_code in [200, 202]:
+                                time.sleep(2)
                                 st.cache_data.clear()
                                 st.success(f"💥 Ação {cod_alvo_del} removida com sucesso!")
                                 time.sleep(1.5)
