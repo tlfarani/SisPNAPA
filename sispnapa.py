@@ -929,13 +929,14 @@ elif modo == "📊 Visualizar Base":
                         st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
                         st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
                         
-                        # 🚀 GESTOR DE CÓDIGO DA ATIVIDADE NA EDIÇÃO (EXIBE AS EXISTENTES)
+                        # 🚀 GESTOR DE CÓDIGO DA ATIVIDADE NA EDIÇÃO (PADRÃO COM UF E AUTO-CORREÇÃO)
                         st.markdown("##### 🏷️ Código e Agrupador da Atividade")
                         if "Codigo_Atividade" not in df_atual.columns:
                             df_atual["Codigo_Atividade"] = ""
                         
                         df_atvs_acao_ed = df_atual[
                             (df_atual["Nível"] == "Atividade") &
+                            (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == str(uf_filtro_pna).strip().upper()) &
                             (
                                 (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao).strip().upper()) |
                                 (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao).split("-")[0].strip().upper())
@@ -944,20 +945,28 @@ elif modo == "📊 Visualizar Base":
                         ]
                         
                         cod_atv_atual_reg = str(registro_alvo.get("Codigo_Atividade", "")).strip().upper()
+                        
+                        # 🔄 AUTO-CORREÇÃO: Se o código salvo for antigo (sem UF), insere a UF automaticamente
+                        if cod_atv_atual_reg:
+                            if f"-{uf_filtro_pna}-" not in cod_atv_atual_reg and "-ATV" in cod_atv_atual_reg:
+                                cod_atv_sugerido_ed = cod_atv_atual_reg.replace("-ATV", f"-{uf_filtro_pna}-ATV")
+                            else:
+                                cod_atv_sugerido_ed = cod_atv_atual_reg
+                        else:
+                            cod_base_acao_ed = val_num_acao if "-" in str(val_num_acao) else f"{val_num_acao}-{val_ano}"
+                            cod_atv_sugerido_ed = f"{cod_base_acao_ed}-{uf_filtro_pna}-ATV01"
+
                         opcoes_exist_ed = []
-                        mapa_exist_ed = {}
                         for cod_u in sorted(df_atvs_acao_ed["Codigo_Atividade"].dropna().unique()):
                             nome_u = str(df_atvs_acao_ed[df_atvs_acao_ed["Codigo_Atividade"] == cod_u]["Nome da Atividade"].iloc[0]).strip()
-                            lbl = f"{cod_u} — {nome_u}"
-                            opcoes_exist_ed.append(lbl)
-                            mapa_exist_ed[lbl] = cod_u
+                            opcoes_exist_ed.append(f"{cod_u} — {nome_u}")
                         
                         c_ed_c1, c_ed_c2 = st.columns([1, 1])
                         with c_ed_c1:
                             codigo_atividade = st.text_input(
                                 "Código da Atividade/Missão:", 
-                                value=cod_atv_atual_reg if cod_atv_atual_reg else f"{val_num_acao}-ATV01", 
-                                key=f"t1_cod_atv_txt_{id_referencia}"
+                                value=cod_atv_sugerido_ed, 
+                                key=f"t1_cod_atv_txt_{id_referencia}_{val_num_acao}"
                             ).strip().upper()
                         with c_ed_c2:
                             if opcoes_exist_ed:
