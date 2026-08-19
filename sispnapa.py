@@ -1256,7 +1256,7 @@ elif modo == "📊 Visualizar Base":
                         st.session_state["version_editor"] += 1
                         st.rerun()
 
-# --- TELA 2 E 3: FORMULÁRIO DA PLANILHA MACRO (INSERIR OU EDITAR) ---
+# --- TELA 2: FORMULÁRIO DA PLANILHA MACRO (INSERIR NOVA LINHA) ---
 elif modo == "➕ Inserir Nova Linha":
     st.markdown(f"<h3 style='color: #03170a;'>Formulário de Dados PNAPA — Modo: {modo}</h3>", unsafe_allow_html=True)
     
@@ -1289,6 +1289,7 @@ elif modo == "➕ Inserir Nova Linha":
             
             val_ano = int(dados_aux_linha["Ano"])
             val_num_acao = str(dados_aux_linha.get("Acao_Ano", dados_aux_linha["Num_Acao_PNAPA"]))
+            cod_prefixo_puro = val_num_acao.split("-")[0].strip()
             apelido_ins = str(dados_aux_linha.get("Nome_Acao_Apelido", "")).strip()
             val_nome_acao = apelido_ins if apelido_ins and apelido_ins.lower() != "nan" else str(dados_aux_linha.get("Nome_Acao_Completo", "")).strip()
             val_indicador = str(dados_aux_linha["Indicador"])
@@ -1297,14 +1298,33 @@ elif modo == "➕ Inserir Nova Linha":
             uf_dono_nac = str(dados_aux_linha.get("UF_Dono", "Ceneac")).strip()
             meta_nac_info = dados_aux_linha.get("Meta_Nacional", "")
 
-            # 💡 CARD INFORMATIVO DA LIDERANÇA NACIONAL
-            st.info(f"👑 **Liderança Nacional:** `{dono_nacional} ({uf_dono_nac})` | **Meta Global do Plano:** `{meta_nac_info}` | **Indicador:** `{val_indicador}`")
+            # 💡 IDENTIFICAÇÃO ROBUSTA DO PONTO FOCAL DA UF
+            uf_filtro_pna = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
+            linhas_acao_uf = df_atual[
+                (df_atual["Nível"] == "Ação") & 
+                (
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == val_num_acao) |
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_prefixo_puro)
+                ) &
+                (df_atual["UF_Acao_PNAPA"].astype(str).str.strip() == str(uf_filtro_pna).strip())
+            ]
+            
+            ponto_focal_estado = ""
+            papel_estado_acao = "Não Cadastrado"
+            if not linhas_acao_uf.empty:
+                linha_acao_alvo = linhas_acao_uf.iloc[0]
+                ponto_focal_estado = str(linha_acao_alvo.get("Servidor", "")).strip()
+                papel_estado_acao = str(linha_acao_alvo.get("Papel_Institucional", "Coordenação")).strip()
+
+            st.info(f"👑 **Liderança Nacional:** `{dono_nacional} ({uf_dono_nac})` | **Meta Global:** `{meta_nac_info}`  \n📍 **Governança em {uf_filtro_pna}:** Papel: `{papel_estado_acao}` | Ponto Focal Estadual: `{ponto_focal_estado if ponto_focal_estado else 'Não Definido'}`")
         else:
             st.warning("⚠️ Nenhuma ação cadastrada para este ano no catálogo auxiliar.")
             val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Ordinária"
+            ponto_focal_estado = ""
     else:
         st.error("⚠️ O catálogo auxiliar de Ações PNAPA está vazio.")
         val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Ordinária"
+        ponto_focal_estado = ""
 
     st.markdown("---")
     
@@ -1322,7 +1342,7 @@ elif modo == "➕ Inserir Nova Linha":
     st.text_input("ID do Registro", value=id_atual if id_atual else "Definido no envio", disabled=True)
     
     # =================================================================
-    # CONDICIONAL VISUAL: SE FOR AÇÃO (MOMENTO 2 - PLANEJAMENTO DA UF)
+    # CONDICIONAL: SE FOR AÇÃO (PLANEJAMENTO DA UF)
     # =================================================================
     if nivel_selecionado == "Ação":
         aba1, aba2, aba4, aba5 = st.tabs(["1. Identificação & Governança", "2. Detalhes & Metas", "4. Cronograma & Custos", "5. Justificativas"])
@@ -1332,23 +1352,17 @@ elif modo == "➕ Inserir Nova Linha":
             st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
             st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
             
-            # 🚀 PAPEL DO ESTADO & PONTO FOCAL CONDICIONAL
             c_pap1, c_pap2 = st.columns(2)
             with c_pap1:
                 papel_inst = st.selectbox("Papel da UF nesta Ação:", LISTA_PAPEIS_INSTITUCIONAIS, key="pna_papel_acao")
             with c_pap2:
-                uf_filtro_pna = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
                 srvs_uf_pna = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_pna]["Servidor"].dropna().unique().tolist()
-                
                 if papel_inst == "Coordenação":
                     servidor = st.selectbox(f"Ponto Focal / Coordenador da Ação na UF ({uf_filtro_pna}):", srvs_uf_pna if srvs_uf_pna else [email_logado], key="pna_focal_acao")
                     uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Sim"
                 else:
                     st.info(f"ℹ️ **Atuação em Apoio:** A UF ({uf_filtro_pna}) não indicará Coordenador Estadual.")
-                    servidor = ""
-                    uf_servidor = ""
-                    lotacao = ""
-                    equipe_emergencia = "Não"
+                    servidor, uf_servidor, lotacao, equipe_emergencia = "", "", "", "Não"
 
             lista_andamentos_acao = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
             try: idx_and = lista_andamentos_acao.index(registro_selecionado["Andamento"]) if registro_selecionado is not None else 0
@@ -1357,10 +1371,7 @@ elif modo == "➕ Inserir Nova Linha":
 
         with aba2:
             st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True)
-            
-            # 🚀 META ESTADUAL DA UF
             meta_indicador = st.number_input(f"Meta da Ação para a UF ({uf_usuario}):", min_value=0.0, value=1.0, step=1.0, key="pna_meta_uf_input")
-            
             uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
             st.text_input("Importância da Atividade (Herdada do Catálogo)", value=importancia, disabled=True)
             
@@ -1391,22 +1402,85 @@ elif modo == "➕ Inserir Nova Linha":
                 st.info("ℹ️ Justificativa habilitada apenas para ações com andamento Cancelada, Não Demandada ou Não Executada.")
 
         nome_atividade, resultado_indicador, doc_probatorio, periculosidade = "", "", "", "Não se Aplica"
-        coordenador_operacao, num_pcdp = "", ""
+        coordenador_operacao, num_pcdp, codigo_atividade = "", "", ""
         pais, uf_ocorrencia, estado_local, municipio, dias_exec = "Brasil", "", "", "", 0.0
         rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
 
     # =================================================================
-    # CONDICIONAL VISUAL: SE FOR ATIVIDADE (MOMENTO 3 - OPERAÇÃO/CAMPO)
+    # CONDICIONAL: SE FOR ATIVIDADE (OPERAÇÃO / CAMPO COM CÓDIGO INTELIGENTE)
     # =================================================================
     elif nivel_selecionado == "Atividade":
-        aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes & Indicadores", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
+        aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação & Agrupador", "2. Detalhes & Indicadores", "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Justificativas"])
         
         with aba1:
             st.text_input("Ano da Ação (Automático)", value=str(val_ano if val_ano else ""), disabled=True)
             st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
             st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
             
-            nome_atividade = st.text_input("Nome da Atividade / Operação:", value=str(registro_selecionado["Nome da Atividade"]) if registro_selecionado is not None else "", key="atv_nome")
+            # 🚀 GESTOR INTELIGENTE DE CÓDIGO DA ATIVIDADE
+            st.markdown("##### 🏷️ Código e Agrupador da Atividade")
+            
+            # Localiza atividades existentes para esta Ação
+            df_atvs_acao = df_atual[
+                (df_atual["Nível"] == "Atividade") &
+                (
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == str(val_num_acao).strip()) |
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == str(val_num_acao).split("-")[0].strip())
+                ) &
+                (df_atual["Codigo_Atividade"].astype(str).str.strip() != "")
+            ]
+            
+            # Calcula o próximo número sequencial (ex: ATV01, ATV02...)
+            import re
+            maior_num_atv = 0
+            for cod_exist in df_atvs_acao["Codigo_Atividade"].dropna().unique():
+                match = re.search(r'ATV(\d+)', str(cod_exist).upper())
+                if match:
+                    num_extraido = int(match.group(1))
+                    if num_extraido > maior_num_atv:
+                        maior_num_atv = num_extraido
+            
+            prox_num_atv_str = f"ATV{maior_num_atv + 1:02d}"
+            codigo_novo_sugerido = f"{val_num_acao}-{prox_num_atv_str}"
+            
+            # Monta lista de atividades existentes para seleção
+            opcoes_atvs_existentes = []
+            mapa_dados_atv_existente = {}
+            
+            for cod_unic in sorted(df_atvs_acao["Codigo_Atividade"].dropna().unique()):
+                linhas_deste_cod = df_atvs_acao[df_atvs_acao["Codigo_Atividade"] == cod_unic]
+                nome_deste_cod = str(linhas_deste_cod["Nome da Atividade"].iloc[0]).strip()
+                label_opc = f"{cod_unic} — {nome_deste_cod}"
+                opcoes_atvs_existentes.append(label_opc)
+                mapa_dados_atv_existente[label_opc] = linhas_deste_cod.iloc[0]
+            
+            modo_codigo = st.radio(
+                "Definição da Atividade:", 
+                ["➕ Criar Nova Atividade", "🔗 Vincular a Atividade já Existente (Mesma Equipe/Missão)"],
+                horizontal=True,
+                key="radio_modo_cod_atv"
+            )
+            
+            nome_atv_prefill = ""
+            if modo_codigo == "➕ Criar Nova Atividade":
+                codigo_atividade = st.text_input("Código Gerado Automaticamente:", value=codigo_novo_sugerido, key="input_novo_cod_atv").strip().upper()
+                st.caption(f"💡 Este código agrupará todos os servidores que participarem desta nova atividade.")
+            else:
+                if not opcoes_atvs_existentes:
+                    st.warning("⚠️ Nenhuma atividade cadastrada anteriormente para esta Ação. Um novo código foi gerado.")
+                    codigo_atividade = codigo_novo_sugerido
+                else:
+                    atv_escolhida_lbl = st.selectbox("Selecione a Atividade Existente para integrar a equipe:", opcoes_atvs_existentes, key="sel_atv_existente")
+                    dados_atv_sel = mapa_dados_atv_existente[atv_escolhida_lbl]
+                    codigo_atividade = str(dados_atv_sel["Codigo_Atividade"]).strip().upper()
+                    nome_atv_prefill = str(dados_atv_sel.get("Nome da Atividade", "")).strip()
+                    st.success(f"✅ Integrando à atividade **{codigo_atividade}**. Os dados gerais foram espelhados.")
+
+            nome_atividade = st.text_input(
+                "Nome da Atividade / Operação:", 
+                value=nome_atv_prefill if nome_atv_prefill else (str(registro_selecionado["Nome da Atividade"]) if registro_selecionado is not None else ""), 
+                key=f"atv_nome_input_{codigo_atividade}"
+            ).strip()
             
             lista_andamentos_atividade = ["Prevista", "Concluída"]
             try: idx_and_atv = lista_andamentos_atividade.index(registro_selecionado["Andamento"]) if registro_selecionado is not None else 0
@@ -1432,44 +1506,24 @@ elif modo == "➕ Inserir Nova Linha":
             df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_servidor]
             lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist()) if not df_servidores_filtrados.empty else [email_logado]
             
-            # 🚀 1. IDENTIFICAÇÃO DO CÓDIGO DA ATIVIDADE (AGRUPADOR DA MISSÃO)
-            c_cod_atv1, c_cod_atv2 = st.columns([2, 1])
-            with c_cod_atv1:
-                cod_atv_sugerido = f"{val_num_acao}-{uf_filtro_servidor}-ATV01" if val_num_acao else f"ATV-{datetime.now().strftime('%m%d%H%M')}"
-                codigo_atividade = st.text_input(
-                    "Código da Atividade/Missão (Agrupador de Equipe):", 
-                    value=cod_atv_sugerido, 
-                    help="Servidores que participam da mesma operação devem usar o mesmo Código de Atividade.",
-                    key="atv_input_cod_agrupador"
-                ).strip().upper()
-                
-            with c_cod_atv2:
-                # Localiza quem é o Ponto Focal cadastrado na Ação estadual
-                linha_acao_pai = df_atual[
-                    (df_atual["Nível"] == "Ação") & 
-                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == str(val_num_acao).strip()) &
-                    (df_atual["UF_Acao_PNAPA"].astype(str).str.strip() == str(uf_filtro_servidor).strip())
-                ]
-                ponto_focal_estado = str(linha_acao_pai["Servidor"].iloc[0]).strip() if not linha_acao_pai.empty else ""
-                st.caption(f"👑 **Ponto Focal da Ação em {uf_filtro_servidor}:** `{ponto_focal_estado if ponto_focal_estado else 'Não definido'}`")
-
-            # 🚀 2. SELEÇÃO DO SERVIDOR (PRIMEIRO)
+            # 🚀 1. SELEÇÃO DO SERVIDOR (PRIMEIRO)
             c_rh1, c_rh2 = st.columns(2)
             with c_rh1:
                 servidor = st.selectbox("Servidor Integrante / Responsável:", lista_nomes_servidores, key="atv_sel_servidor")
 
-            # 🚀 3. PREENCHIMENTO AUTOMÁTICO DA FUNÇÃO DE CAMPO (SEGUNDO)
+            # 🚀 2. FUNÇÃO NO CAMPO COM SUGESTÃO AUTOMÁTICA REATIVA (SEGUNDO)
             with c_rh2:
-                # Se for o ponto focal estadual, sugere 'Coordenador de Campo' (idx 0), senão 'Apoio de Campo' (idx 1)
-                idx_funcao_sugerida = 0 if (ponto_focal_estado and servidor == ponto_focal_estado) else 1
+                # Compara o servidor com o Ponto Focal da Ação no estado
+                eh_ponto_focal = (ponto_focal_estado and str(servidor).strip().lower() == str(ponto_focal_estado).strip().lower())
+                idx_funcao_sugerida = 0 if eh_ponto_focal else 1
+                
                 funcao_campo = st.selectbox(
                     "Função na Atividade de Campo:", 
                     LISTA_FUNCOES_CAMPO, 
                     index=idx_funcao_sugerida, 
-                    key=f"atv_funcao_campo_{servidor}"
+                    key=f"atv_funcao_campo_{servidor}_{codigo_atividade}"
                 )
 
-            # Informações funcionais automáticas do servidor selecionado
             if not df_servidores_filtrados.empty and servidor in df_servidores_filtrados["Servidor"].values:
                 dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
                 uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_servidor))
@@ -1532,16 +1586,14 @@ elif modo == "➕ Inserir Nova Linha":
         meta_indicador = ""
 
     st.markdown("<br>", unsafe_allow_html=True)
-    
     btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", key="btn_gravar_individual_reativo")
 
     # =================================================================
-    # 1. ENVIO INDIVIDUAL (CORRIGIDO E SEGURO)
+    # PROCESSAMENTO DO ENVIO: INDIVIDUAL OU EM LOTE
     # =================================================================
     if btn_enviar_individual:
         bloquear_envio = False
         
-        # Define variáveis de forma segura para Ação vs Atividade
         if nivel_selecionado == "Atividade":
             coord_op_final = funcao_campo
             cod_atv_final = str(codigo_atividade)
@@ -1575,9 +1627,7 @@ elif modo == "➕ Inserir Nova Linha":
             )
             executar_envio_sharepoint([payload_unico])
 
-    # =================================================================
     # 2. CARGA EM LOTE (ATIVIDADE)
-    # =================================================================
     if modo == "➕ Inserir Nova Linha" and nivel_selecionado == "Atividade":
         st.markdown("---")
         with st.popover("👥 Deseja cadastrar esta atividade para múltiplos servidores? (Carga em Lote)", use_container_width=True):
@@ -1590,7 +1640,7 @@ elif modo == "➕ Inserir Nova Linha":
             )
             
             servidores_finais = [s.strip() for s in lista_servidores_lote.split("\n") if s.strip()]
-            st.info(f"📋 Serão gerados **{len(servidores_finais)}** registros simultâneos no SharePoint.")
+            st.info(f"📋 Serão gerados **{len(servidores_finais)}** registros simultâneos para o código `{codigo_atividade}`.")
             
             st.markdown("---")
             st.markdown("### 🎯 Espelhamento de Campos")
@@ -1618,8 +1668,6 @@ elif modo == "➕ Inserir Nova Linha":
                 
                 for idx, serv_lote in enumerate(servidores_finais):
                     id_loop = str(id_base_calculado + idx)
-                    
-                    # 🚀 Respeita a função do formulário para o servidor principal e coloca Apoio para os outros
                     funcao_lote = funcao_campo if serv_lote == servidor else "Apoio de Campo"
                     
                     p_nome_atv = nome_atividade if espelhar_detalhes else ""
