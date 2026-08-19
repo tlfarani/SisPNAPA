@@ -786,10 +786,10 @@ elif modo == "📊 Visualizar Base":
                         st.success(f"✅ Dados Vinculados: Código {val_num_acao} | {val_nome_acao[:60]}...")
                     else:
                         st.warning("⚠️ Nenhuma ação cadastrada para este ano no catálogo auxiliar.")
-                        val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Baixa"
+                        val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Ordinária"
                 else:
                     st.error("⚠️ O catálogo auxiliar de Ações PNAPA está vazio.")
-                    val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Baixa"
+                    val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Ordinária"
 
                 st.markdown("---")
                 
@@ -1026,10 +1026,10 @@ elif modo == "📊 Visualizar Base":
                             st.success(f"✅ Dados Vinculados: Código {val_num_acao_lt} | {val_nome_acao_lt[:60]}...")
                         else:
                             st.warning("⚠️ Nenhuma ação cadastrada para este ano no catálogo auxiliar.")
-                            val_ano_lt, val_num_acao_lt, val_nome_acao_lt, val_ind_lt, val_imp_lt = None, "", "", "", "Baixa"
+                            val_ano_lt, val_num_acao_lt, val_nome_acao_lt, val_ind_lt, val_imp_lt = None, "", "", "", "Ordinária"
                     else:
                         st.error("⚠️ O catálogo auxiliar de Ações PNAPA está vazio.")
-                        val_ano_lt, val_num_acao_lt, val_nome_acao_lt, val_ind_lt, val_imp_lt = None, "", "", "", "Baixa"
+                        val_ano_lt, val_num_acao_lt, val_nome_acao_lt, val_ind_lt, val_imp_lt = None, "", "", "", "Ordinária"
 
                     st.markdown("---")
                     
