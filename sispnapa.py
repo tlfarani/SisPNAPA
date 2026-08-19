@@ -678,7 +678,7 @@ elif modo == "📊 Visualizar Base":
                 df_exib_ac["Data de Início"] = df_exib_ac["Data_Inicio_Datetime"].dt.date
                 df_exib_ac["Data de Término"] = df_exib_ac["Data_Termino_Datetime"].dt.date
 
-                # 📋 COLUNAS RELEVANTES PARA AÇÕES (Sem colunas de atividades)
+                # 📋 COLUNAS RELEVANTES PARA AÇÕES
                 COLS_TABELA_ACOES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Nome da Ação PNAPA", 
                     "Papel_Institucional", "Servidor", "UF_Acao_PNAPA", "Meta_Indicador", 
@@ -691,7 +691,6 @@ elif modo == "📊 Visualizar Base":
                 cols_ac_validas = [c for c in COLS_TABELA_ACOES if c in df_exib_ac.columns]
                 df_tab_ac = df_exib_ac[cols_ac_validas].copy()
                 
-                # 🚀 1. CONVERSÃO NUMÉRICA REAL DAS COLUNAS DE AÇÃO:
                 cols_numericas_ac = ["Id", "Meta_Indicador", "Dias_Gastos_Plan", "Rec_Plan_Total"]
                 for c_num in cols_numericas_ac:
                     if c_num in df_tab_ac.columns:
@@ -715,23 +714,15 @@ elif modo == "📊 Visualizar Base":
                 else:
                     colunas_travadas_ac = {col: st.column_config.Column(disabled=True) for col in df_tab_ac.columns}
 
-                # 🚀 2. CONFIGURAÇÃO DE COLUNAS (ORDENAÇÃO NUMÉRICA & CRONOLÓGICA REAL)
                 colunas_travadas_ac["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
                 colunas_travadas_ac["Meta_Indicador"] = st.column_config.NumberColumn("Meta da UF", format="%.1f", disabled=True)
                 colunas_travadas_ac["Dias_Gastos_Plan"] = st.column_config.NumberColumn("Dias Plan.", format="%.1f", disabled=True)
                 colunas_travadas_ac["Rec_Plan_Total"] = st.column_config.NumberColumn("Rec. Plan. Total", format="R$ %.2f", disabled=True)
-                
                 colunas_travadas_ac["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_ac["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
 
                 key_dinamica_ac = f"editor_acoes_v{st.session_state['version_ed_ac']}"
-                tabela_ac = st.data_editor(
-                    df_tab_ac,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config=colunas_travadas_ac,
-                    key=key_dinamica_ac
-                )
+                tabela_ac = st.data_editor(df_tab_ac, hide_index=True, use_container_width=True, column_config=colunas_travadas_ac, key=key_dinamica_ac)
 
                 # Captura seleções
                 if pode_editar and st.session_state[key_dinamica_ac] and "edited_rows" in st.session_state[key_dinamica_ac]:
@@ -824,10 +815,8 @@ elif modo == "📊 Visualizar Base":
                         with aba4_ac:
                             val_dti_ac = converter_para_data_segura(reg_ac_alvo.get("Data de Início"))
                             val_dtf_ac = converter_para_data_segura(reg_ac_alvo.get("Data de Término"))
-                            
                             ed_dt_i_ac = st.date_input("Data de Início:", value=val_dti_ac, format="DD/MM/YYYY", key=f"t1_ac_dti_{id_ac_ref}")
                             ed_dt_f_ac = st.date_input("Data de Término:", value=val_dtf_ac, format="DD/MM/YYYY", key=f"t1_ac_dtf_{id_ac_ref}")
-                            
                             ed_dias_pl_ac = st.number_input("Dias Gastos Plan:", min_value=0.0, value=obter_float_limpo(reg_ac_alvo.get("Dias_Gastos_Plan")), step=0.5, format="%.1f", key=f"t1_ac_dpl_{id_ac_ref}")
                             ed_orig_ac = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(reg_ac_alvo["Origem do Recurso"]) if reg_ac_alvo.get("Origem do Recurso") in LISTA_ORIGENS_RECURSO else 0, key=f"t1_ac_orig_{id_ac_ref}")
                             
@@ -858,6 +847,24 @@ elif modo == "📊 Visualizar Base":
                                 codigo_atividade=""
                             )
                             executar_envio_sharepoint([payload_ac])
+                            st.session_state["selecoes_acoes"] = {}
+                            st.session_state["version_ed_ac"] += 1
+                            st.rerun()
+                    
+                    # Edição em Lote de Ações (Restrita ao Status)
+                    else:
+                        st.warning(f"ℹ️ **Edição em Lote Restrita:** {len(ids_ac_lista)} ações selecionadas. Apenas o status pode ser alterado em massa.")
+                        novo_and_ac_lote = st.selectbox("Alterar Andamento para TODAS as Ações:", ["Planejada", "Cancelada", "Não Demandada", "Não Executada"], key="lt_ac_and")
+                        if st.button(f"💾 Atualizar Andamento de {len(ids_ac_lista)} Ações", type="primary", key="btn_salvar_lote_ac"):
+                            payloads_lote_ac = []
+                            for _, row_orig in df_ac_sel.iterrows():
+                                p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                                p_item["Acao"] = "Editar"
+                                p_item["Id"] = str(row_orig["Id"])
+                                p_item["Andamento"] = str(novo_and_ac_lote)
+                                payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
+                                payloads_lote_ac.append(payload_sanit)
+                            executar_envio_sharepoint(payloads_lote_ac)
                             st.session_state["selecoes_acoes"] = {}
                             st.session_state["version_ed_ac"] += 1
                             st.rerun()
@@ -914,7 +921,7 @@ elif modo == "📊 Visualizar Base":
                 df_exib_at["Data de Início"] = df_exib_at["Data_Inicio_Datetime"].dt.date
                 df_exib_at["Data de Término"] = df_exib_at["Data_Termino_Datetime"].dt.date
 
-                # 📋 COLUNAS RELEVANTES PARA ATIVIDADES (Sem Meta_Indicador ou Justificativa)
+                # 📋 COLUNAS RELEVANTES PARA ATIVIDADES
                 COLS_TABELA_ATIVIDADES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Codigo_Atividade", 
                     "Nome da Atividade", "Papel_Institucional", "Coordenador_Operacao", 
@@ -930,7 +937,6 @@ elif modo == "📊 Visualizar Base":
                 cols_at_validas = [c for c in COLS_TABELA_ATIVIDADES if c in df_exib_at.columns]
                 df_tab_at = df_exib_at[cols_at_validas].copy()
                 
-                # 🚀 1. CONVERSÃO NUMÉRICA REAL DAS COLUNAS DE ATIVIDADE:
                 cols_numericas_at = [
                     "Id", "Resultado_Indicador", "Dias_Gastos_Plan", "Dias_Gastos_Exec", 
                     "Rec_Plan_Total", "Rec_Exec_Total"
@@ -956,25 +962,17 @@ elif modo == "📊 Visualizar Base":
                 else:
                     colunas_travadas_at = {col: st.column_config.Column(disabled=True) for col in df_tab_at.columns}
 
-                # 🚀 2. CONFIGURAÇÃO DE COLUNAS (ORDENAÇÃO NUMÉRICA & CRONOLÓGICA REAL)
                 colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
                 colunas_travadas_at["Resultado_Indicador"] = st.column_config.NumberColumn("Resultado Indicador", format="%.1f", disabled=True)
                 colunas_travadas_at["Dias_Gastos_Plan"] = st.column_config.NumberColumn("Dias Plan.", format="%.1f", disabled=True)
                 colunas_travadas_at["Dias_Gastos_Exec"] = st.column_config.NumberColumn("Dias Exec.", format="%.1f", disabled=True)
                 colunas_travadas_at["Rec_Plan_Total"] = st.column_config.NumberColumn("Rec. Plan. Total", format="R$ %.2f", disabled=True)
                 colunas_travadas_at["Rec_Exec_Total"] = st.column_config.NumberColumn("Rec. Exec. Total", format="R$ %.2f", disabled=True)
-                
                 colunas_travadas_at["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_at["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
 
                 key_dinamica_at = f"editor_atividades_v{st.session_state['version_ed_at']}"
-                tabela_at = st.data_editor(
-                    df_tab_at,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config=colunas_travadas_at,
-                    key=key_dinamica_at
-                )
+                tabela_at = st.data_editor(df_tab_at, hide_index=True, use_container_width=True, column_config=colunas_travadas_at, key=key_dinamica_at)
 
                 if pode_editar and st.session_state[key_dinamica_at] and "edited_rows" in st.session_state[key_dinamica_at]:
                     for idx_l, alt in st.session_state[key_dinamica_at]["edited_rows"].items():
@@ -996,7 +994,7 @@ elif modo == "📊 Visualizar Base":
                 if not pode_editar:
                     st.info("👁️ **Modo Somente Leitura:** Apenas Administradores e Editores Regionais podem editar Atividades.")
                 elif df_at_sel.empty:
-                    st.caption("💡 *Selecione uma ou mais atividades acima para editar em lote ou excluir.*")
+                    st.caption("💡 *Selecione uma ou mais atividades acima para editar ou excluir.*")
                 else:
                     ids_at_lista = df_at_sel["Id"].astype(str).tolist()
                     qtd_at_sel = len(ids_at_lista)
@@ -1015,7 +1013,9 @@ elif modo == "📊 Visualizar Base":
                             time.sleep(1.5)
                             st.rerun()
 
-                    # Edição Individual de Atividade
+                    # =================================================================
+                    # EDIÇÃO INDIVIDUAL DE ATIVIDADE (1 LINHA)
+                    # =================================================================
                     if qtd_at_sel == 1:
                         reg_at_alvo = df_at_sel.iloc[0]
                         id_at_ref = str(reg_at_alvo["Id"])
@@ -1030,36 +1030,96 @@ elif modo == "📊 Visualizar Base":
 
                         ponto_focal_estado_at, papel_estado_at = obter_ponto_focal_acao(df_atual, val_num_acao_at, uf_acao_at)
 
-                        aba1_at, aba2_at, aba3_at, aba4_at, aba5_at = st.tabs(["1. Identificação & Agrupador", "2. Detalhes & Indicadores", "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Justificativas"])
+                        aba1_at, aba2_at, aba3_at, aba4_at, aba5_at = st.tabs([
+                            "1. Identificação & Agrupador", "2. Detalhes & Indicadores", 
+                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações"
+                        ])
                         
                         with aba1_at:
-                            st.text_input("Ano da Ação", value=str(val_ano_at), disabled=True, key=f"t1_at_ano_{id_at_ref}")
-                            st.text_input("Número da Ação PNAPA", value=val_num_acao_at, disabled=True, key=f"t1_at_num_{id_at_ref}")
-                            st.text_input("Nome da Ação PNAPA", value=val_nome_acao_at, disabled=True, key=f"t1_at_nomepna_{id_at_ref}")
+                            st.text_input("Ano da Ação (Automático)", value=str(val_ano_at), disabled=True, key=f"t1_at_ano_{id_at_ref}")
+                            st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao_at, disabled=True, key=f"t1_at_num_{id_at_ref}")
+                            st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao_at, disabled=True, key=f"t1_at_nomepna_{id_at_ref}")
                             
+                            # 🚀 GESTOR INTELIGENTE DE CÓDIGO (IGUAL À INSERÇÃO)
                             st.markdown("##### 🏷️ Código e Agrupador da Atividade")
                             cod_atv_atual = str(reg_at_alvo.get("Codigo_Atividade", "")).strip().upper()
                             
                             if cod_atv_atual and f"-{uf_acao_at}-" not in cod_atv_atual and "-ATV" in cod_atv_atual:
-                                cod_atv_sug = cod_atv_atual.replace("-ATV", f"-{uf_acao_at}-ATV")
+                                cod_atv_sug_auto = cod_atv_atual.replace("-ATV", f"-{uf_acao_at}-ATV")
                             else:
-                                cod_atv_sug = cod_atv_atual if cod_atv_atual else f"{val_num_acao_at}-{uf_acao_at}-ATV01"
+                                cod_atv_sug_auto = cod_atv_atual if cod_atv_atual else f"{val_num_acao_at}-{uf_acao_at}-ATV01"
 
-                            ed_cod_atv = st.text_input("Código da Atividade/Missão:", value=cod_atv_sug, key=f"t1_cod_atv_txt_{id_at_ref}").strip().upper()
-                            ed_nome_atv = st.text_input("Nome da Atividade / Operação:", value=str(reg_at_alvo.get("Nome da Atividade", "")), key=f"t1_at_nomeatv_{id_at_ref}").strip()
+                            df_atvs_acao_uf = df_atual[
+                                (df_atual["Nível"] == "Atividade") &
+                                (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == str(uf_acao_at).strip().upper()) &
+                                (
+                                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao_at).strip().upper()) |
+                                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao_at).split("-")[0].strip().upper())
+                                ) &
+                                (df_atual["Codigo_Atividade"].astype(str).str.strip() != "")
+                            ]
+
+                            import re
+                            maior_num_atv = 0
+                            for cod_exist in df_atvs_acao_uf["Codigo_Atividade"].dropna().unique():
+                                match = re.search(r'ATV(\d+)', str(cod_exist).upper())
+                                if match:
+                                    num_extraido = int(match.group(1))
+                                    if num_extraido > maior_num_atv:
+                                        maior_num_atv = num_extraido
+
+                            cod_base_acao = val_num_acao_at if "-" in str(val_num_acao_at) else f"{val_num_acao_at}-{val_ano_at}"
+                            prox_num_atv_str = f"ATV{maior_num_atv + 1:02d}"
+                            codigo_novo_gerado = f"{cod_base_acao}-{uf_acao_at}-{prox_num_atv_str}"
+
+                            opcoes_atvs_existentes = []
+                            mapa_dados_atv_existente = {}
+                            for cod_unic in sorted(df_atvs_acao_uf["Codigo_Atividade"].dropna().unique()):
+                                linhas_deste_cod = df_atvs_acao_uf[df_atvs_acao_uf["Codigo_Atividade"] == cod_unic]
+                                nome_deste_cod = str(linhas_deste_cod["Nome da Atividade"].iloc[0]).strip()
+                                label_opc = f"{cod_unic} — {nome_deste_cod}"
+                                opcoes_atvs_existentes.append(label_opc)
+                                mapa_dados_atv_existente[label_opc] = linhas_deste_cod.iloc[0]
+
+                            modo_codigo = st.radio(
+                                "Definição da Atividade:", 
+                                ["✏️ Manter/Editar Código Atual", "➕ Gerar Novo Código Automático", "🔗 Vincular a Outro Existente"],
+                                horizontal=True,
+                                key=f"rad_modo_cod_{id_at_ref}"
+                            )
+
+                            nome_atv_prefill = str(reg_at_alvo.get("Nome da Atividade", "")).strip()
+
+                            if modo_codigo == "✏️ Manter/Editar Código Atual":
+                                ed_cod_atv = st.text_input("Código da Atividade/Missão:", value=cod_atv_sug_auto, key=f"t1_at_cod_{id_at_ref}").strip().upper()
+                            elif modo_codigo == "➕ Gerar Novo Código Automático":
+                                ed_cod_atv = st.text_input("Novo Código Gerado:", value=codigo_novo_gerado, key=f"t1_cod_novo_txt_{id_at_ref}").strip().upper()
+                                st.caption("💡 Código gerado com base no sequencial do estado.")
+                            else:
+                                if not opcoes_atvs_existentes:
+                                    st.warning("⚠️ Nenhuma atividade cadastrada para este estado. Usando o código sugerido.")
+                                    ed_cod_atv = codigo_novo_gerado
+                                else:
+                                    atv_escolhida_lbl = st.selectbox("Selecione a Atividade Existente:", opcoes_atvs_existentes, key=f"t1_sel_exist_{id_at_ref}")
+                                    dados_atv_sel = mapa_dados_atv_existente[atv_escolhida_lbl]
+                                    ed_cod_atv = str(dados_atv_sel["Codigo_Atividade"]).strip().upper()
+                                    nome_atv_prefill = str(dados_atv_sel.get("Nome da Atividade", "")).strip()
+                                    st.success(f"✅ Vinculando à atividade **{ed_cod_atv}**.")
+
+                            ed_nome_atv = st.text_input("Nome da Atividade / Operação:", value=nome_atv_prefill, key=f"t1_at_nomeatv_{id_at_ref}").strip()
                             lista_and_at = ["Prevista", "Concluída"]
                             idx_and_at = lista_and_at.index(reg_at_alvo["Andamento"]) if reg_at_alvo.get("Andamento") in lista_and_at else 0
-                            ed_andamento_at = st.selectbox("Andamento:", lista_and_at, index=idx_and_at, key=f"t1_at_and_{id_at_ref}")
+                            ed_andamento_at = st.selectbox("Andamento da Atividade:", lista_and_at, index=idx_and_at, key=f"t1_at_and_{id_at_ref}")
 
                         with aba2_at:
                             st.text_input("Indicador Oficial", value=val_indicador_at, disabled=True, key=f"t1_at_ind_{id_at_ref}")
-                            ed_res_ind_at = st.text_input("Resultado do Indicador:", value=str(reg_at_alvo.get("Resultado_Indicador", "")), key=f"t1_at_resind_{id_at_ref}")
+                            ed_res_ind_at = st.text_input("Resultado do Indicador (Aferição Real):", value=str(reg_at_alvo.get("Resultado_Indicador", "")), key=f"t1_at_resind_{id_at_ref}")
                             ed_doc_at = st.text_input("Doc_Probatorio_Exec (SEI):", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
-                            st.text_input("UF da Ação", value=uf_acao_at, disabled=True, key=f"t1_at_uf_{id_at_ref}")
-                            st.text_input("Importância", value=importancia_at, disabled=True, key=f"t1_at_imp_{id_at_ref}")
-                            ed_tema_at = st.selectbox("Tema:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_at_alvo["Tema da Atividade"]) if reg_at_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_at_tema_{id_at_ref}")
-                            ed_obj_at = st.selectbox("Objetivo:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(reg_at_alvo["Objetivo da Atividade"]) if reg_at_alvo.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key=f"t1_at_obj_{id_at_ref}")
-                            ed_tipo_at = st.selectbox("Tipo:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo["Tipo de Atividade"]) if reg_at_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
+                            st.text_input("UF da Ação PNAPA", value=uf_acao_at, disabled=True, key=f"t1_at_uf_{id_at_ref}")
+                            st.text_input("Importância da Atividade (Herdada)", value=importancia_at, disabled=True, key=f"t1_at_imp_{id_at_ref}")
+                            ed_tema_at = st.selectbox("Tema da Atividade:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_at_alvo["Tema da Atividade"]) if reg_at_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_at_tema_{id_at_ref}")
+                            ed_obj_at = st.selectbox("Objetivo da Atividade:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(reg_at_alvo["Objetivo da Atividade"]) if reg_at_alvo.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key=f"t1_at_obj_{id_at_ref}")
+                            ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo["Tipo de Atividade"]) if reg_at_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
                             ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo["Periculosidade/Insalubridade"]) if reg_at_alvo.get("Periculosidade/Insalubridade") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
 
                         with aba3_at:
@@ -1088,22 +1148,23 @@ elif modo == "📊 Visualizar Base":
                             else:
                                 ed_uf_srv_at, ed_lot_at, ed_eq_at = uf_acao_at, "Sede Superintendência", "Não"
 
-                            st.text_input("UF do Servidor", value=ed_uf_srv_at, disabled=True, key=f"t1_at_ufsrv_{id_at_ref}")
-                            st.text_input("Lotação", value=ed_lot_at, disabled=True, key=f"t1_at_lot_{id_at_ref}")
-                            st.text_input("Equipe de Emergências?", value=ed_eq_at, disabled=True, key=f"t1_at_eq_{id_at_ref}")
+                            st.text_input("UF do Servidor (Automático)", value=ed_uf_srv_at, disabled=True, key=f"t1_at_ufsrv_{id_at_ref}")
+                            st.text_input("Lotação (Automático)", value=ed_lot_at, disabled=True, key=f"t1_at_lot_{id_at_ref}")
+                            st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=ed_eq_at, disabled=True, key=f"t1_at_eq_{id_at_ref}")
                             ed_pcdp_at = st.text_input("Número da PCDP:", value=str(reg_at_alvo.get("Número da PCDP", "")), key=f"t1_at_pcdp_{id_at_ref}")
                             
-                            st.markdown("<p style='font-weight:bold; color:#03170a;'>Localização</p>", unsafe_allow_html=True)
+                            st.markdown("<p style='font-weight:bold; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
+                            st.text_input("País", value="Brasil", disabled=True, key=f"t1_at_pais_{id_at_ref}")
                             uf_oc_atual = str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "SP"))
                             idx_uf_oc_at = LISTA_UFS_COMPLETA.index(uf_oc_atual) if uf_oc_atual in LISTA_UFS_COMPLETA else 0
-                            ed_uf_oc_at = st.selectbox("UF de Ocorrência:", LISTA_UFS_COMPLETA, index=idx_uf_oc_at, key=f"t1_at_ufoc_{id_at_ref}")
+                            ed_uf_oc_at = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação:", LISTA_UFS_COMPLETA, index=idx_uf_oc_at, key=f"t1_at_ufoc_{id_at_ref}")
                             ed_est_loc_at = MAPEAMENTO_ESTADOS_COMPLETO.get(ed_uf_oc_at, "")
-                            st.text_input("Estado", value=ed_est_loc_at, disabled=True, key=f"t1_at_est_{id_at_ref}")
+                            st.text_input("Estado_Local_Acao (Automático)", value=ed_est_loc_at, disabled=True, key=f"t1_at_est_{id_at_ref}")
                             
                             mun_lista_at = obter_municipios_ibge(ed_uf_oc_at)
                             mun_atual_at = str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
                             idx_mun_at = mun_lista_at.index(mun_atual_at) if mun_atual_at in mun_lista_at else 0
-                            ed_mun_at = st.selectbox("Município:", mun_lista_at if mun_lista_at else ["Superintendência Sede"], index=idx_mun_at, key=f"t1_at_mun_{id_at_ref}_{ed_uf_oc_at}")
+                            ed_mun_at = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação:", mun_lista_at if mun_lista_at else ["Superintendência Sede"], index=idx_mun_at, key=f"t1_at_mun_{id_at_ref}_{ed_uf_oc_at}")
 
                         with aba4_at:
                             val_dti_at = converter_para_data_segura(reg_at_alvo.get("Data de Início"))
@@ -1119,19 +1180,20 @@ elif modo == "📊 Visualizar Base":
                                 
                             ed_orig_at = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(reg_at_alvo["Origem do Recurso"]) if reg_at_alvo.get("Origem do Recurso") in LISTA_ORIGENS_RECURSO else 0, key=f"t1_at_orig_{id_at_ref}")
                             
+                            st.markdown("<p style='font-weight:bold; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
                             c_at_pl, c_at_ex = st.columns(2)
                             with c_at_pl:
                                 st.caption("Planejado")
-                                ed_rp_d_at = st.number_input("Diárias Plan:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Diarias")), step=50.0, format="%.2f", key=f"t1_at_rpd_{id_at_ref}")
-                                ed_rp_p_at = st.number_input("Passagens Plan:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Passagens")), step=50.0, format="%.2f", key=f"t1_at_rpp_{id_at_ref}")
-                                ed_rp_o_at = st.number_input("Outras Plan:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_at_rpo_{id_at_ref}")
-                                st.text_input("Total Plan:", value=f"{(ed_rp_d_at + ed_rp_p_at + ed_rp_o_at):,.2f}", disabled=True, key=f"t1_at_totpl_{id_at_ref}")
+                                ed_rp_d_at = st.number_input("Rec_Plan_Diarias:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Diarias")), step=50.0, format="%.2f", key=f"t1_at_rpd_{id_at_ref}")
+                                ed_rp_p_at = st.number_input("Rec_Plan_Passagens:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Passagens")), step=50.0, format="%.2f", key=f"t1_at_rpp_{id_at_ref}")
+                                ed_rp_o_at = st.number_input("Rec_Plan_Outras_Despesas:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_at_rpo_{id_at_ref}")
+                                st.text_input("Rec_Plan_Total (Soma):", value=f"{(ed_rp_d_at + ed_rp_p_at + ed_rp_o_at):,.2f}", disabled=True, key=f"t1_at_totpl_{id_at_ref}")
                             with c_at_ex:
                                 st.caption("Executado")
-                                ed_re_d_at = st.number_input("Diárias Exec:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Diarias")), step=50.0, format="%.2f", key=f"t1_at_red_{id_at_ref}")
-                                ed_re_p_at = st.number_input("Passagens Exec:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Passagens")), step=50.0, format="%.2f", key=f"t1_at_rep_{id_at_ref}")
-                                ed_re_o_at = st.number_input("Outras Exec:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_at_reo_{id_at_ref}")
-                                st.text_input("Total Exec:", value=f"{(ed_re_d_at + ed_re_p_at + ed_re_o_at):,.2f}", disabled=True, key=f"t1_at_totex_{id_at_ref}")
+                                ed_re_d_at = st.number_input("Rec_Exec_Diarias:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Diarias")), step=50.0, format="%.2f", key=f"t1_at_red_{id_at_ref}")
+                                ed_re_p_at = st.number_input("Rec_Exec_Passagens:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Passagens")), step=50.0, format="%.2f", key=f"t1_at_rep_{id_at_ref}")
+                                ed_re_o_at = st.number_input("Rec_Exec_Outras_Despesas:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_at_reo_{id_at_ref}")
+                                st.text_input("Rec_Exec_Total (Soma):", value=f"{(ed_re_d_at + ed_re_p_at + ed_re_o_at):,.2f}", disabled=True, key=f"t1_at_totex_{id_at_ref}")
 
                         with aba5_at:
                             ed_obs_at = st.text_area("Observações:", value=str(reg_at_alvo.get("Observações", "")), key=f"t1_at_obs_{id_at_ref}")
@@ -1139,107 +1201,180 @@ elif modo == "📊 Visualizar Base":
                         ed_papel_heranca = papel_estado_at if papel_estado_at in LISTA_PAPEIS_INSTITUCIONAIS else ""
 
                         if st.button("💾 Gravar Alterações da Atividade", type="primary", key=f"btn_salvar_at_{id_at_ref}"):
-                            payload_at = payload_gerador(
-                                val_ano_at, val_num_acao_at, val_nome_acao_at, val_indicador_at, "Atividade",
-                                ed_nome_atv, ed_andamento_at, ed_res_ind_at, ed_doc_at, uf_acao_at,
-                                importancia_at, ed_tema_at, ed_obj_at, ed_tipo_at, ed_perigo_at, ed_servidor_at,
-                                ed_uf_srv_at, ed_lot_at, ed_eq_at, ed_pcdp_at, "Brasil", ed_uf_oc_at,
-                                ed_est_loc_at, ed_mun_at, ed_dt_i_at, ed_dt_f_at, ed_dias_pl_at, ed_dias_ex_at,
-                                ed_orig_at, ed_rp_d_at, ed_rp_p_at, ed_rp_o_at, ed_re_d_at,
-                                ed_re_p_at, ed_re_o_at, ed_obs_at, "", id_at_ref, "📝 Editar Linha Existente", df_atual,
-                                papel_institucional=ed_papel_heranca, coordenador_operacao=ed_funcao_campo, meta_indicador="",
-                                codigo_atividade=ed_cod_atv
-                            )
-                            executar_envio_sharepoint([payload_at])
-                            st.session_state["selecoes_atividades"] = {}
-                            st.session_state["version_ed_at"] += 1
-                            st.rerun()
+                            # Validação do Coordenador de Campo
+                            bloqueio_coord = False
+                            if ed_funcao_campo == "Coordenador de Campo":
+                                coordenadores_existentes = df_atual[
+                                    (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                                    (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(ed_cod_atv).strip().upper()) &
+                                    (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo") &
+                                    (df_atual["Id"].astype(str) != id_at_ref)
+                                ]
+                                if not coordenadores_existentes.empty:
+                                    nome_outro = coordenadores_existentes["Servidor"].iloc[0]
+                                    st.error(f"⛔ **Conflito de Liderança:** A atividade `{ed_cod_atv}` já possui **{nome_outro}** como Coordenador de Campo.")
+                                    bloqueio_coord = True
+
+                            if not bloqueio_coord:
+                                payload_at = payload_gerador(
+                                    val_ano_at, val_num_acao_at, val_nome_acao_at, val_indicador_at, "Atividade",
+                                    ed_nome_atv, ed_andamento_at, ed_res_ind_at, ed_doc_at, uf_acao_at,
+                                    importancia_at, ed_tema_at, ed_obj_at, ed_tipo_at, ed_perigo_at, ed_servidor_at,
+                                    ed_uf_srv_at, ed_lot_at, ed_eq_at, ed_pcdp_at, "Brasil", ed_uf_oc_at,
+                                    ed_est_loc_at, ed_mun_at, ed_dt_i_at, ed_dt_f_at, ed_dias_pl_at, ed_dias_ex_at,
+                                    ed_orig_at, ed_rp_d_at, ed_rp_p_at, ed_rp_o_at, ed_re_d_at,
+                                    ed_re_p_at, ed_re_o_at, ed_obs_at, "", id_at_ref, "📝 Editar Linha Existente", df_atual,
+                                    papel_institucional=ed_papel_heranca, coordenador_operacao=ed_funcao_campo, meta_indicador="",
+                                    codigo_atividade=ed_cod_atv
+                                )
+                                executar_envio_sharepoint([payload_at])
+                                st.session_state["selecoes_atividades"] = {}
+                                st.session_state["version_ed_at"] += 1
+                                st.rerun()
 
                     # =================================================================
-                    # NOVO BLOCO DE EDIÇÃO EM  LOTE DE ATIVIDADES
+                    # EDIÇÃO EM LOTE DE ATIVIDADES (CHECKBOX + RESUMO REATIVO)
                     # =================================================================
                     else:
-                        st.warning(f"👥 **Edição em Lote:** {qtd_at_sel} atividades selecionadas. Marque o campo para habilitar a edição e definir o novo valor.")
+                        st.info(f"👥 **Edição em Lote:** {qtd_at_sel} atividades selecionadas. Marque os campos nas abas abaixo para habilitar a edição seletiva em massa.")
                         
-                        # Dicionário para armazenar o que o usuário quer mudar
                         edicoes_lote = {}
                         
-                        with st.form("form_lote_completo_atv"):
-                            l_aba1, l_aba2, l_aba3, l_aba4, l_aba5 = st.tabs([
-                                "1. Identificação", "2. Detalhes", "3. Recursos Humanos", "4. Cronograma & Custos", "5. Observações"
-                            ])
-                    
-                            with l_aba1:
-                                if st.checkbox("Alterar Nome da Atividade?"):
-                                    edicoes_lote["Nome da Atividade"] = st.text_input("Novo Nome:")
-                                if st.checkbox("Alterar Andamento?"):
-                                    edicoes_lote["Andamento"] = st.selectbox("Novo Andamento:", ["Prevista", "Concluída"])
-                                if st.checkbox("Alterar Código da Atividade?"):
-                                    edicoes_lote["Codigo_Atividade"] = st.text_input("Novo Código:").strip().upper()
-                    
-                            with l_aba2:
-                                if st.checkbox("Alterar Resultado do Indicador?"):
-                                    edicoes_lote["Resultado_Indicador"] = st.text_input("Novo Resultado:")
-                                if st.checkbox("Alterar Doc. Probatório (SEI)?"):
-                                    edicoes_lote["Doc_Probatorio_Exec"] = st.text_input("Novo SEI:")
-                                if st.checkbox("Alterar Tema?"):
-                                    edicoes_lote["Tema da Atividade"] = st.selectbox("Novo Tema:", LISTA_TEMAS)
-                                if st.checkbox("Alterar Objetivo?"):
-                                    edicoes_lote["Objetivo da Atividade"] = st.selectbox("Novo Objetivo:", LISTA_OBJETIVOS)
-                                if st.checkbox("Alterar Tipo?"):
-                                    edicoes_lote["Tipo de Atividade"] = st.selectbox("Novo Tipo:", LISTA_TIPOS_ATIVIDADE)
-                                if st.checkbox("Alterar Periculosidade?"):
-                                    edicoes_lote["Periculosidade/Insalubridade"] = st.selectbox("Nova Periculosidade:", LISTA_PERIGOS)
-                    
-                            with l_aba3:
-                                if st.checkbox("Alterar Servidor (RH)?"):
-                                    edicoes_lote["Servidor"] = st.selectbox("Novo Servidor:", lista_nomes_servidores)
-                                if st.checkbox("Alterar Função de Campo?"):
-                                    edicoes_lote["Coordenador_Operacao"] = st.selectbox("Nova Função:", LISTA_FUNCOES_CAMPO)
-                                if st.checkbox("Alterar UF de Ocorrência?"):
-                                    edicoes_lote["UF Onde Ocorreu/Ocorrerá a Ação"] = st.selectbox("Nova UF:", LISTA_UFS_COMPLETA)
-                                if st.checkbox("Alterar Município?"):
-                                    edicoes_lote["Municipio Onde Ocorreu/Ocorrerá a Ação"] = st.text_input("Novo Município:")
-                    
-                            with l_aba4:
-                                if st.checkbox("Alterar Data de Início?"):
-                                    edicoes_lote["Data de Início"] = str(st.date_input("Nova Data de Início:", format="DD/MM/YYYY"))
-                                if st.checkbox("Alterar Data de Término?"):
-                                    edicoes_lote["Data de Término"] = str(st.date_input("Nova Data de Término:", format="DD/MM/YYYY"))
-                                if st.checkbox("Alterar Custos Planejados?"):
-                                    edicoes_lote["Rec_Plan_Diarias"] = st.number_input("Nova Diária Plan:", step=50.0)
-                                    # ... adicione outros campos de custo se desejar
-                    
-                            with l_aba5:
-                                if st.checkbox("Alterar Observações?"):
-                                    edicoes_lote["Observações"] = st.text_area("Novas Observações:")
-                    
-                            # RESUMO ANTES DE GRAVAR
-                            if edicoes_lote:
-                                st.write("### 📝 Resumo das alterações para todas as linhas selecionadas:")
-                                st.json(edicoes_lote)
+                        l_aba1, l_aba2, l_aba3, l_aba4, l_aba5 = st.tabs([
+                            "1. Identificação & Agrupador", "2. Detalhes & Indicadores", 
+                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações"
+                        ])
+
+                        with l_aba1:
+                            if st.checkbox("Alterar Código da Atividade/Missão?", key="chk_cod_lt"):
+                                edicoes_lote["Codigo_Atividade"] = st.text_input("Novo Código:", key="in_cod_lt").strip().upper()
+                            if st.checkbox("Alterar Nome da Atividade / Operação?", key="chk_nome_lt"):
+                                edicoes_lote["Nome da Atividade"] = st.text_input("Novo Nome da Atividade:", key="in_nome_lt").strip()
+                            if st.checkbox("Alterar Andamento?", key="chk_and_lt"):
+                                edicoes_lote["Andamento"] = st.selectbox("Novo Andamento:", ["Prevista", "Concluída"], key="in_and_lt")
+
+                        with l_aba2:
+                            if st.checkbox("Alterar Resultado do Indicador (Aferição Real)?", key="chk_res_lt"):
+                                edicoes_lote["Resultado_Indicador"] = st.text_input("Novo Resultado:", key="in_res_lt").strip()
+                            if st.checkbox("Alterar Doc_Probatorio_Exec (SEI)?", key="chk_doc_lt"):
+                                edicoes_lote["Doc_Probatorio_Exec"] = st.text_input("Novo SEI:", key="in_doc_lt").strip()
+                            if st.checkbox("Alterar Tema da Atividade?", key="chk_tema_lt"):
+                                edicoes_lote["Tema da Atividade"] = st.selectbox("Novo Tema:", LISTA_TEMAS, key="in_tema_lt")
+                            if st.checkbox("Alterar Objetivo da Atividade?", key="chk_obj_lt"):
+                                edicoes_lote["Objetivo da Atividade"] = st.selectbox("Novo Objetivo:", LISTA_OBJETIVOS, key="in_obj_lt")
+                            if st.checkbox("Alterar Tipo de Atividade?", key="chk_tipo_lt"):
+                                edicoes_lote["Tipo de Atividade"] = st.selectbox("Novo Tipo:", LISTA_TIPOS_ATIVIDADE, key="in_tipo_lt")
+                            if st.checkbox("Alterar Periculosidade/Insalubridade?", key="chk_perigo_lt"):
+                                edicoes_lote["Periculosidade/Insalubridade"] = st.selectbox("Nova Periculosidade:", LISTA_PERIGOS, key="in_perigo_lt")
+
+                        with l_aba3:
+                            st.caption("Atenção: Alterar dados de Recursos Humanos aplicará o mesmo valor a todas as linhas selecionadas.")
+                            if st.checkbox("Alterar Servidor Integrante / Responsável?", key="chk_srv_lt"):
+                                lista_todos_srvs = sorted(df_servidores["Servidor"].dropna().unique().tolist())
+                                edicoes_lote["Servidor"] = st.selectbox("Novo Servidor:", lista_todos_srvs, key="in_srv_lt")
+                            if st.checkbox("Alterar Função na Atividade de Campo?", key="chk_func_lt"):
+                                edicoes_lote["Coordenador_Operacao"] = st.selectbox("Nova Função:", LISTA_FUNCOES_CAMPO, key="in_func_lt")
+                            if st.checkbox("Alterar Número da PCDP?", key="chk_pcdp_lt"):
+                                edicoes_lote["Número da PCDP"] = st.text_input("Nova PCDP:", key="in_pcdp_lt").strip()
+                            
+                            st.markdown("##### Geolocalização da Atividade")
+                            if st.checkbox("Alterar Localidade (UF e Município Ocorrência)?", key="chk_loc_lt"):
+                                ed_uf_oc = st.selectbox("Nova UF Onde Ocorreu/Ocorrerá a Ação:", LISTA_UFS_COMPLETA, key="in_ufoc_lt")
+                                edicoes_lote["UF Onde Ocorreu/Ocorrerá a Ação"] = ed_uf_oc
+                                edicoes_lote["Estado_Local_Acao"] = MAPEAMENTO_ESTADOS_COMPLETO.get(ed_uf_oc, "")
+                                mun_lista_lote = obter_municipios_ibge(ed_uf_oc)
+                                edicoes_lote["Municipio Onde Ocorreu/Ocorrerá a Ação"] = st.selectbox("Novo Municipio Onde Ocorreu/Ocorrerá a Ação:", mun_lista_lote if mun_lista_lote else ["Superintendência Sede"], key="in_mun_lt")
+
+                        with l_aba4:
+                            col_ld1, col_ld2 = st.columns(2)
+                            with col_ld1:
+                                if st.checkbox("Alterar Data de Início?", key="chk_dti_lt"):
+                                    edicoes_lote["Data de Início"] = str(st.date_input("Nova Data de Início:", format="DD/MM/YYYY", key="in_dti_lt"))
+                                if st.checkbox("Alterar Data de Término?", key="chk_dtf_lt"):
+                                    edicoes_lote["Data de Término"] = str(st.date_input("Nova Data de Término:", format="DD/MM/YYYY", key="in_dtf_lt"))
+                                if st.checkbox("Alterar Origem do Recurso?", key="chk_orig_lt"):
+                                    edicoes_lote["Origem do Recurso"] = st.selectbox("Nova Origem do Recurso:", LISTA_ORIGENS_RECURSO, key="in_orig_lt")
+                            with col_ld2:
+                                if st.checkbox("Alterar Dias_Gastos_Plan?", key="chk_dpl_lt"):
+                                    edicoes_lote["Dias_Gastos_Plan"] = st.number_input("Novos Dias Gastos Plan:", min_value=0.0, step=0.5, format="%.1f", key="in_dpl_lt")
+                                if st.checkbox("Alterar Dias_Gastos_Exec?", key="chk_dex_lt"):
+                                    edicoes_lote["Dias_Gastos_Exec"] = st.number_input("Novos Dias Gastos Exec:", min_value=0.0, step=0.5, format="%.1f", key="in_dex_lt")
+
+                            st.markdown("##### Valores Orçamentários (Planejado vs Executado)")
+                            col_lpl, col_lex = st.columns(2)
+                            with col_lpl:
+                                if st.checkbox("Alterar Rec_Plan_Diarias?", key="chk_rpd_lt"):
+                                    edicoes_lote["Rec_Plan_Diarias"] = st.number_input("Novo Rec_Plan_Diarias:", min_value=0.0, step=50.0, format="%.2f", key="in_rpd_lt")
+                                if st.checkbox("Alterar Rec_Plan_Passagens?", key="chk_rpp_lt"):
+                                    edicoes_lote["Rec_Plan_Passagens"] = st.number_input("Novo Rec_Plan_Passagens:", min_value=0.0, step=50.0, format="%.2f", key="in_rpp_lt")
+                                if st.checkbox("Alterar Rec_Plan_Outras_Despesas?", key="chk_rpo_lt"):
+                                    edicoes_lote["Rec_Plan_Outras_Despesas"] = st.number_input("Novo Rec_Plan_Outras_Despesas:", min_value=0.0, step=50.0, format="%.2f", key="in_rpo_lt")
+                            with col_lex:
+                                if st.checkbox("Alterar Rec_Exec_Diarias?", key="chk_red_lt"):
+                                    edicoes_lote["Rec_Exec_Diarias"] = st.number_input("Novo Rec_Exec_Diarias:", min_value=0.0, step=50.0, format="%.2f", key="in_red_lt")
+                                if st.checkbox("Alterar Rec_Exec_Passagens?", key="chk_rep_lt"):
+                                    edicoes_lote["Rec_Exec_Passagens"] = st.number_input("Novo Rec_Exec_Passagens:", min_value=0.0, step=50.0, format="%.2f", key="in_rep_lt")
+                                if st.checkbox("Alterar Rec_Exec_Outras_Despesas?", key="chk_reo_lt"):
+                                    edicoes_lote["Rec_Exec_Outras_Despesas"] = st.number_input("Novo Rec_Exec_Outras_Despesas:", min_value=0.0, step=50.0, format="%.2f", key="in_reo_lt")
+
+                        with l_aba5:
+                            if st.checkbox("Alterar Observações?", key="chk_obs_lt"):
+                                edicoes_lote["Observações"] = st.text_area("Novas Observações:", key="in_obs_lt").strip()
+
+                        st.markdown("---")
+                        st.markdown("### 📋 Resumo das Alterações (Serão aplicadas a todas as linhas selecionadas)")
+                        if edicoes_lote:
+                            st.json(edicoes_lote)
+                            
+                            if st.button("🚀 Confirmar e Aplicar Alterações em Massa", type="primary", key="btn_confirm_lote_at"):
+                                payloads_lote = []
+                                bloqueio_lote = False
                                 
-                                if st.form_submit_button("💾 Aplicar alterações em massa", type="primary"):
-                                    payloads_lote = []
+                                # Validação: Se tentar colocar a função de Coordenador em lote e já houver código igual nas linhas
+                                if edicoes_lote.get("Coordenador_Operacao") == "Coordenador de Campo":
+                                    # Verifica se o código da atividade já foi definido no lote ou se estão editando atividades com códigos iguais
+                                    codigos_no_lote = df_at_sel["Codigo_Atividade"].unique()
+                                    if "Codigo_Atividade" in edicoes_lote or len(codigos_no_lote) == 1:
+                                        if qtd_at_sel > 1:
+                                            st.error("⛔ **Conflito de Liderança:** Você não pode definir 'Coordenador de Campo' para múltiplos servidores da mesma atividade em lote. Apenas um servidor pode coordenar a atividade.")
+                                            bloqueio_lote = True
+
+                                if not bloqueio_lote:
                                     for _, row in df_at_sel.iterrows():
-                                        # 1. Pega a linha original
+                                        # Pega os dados originais
                                         p = {col: row[col] for col in df_atual.columns if col in row}
                                         p["Acao"] = "Editar"
                                         p["Id"] = str(row["Id"])
                                         
-                                        # 2. Aplica SOMENTE o que o usuário marcou
+                                        # Aplica APENAS os campos marcados nos checkboxes
                                         p.update(edicoes_lote)
                                         
-                                        # 3. Recalcula totais se custos foram alterados
-                                        if "Rec_Plan_Diarias" in edicoes_lote:
-                                            p["Rec_Plan_Total"] = p["Rec_Plan_Diarias"] + p["Rec_Plan_Passagens"] + p["Rec_Plan_Outras_Despesas"]
-                                            
-                                        payloads_lote.append(p)
+                                        # Trata a atualização de dados herdados do servidor caso o RH tenha sido modificado
+                                        if "Servidor" in edicoes_lote:
+                                            novo_srv = edicoes_lote["Servidor"]
+                                            df_srv_lt = df_servidores[df_servidores["Servidor"] == novo_srv]
+                                            if not df_srv_lt.empty:
+                                                p["UF_Servidor"] = str(df_srv_lt.iloc[0].get("UF_Servidor", ""))
+                                                p["Lotação"] = str(df_srv_lt.iloc[0].get("Lotacao", ""))
+                                                p["Faz parte da Equipe de Emergências"] = str(df_srv_lt.iloc[0].get("Equipe_Emergencias", "Não"))
+                                        
+                                        # Recalcula totais financeiros se algum campo de custo foi marcado
+                                        if any(k in edicoes_lote for k in ["Rec_Plan_Diarias", "Rec_Plan_Passagens", "Rec_Plan_Outras_Despesas"]):
+                                            p["Rec_Plan_Total"] = float(p.get("Rec_Plan_Diarias", 0)) + float(p.get("Rec_Plan_Passagens", 0)) + float(p.get("Rec_Plan_Outras_Despesas", 0))
+                                        
+                                        if any(k in edicoes_lote for k in ["Rec_Exec_Diarias", "Rec_Exec_Passagens", "Rec_Exec_Outras_Despesas"]):
+                                            p["Rec_Exec_Total"] = float(p.get("Rec_Exec_Diarias", 0)) + float(p.get("Rec_Exec_Passagens", 0)) + float(p.get("Rec_Exec_Outras_Despesas", 0))
+                                        
+                                        # Sanitização
+                                        payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p.items()}
+                                        payloads_lote.append(payload_sanit)
                                     
                                     executar_envio_sharepoint(payloads_lote)
+                                    st.session_state["selecoes_atividades"] = {}
+                                    st.session_state["version_ed_at"] += 1
                                     st.rerun()
-                            else:
-                                st.info("Nenhum campo selecionado para edição.")
+                        else:
+                            st.info("💡 Nenhum campo foi marcado para edição. Marque as opções acima para visualizar o resumo e habilitar a gravação.")
 
 # --- TELA 2: FORMULÁRIO DA PLANILHA MACRO (INSERIR NOVA LINHA) ---
 elif modo == "➕ Inserir Nova Linha":
