@@ -252,6 +252,27 @@ def carregar_dados_da_nuvem():
         st.error(f"❌ Erro ao conectar ao Power Automate: {e}")
         return pd.DataFrame(columns=COLUNAS_PNAPA)
 
+def converter_para_data_segura(valor):
+    """Converte com segurança qualquer formato (serial Excel, ISO, string BR) para date."""
+    if pd.isna(valor) or valor is None:
+        return date.today()
+    if isinstance(valor, (datetime, pd.Timestamp)):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    val_str = str(valor).strip()
+    if val_str == "" or val_str.lower() in ["none", "nat", "nan"]:
+        return date.today()
+    # Serial do Excel (ex: 45678)
+    if val_str.replace('.', '', 1).isdigit():
+        try:
+            return pd.to_datetime(int(float(val_str)), unit='D', origin='1899-12-30').date()
+        except:
+            pass
+    # Força o parsing com dia primeiro (Padrão Brasil)
+    dt = pd.to_datetime(val_str, errors='coerce', dayfirst=True)
+    return dt.date() if pd.notna(dt) else date.today()
+
 # Carregamento das tabelas de apoio (Unidades, Servidores e Ações PNAPA)
 @st.cache_data(ttl=60)
 def carregar_bases_vias_power_automate():
@@ -702,10 +723,12 @@ elif modo == "📊 Visualizar Base":
                             ed_tipo_ac = st.selectbox("Tipo:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_ac_alvo["Tipo de Atividade"]) if reg_ac_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_ac_tipo_{id_ac_ref}")
 
                         with aba4_ac:
-                            dt_i_ac = pd.to_datetime(reg_ac_alvo.get("Data de Início"), errors='coerce')
-                            dt_f_ac = pd.to_datetime(reg_ac_alvo.get("Data de Término"), errors='coerce')
-                            ed_dt_i_ac = st.date_input("Data de Início:", value=dt_i_ac.date() if pd.notna(dt_i_ac) else date.today(), key=f"t1_ac_dti_{id_ac_ref}")
-                            ed_dt_f_ac = st.date_input("Data de Término:", value=dt_f_ac.date() if pd.notna(dt_f_ac) else date.today(), key=f"t1_ac_dtf_{id_ac_ref}")
+                            val_dti_ac = converter_para_data_segura(reg_ac_alvo.get("Data de Início"))
+                            val_dtf_ac = converter_para_data_segura(reg_ac_alvo.get("Data de Término"))
+                            
+                            ed_dt_i_ac = st.date_input("Data de Início:", value=val_dti_ac, format="DD/MM/YYYY", key=f"t1_ac_dti_{id_ac_ref}")
+                            ed_dt_f_ac = st.date_input("Data de Término:", value=val_dtf_ac, format="DD/MM/YYYY", key=f"t1_ac_dtf_{id_ac_ref}")
+                            
                             ed_dias_pl_ac = st.number_input("Dias Gastos Plan:", min_value=0.0, value=obter_float_limpo(reg_ac_alvo.get("Dias_Gastos_Plan")), step=0.5, format="%.1f", key=f"t1_ac_dpl_{id_ac_ref}")
                             ed_orig_ac = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(reg_ac_alvo["Origem do Recurso"]) if reg_ac_alvo.get("Origem do Recurso") in LISTA_ORIGENS_RECURSO else 0, key=f"t1_ac_orig_{id_ac_ref}")
                             
@@ -969,10 +992,11 @@ elif modo == "📊 Visualizar Base":
                             ed_mun_at = st.selectbox("Município:", mun_lista_at if mun_lista_at else ["Superintendência Sede"], index=idx_mun_at, key=f"t1_at_mun_{id_at_ref}_{ed_uf_oc_at}")
 
                         with aba4_at:
-                            dt_i_at = pd.to_datetime(reg_at_alvo.get("Data de Início"), errors='coerce')
-                            dt_f_at = pd.to_datetime(reg_at_alvo.get("Data de Término"), errors='coerce')
-                            ed_dt_i_at = st.date_input("Data de Início:", value=dt_i_at.date() if pd.notna(dt_i_at) else date.today(), key=f"t1_at_dti_{id_at_ref}")
-                            ed_dt_f_at = st.date_input("Data de Término:", value=dt_f_at.date() if pd.notna(dt_f_at) else date.today(), key=f"t1_at_dtf_{id_at_ref}")
+                            val_dti_at = converter_para_data_segura(reg_at_alvo.get("Data de Início"))
+                            val_dtf_at = converter_para_data_segura(reg_at_alvo.get("Data de Término"))
+                            
+                            ed_dt_i_at = st.date_input("Data de Início:", value=val_dti_at, format="DD/MM/YYYY", key=f"t1_at_dti_{id_at_ref}")
+                            ed_dt_f_at = st.date_input("Data de Término:", value=val_dtf_at, format="DD/MM/YYYY", key=f"t1_at_dtf_{id_at_ref}")
                             
                             c_at_d1, c_at_d2 = st.columns(2)
                             with c_at_d1:
@@ -1150,8 +1174,8 @@ elif modo == "➕ Inserir Nova Linha":
             tipo_atividade = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE, key="pna_sel_tipo_acao")
 
         with aba4:
-            dt_inicio = st.date_input("Data de Início", value=val_dt_inicio, key="pna_dt_ini_acao")
-            dt_termino = st.date_input("Data de Término", value=val_dt_termino, key="pna_dt_fim_acao")
+            dt_inicio = st.date_input("Data de Início:", value=val_dt_inicio, format="DD/MM/YYYY", key="pna_dt_ini_acao")
+            dt_termino = st.date_input("Data de Término:", value=val_dt_termino, format="DD/MM/YYYY", key="pna_dt_fim_acao")
             dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
             origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, key="pna_orig_acao")
             
@@ -1331,8 +1355,8 @@ elif modo == "➕ Inserir Nova Linha":
             municipio = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação", lista_municipios_uf if lista_municipios_uf else ["Superintendência Sede"], key="atv_sel_municipio")
 
         with aba4:
-            dt_inicio = st.date_input("Data de Início", value=val_dt_inicio, key="atv_dt_ini")
-            dt_termino = st.date_input("Data de Término", value=val_dt_termino, key="atv_dt_fim")
+            dt_inicio = st.date_input("Data de Início:", value=val_dt_inicio, format="DD/MM/YYYY", key="atv_dt_ini")
+            dt_termino = st.date_input("Data de Término:", value=val_dt_termino, format="DD/MM/YYYY", key="atv_dt_fim")
             
             c_d1_ins, c_d2_ins = st.columns(2)
             with c_d1_ins:
