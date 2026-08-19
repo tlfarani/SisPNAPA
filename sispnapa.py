@@ -1473,8 +1473,10 @@ elif modo == "➕ Inserir Nova Linha":
             if "Codigo_Atividade" not in df_atual.columns:
                 df_atual["Codigo_Atividade"] = ""
             
-            df_atvs_acao = df_atual[
+            # 1. Filtra as atividades existentes DAQUELA AÇÃO e DAQUELA UF
+            df_atvs_acao_uf = df_atual[
                 (df_atual["Nível"] == "Atividade") &
+                (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == str(uf_filtro_pna).strip().upper()) &
                 (
                     (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao).strip().upper()) |
                     (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao).split("-")[0].strip().upper())
@@ -1482,18 +1484,20 @@ elif modo == "➕ Inserir Nova Linha":
                 (df_atual["Codigo_Atividade"].astype(str).str.strip() != "")
             ]
             
-            # Localiza o maior ATVxx cadastrado para esta Ação
+            # 2. Localiza o maior número ATVxx usado por ESTA UF para esta ação
             import re
             maior_num_atv = 0
-            for cod_exist in df_atvs_acao["Codigo_Atividade"].dropna().unique():
+            for cod_exist in df_atvs_acao_uf["Codigo_Atividade"].dropna().unique():
                 match = re.search(r'ATV(\d+)', str(cod_exist).upper())
                 if match:
                     num_extraido = int(match.group(1))
                     if num_extraido > maior_num_atv:
                         maior_num_atv = num_extraido
             
+            # 3. Monta o código oficial canônico: CEN001-2026-SP-ATV01
+            cod_base_acao = val_num_acao if "-" in str(val_num_acao) else f"{val_num_acao}-{val_ano}"
             prox_num_atv_str = f"ATV{maior_num_atv + 1:02d}"
-            codigo_novo_sugerido = f"{val_num_acao}-{prox_num_atv_str}"
+            codigo_novo_sugerido = f"{cod_base_acao}-{uf_filtro_pna}-{prox_num_atv_str}"
             
             opcoes_atvs_existentes = []
             mapa_dados_atv_existente = {}
@@ -1653,30 +1657,60 @@ elif modo == "➕ Inserir Nova Linha":
     if btn_enviar_individual:
         bloquear_envio = False
         
-        if nivel_selecionado == "Atividade":
+        # -------------------------------------------------------------
+        # 🔒 1. VALIDAÇÃO DE UNICIDADE DA AÇÃO ESTADUAL (POR ANO E UF)
+        # -------------------------------------------------------------
+        if nivel_selecionado == "Ação":
+            coord_op_final = ""
+            cod_atv_final = ""
+            
+            cod_puro = str(val_num_acao).split("-")[0].strip().upper()
+            cod_comp = str(val_num_acao).strip().upper()
+            uf_limpa = str(uf_filtro_pna).strip().upper()
+            ano_alvo_str = str(val_ano).strip()
+            
+            # Valida se já existe uma Ação com este código, neste mesmo ANO e nesta mesma UF
+            acao_estadual_ja_existe = df_atual[
+                (df_atual["Nível"].astype(str).str.strip() == "Ação") &
+                (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_limpa) &
+                (df_atual["Ano da Ação"].astype(str).str.split('.').str[0].str.strip() == ano_alvo_str) &
+                (
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_comp) |
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == f"{cod_puro}-{ano_alvo_str}") |
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_puro)
+                )
+            ]
+            
+            if not acao_estadual_ja_existe.empty:
+                st.error(f"⛔ **Ação Já Cadastrada:** A UF **{uf_limpa}** já possui planejamento registrado para a Ação **{val_num_acao}** no ano de **{ano_alvo_str}**. Para alterar o Ponto Focal, Papel ou Meta, utilize a tela de **📊 Visualizar Base**.")
+                bloquear_envio = True
+
+        # -------------------------------------------------------------
+        # 🔒 2. VALIDAÇÃO DE LIDERANÇA ÚNICA NA ATIVIDADE DE CAMPO
+        # -------------------------------------------------------------
+        elif nivel_selecionado == "Atividade":
             coord_op_final = funcao_campo
             cod_atv_final = str(codigo_atividade)
             
-            # 🔒 Validação de coordenador único para a mesma atividade
             if funcao_campo == "Coordenador de Campo":
                 coordenadores_existentes = df_atual[
-                    (df_atual["Nível"] == "Atividade") &
+                    (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
                     (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(codigo_atividade).strip().upper()) &
                     (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
                 ]
                 if not coordenadores_existentes.empty:
                     nome_outro_coord = coordenadores_existentes["Servidor"].iloc[0]
-                    st.error(f"⛔ **Conflito de Liderança:** A atividade `{codigo_atividade}` já possui **{nome_outro_coord}** cadastrado como Coordenador de Campo. Uma atividade só pode ter 1 coordenador.")
+                    st.error(f"⛔ **Conflito de Liderança:** A atividade `{codigo_atividade}` já possui **{nome_outro_coord}** cadastrado como Coordenador de Campo. Uma mesma atividade só pode ter 1 coordenador.")
                     bloquear_envio = True
-        else:
-            coord_op_final = ""
-            cod_atv_final = ""
 
+        # -------------------------------------------------------------
+        # 🚀 3. DISPARO DO ENVIO
+        # -------------------------------------------------------------
         if not bloquear_envio:
             payload_unico = payload_gerador(
                 val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
                 nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
-                importancia, tema, objective, tipo_atividade, periculosidade, servidor, 
+                importancia, tema, objetivo, tipo_atividade, periculosidade, servidor, 
                 uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
                 estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
                 origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
