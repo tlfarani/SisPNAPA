@@ -1028,7 +1028,6 @@ elif modo == "📊 Visualizar Base":
                         importancia_at = str(reg_at_alvo.get("Importância da Atividade", "Ordinária"))
                         uf_acao_at = str(reg_at_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
 
-                        # Identifica o Ponto Focal da Ação Pai
                         ponto_focal_estado_at, papel_estado_at = obter_ponto_focal_acao(df_atual, val_num_acao_at, uf_acao_at)
 
                         aba1_at, aba2_at, aba3_at, aba4_at, aba5_at = st.tabs(["1. Identificação & Agrupador", "2. Detalhes & Indicadores", "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Justificativas"])
@@ -1048,7 +1047,6 @@ elif modo == "📊 Visualizar Base":
 
                             ed_cod_atv = st.text_input("Código da Atividade/Missão:", value=cod_atv_sug, key=f"t1_cod_atv_txt_{id_at_ref}").strip().upper()
                             ed_nome_atv = st.text_input("Nome da Atividade / Operação:", value=str(reg_at_alvo.get("Nome da Atividade", "")), key=f"t1_at_nomeatv_{id_at_ref}").strip()
-                            
                             lista_and_at = ["Prevista", "Concluída"]
                             idx_and_at = lista_and_at.index(reg_at_alvo["Andamento"]) if reg_at_alvo.get("Andamento") in lista_and_at else 0
                             ed_andamento_at = st.selectbox("Andamento:", lista_and_at, index=idx_and_at, key=f"t1_at_and_{id_at_ref}")
@@ -1138,7 +1136,6 @@ elif modo == "📊 Visualizar Base":
                         with aba5_at:
                             ed_obs_at = st.text_area("Observações:", value=str(reg_at_alvo.get("Observações", "")), key=f"t1_at_obs_{id_at_ref}")
 
-                        # Herança Automática do Papel da Ação
                         ed_papel_heranca = papel_estado_at if papel_estado_at in LISTA_PAPEIS_INSTITUCIONAIS else ""
 
                         if st.button("💾 Gravar Alterações da Atividade", type="primary", key=f"btn_salvar_at_{id_at_ref}"):
@@ -1158,7 +1155,7 @@ elif modo == "📊 Visualizar Base":
                             st.session_state["version_ed_at"] += 1
                             st.rerun()
 
-                    # Edição em Lote de Atividades
+                    # Edição em Lote
                     else:
                         codigos_unicos = df_at_sel["Codigo_Atividade"].dropna().astype(str).str.strip().str.upper().unique()
                         mesma_atividade = (len(codigos_unicos) == 1 and codigos_unicos[0] != "")
