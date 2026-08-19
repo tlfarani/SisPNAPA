@@ -541,6 +541,44 @@ if modo == "📈 Dashboards Executivos":
             - **Nível 3:** 20+ dias (Esforço intensivo).
             *Recomendação: Coordenadores estaduais devem evitar acumular mais de 2 ações de Nível 3.*
             """)
+
+        import plotly.express as px
+
+        # --- NOVO PAINEL DE MATRIZ DE PRIORIZAÇÃO ---
+        st.markdown("---")
+        st.markdown("### 🎯 Matriz de Priorização (Esforço x Importância)")
+        st.caption("Estratégia de Planejamento: Identifique 'Quick Wins' (Baixo Esforço/Alta Importância) e 'Time Sinks' (Alto Esforço/Baixa Importância).")
+        
+        # Preparação dos dados para a matriz
+        df_matriz = df_atual[df_atual["Nível"] == "Ação"].copy()
+        df_matriz["Dias_Gastos_Plan"] = pd.to_numeric(df_matriz["Dias_Gastos_Plan"], errors='coerce').fillna(0)
+        # Ordena a importância para o eixo Y
+        ordem_importancia = ["Ordinária", "Prioritária", "Estratégica"]
+        
+        # Criando o gráfico
+        fig = px.scatter(
+            df_matriz, 
+            x="Dias_Gastos_Plan", 
+            y="Importância da Atividade", 
+            color="Papel_Institucional",
+            hover_name="Nome da Ação PNAPA",
+            size_max=15,
+            category_orders={"Importância da Atividade": ordem_importancia},
+            title="Distribuição das Ações por Esforço Planejado e Importância Institucional"
+        )
+        
+        # Linhas de referência para os níveis de carga
+        fig.add_vline(x=5, line_dash="dash", line_color="green", annotation_text="Nível 1 Limite")
+        fig.add_vline(x=20, line_dash="dash", line_color="red", annotation_text="Nível 3 Limite")
+        
+        # Customização
+        fig.update_layout(
+            xaxis_title="Dias Totais Planejados (Esforço)",
+            yaxis_title="Importância Institucional",
+            plot_bgcolor="white"
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
             
         st.info("💡 **Espaço para Novos Gráficos:** Novos indicadores analíticos podem ser plugados diretamente nesta página.")
 
