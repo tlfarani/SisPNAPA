@@ -511,114 +511,232 @@ id_atual = ""
 # =================================================================
 
 # --- PÁGINA: DASHBOARDS EXECUTIVOS ---
-if modo == "📈 Dashboards Executivos":
+elif modo == "📈 Dashboards Executivos":
     st.markdown("<h2 style='color: #03170a;'>📈 Painel Executivo & Indicadores Estratégicos</h2>", unsafe_allow_html=True)
     st.caption("Visão consolidada das operações do Plano Nacional de Ação de Emergências Ambientais (PNAPA).")
     
     if df_atual.empty:
         st.info("Aguardando carregamento da base de dados do SharePoint.")
     else:
-        # Cartões de Métricas Principais
-        total_atividades = len(df_atual[df_atual["Nível"] == "Atividade"])
+        import plotly.graph_objects as go
+        import plotly.express as px
+
+        # =====================================================================
+        # 1. PREPARAÇÃO DE DADOS E FILTROS LATERAIS (POPOVERS)
+        # =====================================================================
+        df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
+        
+        # Conversão de Datas e Numéricos para Atividades
+        df_dash_atv["Data_Inicio_DT"] = pd.to_datetime(df_dash_atv["Data de Início"], format='%d/%m/%Y', errors='coerce')
+        df_dash_atv["Data_Fim_DT"] = pd.to_datetime(df_dash_atv["Data de Término"], format='%d/%m/%Y', errors='coerce')
+        df_dash_atv["Mes_Inicio"] = df_dash_atv["Data_Inicio_DT"].dt.month
+        df_dash_atv["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Plan"], errors='coerce').fillna(0)
+        df_dash_atv["Dias_Gastos_Exec"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0)
+        
+        meses_pt = {1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'}
+        df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt)
+
+        # Configuração do Menu Lateral
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🔍 Filtros Interativos (Dashboards)")
+        
+        for k in ["fd_ano", "fd_uf", "fd_lot", "fd_srv", "fd_pna", "fd_tema", "fd_and"]:
+            if k not in st.session_state: st.session_state[k] = "Todos"
+            
+        dts_validas = df_dash_atv["Data_Inicio_DT"].dropna()
+        min_dt = dts_validas.min().date() if not dts_validas.empty else date(2025, 1, 1)
+        max_dt = dts_validas.max().date() if not dts_validas.empty else date(2026, 12, 31)
+        if min_dt >= max_dt: max_dt = min_dt + pd.Timedelta(days=1)
+        if "fd_dt_range" not in st.session_state: st.session_state["fd_dt_range"] = (min_dt, max_dt)
+
+        with st.sidebar.popover("📅 Período Considerado", use_container_width=True):
+            anos_disp = ["Todos"] + sorted([str(int(a)) for a in df_dash_atv["Ano da Ação"].dropna().unique() if str(a).strip().isdigit()], reverse=True)
+            st.session_state["fd_ano"] = st.selectbox("Ano da Ação:", anos_disp, index=anos_disp.index(st.session_state["fd_ano"]) if st.session_state["fd_ano"] in anos_disp else 0)
+            st.session_state["fd_dt_range"] = st.slider("Data de Início:", min_value=min_dt, max_value=max_dt, value=st.session_state["fd_dt_range"], format="DD/MM/YYYY")
+
+        with st.sidebar.popover("🗺️ UF / Lotação / Servidor", use_container_width=True):
+            ufs_disp = ["Todos"] + sorted(df_dash_atv["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
+            st.session_state["fd_uf"] = st.selectbox("UF da Ação:", ufs_disp, index=ufs_disp.index(st.session_state["fd_uf"]) if st.session_state["fd_uf"] in ufs_disp else 0)
+            lot_disp = ["Todos"] + sorted(df_dash_atv["Lotação"].dropna().astype(str).unique().tolist())
+            st.session_state["fd_lot"] = st.selectbox("Lotação:", lot_disp, index=lot_disp.index(st.session_state["fd_lot"]) if st.session_state["fd_lot"] in lot_disp else 0)
+            srvs_disp = ["Todos"] + sorted(df_dash_atv["Servidor"].dropna().astype(str).unique().tolist())
+            st.session_state["fd_srv"] = st.selectbox("Servidor:", srvs_disp, index=srvs_disp.index(st.session_state["fd_srv"]) if st.session_state["fd_srv"] in srvs_disp else 0)
+
+        with st.sidebar.popover("🏷️ Classificação", use_container_width=True):
+            pnas_disp = ["Todos"] + sorted(df_dash_atv["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
+            st.session_state["fd_pna"] = st.selectbox("Ação PNAPA:", pnas_disp, index=pnas_disp.index(st.session_state["fd_pna"]) if st.session_state["fd_pna"] in pnas_disp else 0)
+            temas_disp = ["Todos"] + sorted(df_dash_atv["Tema da Atividade"].dropna().astype(str).unique().tolist())
+            st.session_state["fd_tema"] = st.selectbox("Tema:", temas_disp, index=temas_disp.index(st.session_state["fd_tema"]) if st.session_state["fd_tema"] in temas_disp else 0)
+            ands_disp = ["Todos"] + sorted(df_dash_atv["Andamento"].dropna().astype(str).unique().tolist())
+            st.session_state["fd_and"] = st.selectbox("Status:", ands_disp, index=ands_disp.index(st.session_state["fd_and"]) if st.session_state["fd_and"] in ands_disp else 0)
+
+        if st.sidebar.button("🧹 Limpar Filtros"):
+            for k in ["fd_ano", "fd_uf", "fd_lot", "fd_srv", "fd_pna", "fd_tema", "fd_and"]: st.session_state[k] = "Todos"
+            st.session_state["fd_dt_range"] = (min_dt, max_dt)
+            if "clique_mes" in st.session_state: del st.session_state["clique_mes"]
+            st.rerun()
+
+        # Aplicação dos Filtros
+        df_filt_atv = df_dash_atv.copy()
+        if st.session_state["fd_ano"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Ano da Ação"].astype(str).str.split('.').str[0] == st.session_state["fd_ano"]]
+        if st.session_state["fd_uf"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["UF_Acao_PNAPA"].astype(str) == st.session_state["fd_uf"]]
+        if st.session_state["fd_lot"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Lotação"].astype(str) == st.session_state["fd_lot"]]
+        if st.session_state["fd_srv"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Servidor"].astype(str) == st.session_state["fd_srv"]]
+        if st.session_state["fd_pna"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Número da Ação PNAPA"].astype(str) == st.session_state["fd_pna"]]
+        if st.session_state["fd_tema"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Tema da Atividade"].astype(str) == st.session_state["fd_tema"]]
+        if st.session_state["fd_and"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Andamento"].astype(str) == st.session_state["fd_and"]]
+        
+        ts_ini, ts_fim = pd.to_datetime(st.session_state["fd_dt_range"][0]), pd.to_datetime(st.session_state["fd_dt_range"][1]) + pd.Timedelta(days=1)
+        df_filt_atv = df_filt_atv[df_filt_atv["Data_Inicio_DT"].isna() | ((df_filt_atv["Data_Inicio_DT"] >= ts_ini) & (df_filt_atv["Data_Inicio_DT"] < ts_fim))]
+
+        if "clique_mes" in st.session_state and st.session_state["clique_mes"]:
+            df_filt_atv = df_filt_atv[df_filt_atv["Mes_Nome"] == st.session_state["clique_mes"]]
+            st.warning(f"👆 Filtro cruzado ativo: **Mês de {st.session_state['clique_mes'].capitalize()}**. Use o botão na lateral para limpar.")
+
+        # =====================================================================
+        # 2. CARTÕES GLOBAIS DE MÉTRICAS (VISÃO GERAL DO SISTEMA)
+        # =====================================================================
+        total_atividades = len(df_filt_atv)
         total_acoes = len(df_atual[df_atual["Nível"] == "Ação"])
         
-        rec_plan_total = pd.to_numeric(df_atual["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
-        rec_exec_total = pd.to_numeric(df_atual["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
+        rec_plan_total = pd.to_numeric(df_filt_atv["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
+        rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
         
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        col_m1.metric("📌 Total de Atividades", f"{total_atividades}")
-        col_m2.metric("🎯 Total de Ações", f"{total_acoes}")
-        col_m3.metric("💰 Orçamento Planejado", f"R$ {rec_plan_total:,.2f}")
-        col_m4.metric("💳 Orçamento Executado", f"R$ {rec_exec_total:,.2f}")
+        col_m1.metric("📌 Atividades (Filtradas)", f"{total_atividades}")
+        col_m2.metric("🎯 Total de Ações (Global)", f"{total_acoes}")
+        col_m3.metric("💰 Orçamento Plan. (Filtrado)", f"R$ {rec_plan_total:,.2f}")
+        col_m4.metric("💳 Orçamento Exec. (Filtrado)", f"R$ {rec_exec_total:,.2f}")
         
         st.markdown("---")
+
+        # =====================================================================
+        # 3. PAINEL INTERATIVO ESTILO POWER BI (ATIVIDADES)
+        # =====================================================================
+        st.markdown("### 📊 Acompanhamento de Execução (Atividades de Campo)")
+        col_graf1, col_graf2 = st.columns([1, 1.2])
+        
+        with col_graf1:
+            st.markdown("##### 📅 Esforço Mensal (Plan vs Exec)")
+            df_mensal = df_filt_atv.groupby("Mes_Inicio")[["Dias_Gastos_Plan", "Dias_Gastos_Exec"]].sum().reset_index()
+            df_mensal["Mes_Nome"] = df_mensal["Mes_Inicio"].map(meses_pt)
+            df_mensal = df_mensal.sort_values("Mes_Inicio")
+            
+            fig_bar = go.Figure()
+            fig_bar.add_trace(go.Bar(x=df_mensal["Mes_Nome"], y=df_mensal["Dias_Gastos_Plan"], name='Previstos', marker_color='#a3c1ad', text=df_mensal["Dias_Gastos_Plan"], textposition='outside'))
+            fig_bar.add_trace(go.Bar(x=df_mensal["Mes_Nome"], y=df_mensal["Dias_Gastos_Exec"], name='Executados', marker_color='#4f7942', text=df_mensal["Dias_Gastos_Exec"], textposition='outside'))
+            fig_bar.update_layout(barmode='group', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=10, b=0, l=0, r=0), height=300)
+            
+            try:
+                evento_bar = st.plotly_chart(fig_bar, use_container_width=True, on_select="rerun")
+                if evento_bar and evento_bar.selection and evento_bar.selection.points:
+                    mes_selecionado = evento_bar.selection.points[0]["x"]
+                    if st.session_state.get("clique_mes") != mes_selecionado:
+                        st.session_state["clique_mes"] = mes_selecionado
+                        st.rerun()
+            except:
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+            st.markdown("##### 🍩 Acumulado Global (Dias Totais)")
+            tot_plan = df_filt_atv["Dias_Gastos_Plan"].sum()
+            tot_exec = df_filt_atv["Dias_Gastos_Exec"].sum()
+            falta_executar = tot_plan - tot_exec if tot_plan > tot_exec else 0
+            
+            fig_donut = go.Figure(data=[go.Pie(
+                values=[tot_exec, falta_executar, max(tot_plan, tot_exec)], 
+                marker_colors=['#4f7942', '#e2e8f0', 'rgba(0,0,0,0)'], 
+                hole=0.7, direction='clockwise', sort=False, rotation=90, textinfo='none', hoverinfo='none'
+            )])
+            fig_donut.add_annotation(text=f"<b>{int(tot_exec)}</b>", x=0.5, y=0.4, font_size=40, showarrow=False)
+            fig_donut.add_annotation(text=f"0", x=0.1, y=0.5, font_size=14, showarrow=False)
+            fig_donut.add_annotation(text=f"{int(tot_plan)}", x=0.9, y=0.5, font_size=14, showarrow=False)
+            fig_donut.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=250, showlegend=False, plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_donut, use_container_width=True)
+
+        with col_graf2:
+            st.markdown("##### 🗓️ Calendário de Ocorrências (Gantt)")
+            df_gantt = df_filt_atv.dropna(subset=["Data_Inicio_DT", "Data_Fim_DT"]).copy()
+            if not df_gantt.empty:
+                cor_mapa_gantt = {"Concluída": "#4f7942", "Prevista": "#60a5fa", "Não Iniciada": "#facc15", "Atrasada": "#ef4444"}
+                fig_gantt = px.timeline(df_gantt, x_start="Data_Inicio_DT", x_end="Data_Fim_DT", y="Nome da Atividade", color="Andamento", color_discrete_map=cor_mapa_gantt, hover_name="Servidor")
+                fig_gantt.update_yaxes(autorange="reversed", title_text="", showticklabels=True)
+                fig_gantt.update_xaxes(title_text="")
+                fig_gantt.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=10, b=0, l=0, r=0), height=550)
+                try:
+                    evento_gantt = st.plotly_chart(fig_gantt, use_container_width=True, on_select="rerun")
+                    if evento_gantt and evento_gantt.selection and evento_gantt.selection.points:
+                        idx_gantt = evento_gantt.selection.points[0]["pointIndex"]
+                        nome_atv_sel = df_gantt.iloc[idx_gantt]["Nome da Atividade"]
+                        df_filt_atv = df_filt_atv[df_filt_atv["Nome da Atividade"] == nome_atv_sel]
+                        st.warning(f"👆 Detalhando tabela abaixo para: **{nome_atv_sel}**.")
+                except:
+                    st.plotly_chart(fig_gantt, use_container_width=True)
+            else:
+                st.info("Não há atividades com datas válidas para o período.")
+
+        # Tabela Detalhada Reativa
+        cols_tabela = ["Id", "Data de Início", "Data de Término", "Servidor", "Número da PCDP", "Número da Ação PNAPA", "Nome da Atividade"]
+        df_tabela = df_filt_atv[[c for c in cols_tabela if c in df_filt_atv.columns]].copy()
+        df_tabela = df_tabela.sort_values("Data de Início").reset_index(drop=True)
+        st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+
+        # =====================================================================
+        # 4. GRÁFICOS ORIGINAIS (STATUS E UF) E GOVERNANÇA DE AÇÕES
+        # =====================================================================
+        st.markdown("---")
+        st.markdown("### 🏛️ Visão Estratégica & Governança (Nível Ação)")
         
         col_g1, col_g2 = st.columns(2)
         with col_g1:
-            st.markdown("#### 🔄 Atividades por Andamento")
-            df_and = df_atual["Andamento"].value_counts().reset_index()
+            st.markdown("#### 🔄 Distribuição de Status (Atividades Filtradas)")
+            df_and = df_filt_atv["Andamento"].value_counts().reset_index()
             df_and.columns = ["Andamento", "Quantidade"]
             st.bar_chart(df_and.set_index("Andamento"))
             
         with col_g2:
-            st.markdown("#### 📍 Atividades por UF da Ação")
-            df_uf_cont = df_atual[df_atual["UF_Acao_PNAPA"] != ""]["UF_Acao_PNAPA"].value_counts().reset_index()
+            st.markdown("#### 📍 Concentração por UF (Atividades Filtradas)")
+            df_uf_cont = df_filt_atv[df_filt_atv["UF_Acao_PNAPA"] != ""]["UF_Acao_PNAPA"].value_counts().reset_index()
             df_uf_cont.columns = ["UF", "Quantidade"]
             st.bar_chart(df_uf_cont.set_index("UF"))
 
-        # 🚀 Nova seção de Governança de Carga
-        st.markdown("---")
-        st.markdown("### ⚖️ Governança de Carga de Trabalho (Nível das Ações)")
-        
-        # Aplica a classificação
-        df_dashboard = df_atual[df_atual["Nível"] == "Ação"].copy()
-        df_dashboard["Dias_Gastos_Plan"] = pd.to_numeric(df_dashboard["Dias_Gastos_Plan"], errors='coerce').fillna(0)
-        
-        # 🚀 FORÇANDO A CATEGORIA "Indefinido"
-        df_dashboard["Nivel_Carga"] = df_dashboard["Dias_Gastos_Plan"].apply(classificar_nivel_acao)
+        # Governança de Carga
+        df_dashboard_acao = df_atual[df_atual["Nível"] == "Ação"].copy()
+        df_dashboard_acao["Dias_Gastos_Plan"] = pd.to_numeric(df_dashboard_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0)
+        df_dashboard_acao["Nivel_Carga"] = df_dashboard_acao["Dias_Gastos_Plan"].apply(classificar_nivel_acao)
         ordem_carga = ["Nível 1 (Leve)", "Nível 2 (Médio)", "Nível 3 (Intensivo)", "Indefinido"]
-        df_dashboard["Nivel_Carga"] = pd.Categorical(df_dashboard["Nivel_Carga"], categories=ordem_carga, ordered=True)
+        df_dashboard_acao["Nivel_Carga"] = pd.Categorical(df_dashboard_acao["Nivel_Carga"], categories=ordem_carga, ordered=True)
         
-        # Exibe resumo de carga por coordenador
         col_g3, col_g4 = st.columns(2)
         with col_g3:
-            st.markdown("#### Carga por Coordenador")
-            # Agora garantimos que todas as colunas aparecem, mesmo com valor 0
-            df_carga = df_dashboard.groupby(["Servidor", "Nivel_Carga"], observed=False).size().unstack(fill_value=0)
+            st.markdown("#### ⚖️ Matriz de Sobrecarga por Coordenador (Ações Totais)")
+            df_carga = df_dashboard_acao.groupby(["Servidor", "Nivel_Carga"], observed=False).size().unstack(fill_value=0)
             st.dataframe(df_carga, use_container_width=True)
         
         with col_g4:
             st.info("""
-            **Regra de Planejamento:**
+            **Regra de Planejamento (Ações Estaduais):**
             - **Nível 1:** Até 5 dias (Esforço leve).
             - **Nível 2:** 6 a 19 dias (Esforço médio).
             - **Nível 3:** 20+ dias (Esforço intensivo).
-            *Recomendação: Coordenadores estaduais devem evitar acumular mais de 2 ações de Nível 3.*
+            *Coordenadores estaduais devem evitar acumular mais de 2 ações de Nível 3.*
             """)
         
-        # --- NOVO PAINEL DE MATRIZ DE PRIORIZAÇÃO ---
-        st.markdown("---")
-        st.markdown("### 🎯 Matriz de Priorização (Esforço x Importância)")
-        
+        # Matriz de Priorização
+        st.markdown("#### 🎯 Matriz de Priorização (Esforço x Importância)")
         ordem_importancia = ["Ordinária", "Prioritária", "Estratégica"]
-        
-        # Definindo cores fixas para identificar o "Indefinido" facilmente (Cinza)
-        cor_mapa = {
-            "Coordenação": "#1f77b4", 
-            "Apoio": "#ff7f0e"
-        }
+        cor_mapa = {"Coordenação": "#1f77b4", "Apoio": "#ff7f0e"}
 
-        fig = px.scatter(
-            df_dashboard, 
-            x="Dias_Gastos_Plan", 
-            y="Importância da Atividade", 
-            color="Papel_Institucional",
-            hover_name="Nome da Ação PNAPA",
-            size_max=15,
-            category_orders={
-                "Importância da Atividade": ordem_importancia,
-                "Nivel_Carga": ordem_carga
-            },
-            title="Distribuição das Ações por Esforço Planejado e Importância Institucional"
+        fig_matriz = px.scatter(
+            df_dashboard_acao, x="Dias_Gastos_Plan", y="Importância da Atividade", color="Papel_Institucional",
+            hover_name="Nome da Ação PNAPA", size_max=15,
+            category_orders={"Importância da Atividade": ordem_importancia, "Nivel_Carga": ordem_carga},
+            title="Ações Estaduais: Esforço Planejado vs. Importância Institucional"
         )
-        
-        # Adicionando um destaque visual para a legenda do Nível de Carga (opcional)
-        fig.update_traces(marker=dict(line=dict(width=1, color='DarkSlateGrey')))
-        
-        # Linhas de referência para os níveis de carga
-        fig.add_vline(x=5, line_dash="dash", line_color="green", annotation_text="Nível 1 Limite")
-        fig.add_vline(x=20, line_dash="dash", line_color="red", annotation_text="Nível 3 Limite")
-        
-        # Customização
-        fig.update_layout(
-            xaxis_title="Dias Totais Planejados (Esforço)",
-            yaxis_title="Importância Institucional",
-            plot_bgcolor="white"
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-            
-        st.info("💡 **Espaço para Novos Gráficos:** Novos indicadores analíticos podem ser plugados diretamente nesta página.")
+        fig_matriz.update_traces(marker=dict(line=dict(width=1, color='DarkSlateGrey')))
+        fig_matriz.add_vline(x=5, line_dash="dash", line_color="green", annotation_text="Limite Nível 1")
+        fig_matriz.add_vline(x=20, line_dash="dash", line_color="red", annotation_text="Limite Nível 3")
+        fig_matriz.update_layout(xaxis_title="Dias Totais Planejados", yaxis_title="Importância", plot_bgcolor="white")
+        st.plotly_chart(fig_matriz, use_container_width=True)
 
 # --- TELA 1: VISUALIZAÇÃO E EDIÇÃO EM DUAS SUBPÁGINAS (AÇÕES vs ATIVIDADES) ---
 elif modo == "📊 Visualizar Base":
