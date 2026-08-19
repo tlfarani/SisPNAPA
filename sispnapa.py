@@ -38,6 +38,7 @@ LISTA_PERIGOS = ["Periculosidade", "Insalubridade", "Não se Aplica"]
 LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Ceneac", "Não se aplica", "Outras fontes"]
 LISTA_IMPORTANCIA = ["Ordinária", "Prioritária", "Estratégica"]
 LISTA_PAPEIS_INSTITUCIONAIS = ["Coordenação", "Apoio"]
+LISTA_FUNCOES_CAMPO = ["Coordenador de Campo", "Apoio de Campo"]
 
 LISTA_JUSTIFICATIVAS_ACAO = [
     "Indisponibilidade de meios orçamentários/financeiros para a execução da Ação",
@@ -69,7 +70,7 @@ def obter_municipios_ibge(sigla_uf):
 
 COLUNAS_PNAPA = [
     "Id", "Ano da Ação", "Número da Ação PNAPA", "Nome da Ação PNAPA", "Nível", 
-    "Papel_Institucional", "Coordenador_Operacao",
+    "Codigo_Atividade", "Papel_Institucional", "Coordenador_Operacao",
     "Nome da Atividade", "Andamento", "Indicador", "Meta_Indicador", "Resultado_Indicador", 
     "Doc_Probatorio_Exec", "UF_Acao_PNAPA", "Importância da Atividade", "Tema da Atividade", 
     "Objetivo da Atividade", "Tipo de Atividade", "Periculosidade/Insalubridade", "Servidor", 
@@ -115,7 +116,7 @@ def payload_gerador(
     estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
     origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
     rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual,
-    papel_institucional="", coordenador_operacao="", meta_indicador=""
+    papel_institucional="", coordenador_operacao="", meta_indicador="", codigo_atividade=""
 ):
     if modo == "➕ Inserir Nova Linha":
         id_final = str(int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1)) if not df_atual.empty else "1"
@@ -131,6 +132,7 @@ def payload_gerador(
         "Número da Ação PNAPA": str(val_num_acao),
         "Nome da Ação PNAPA": str(val_nome_acao),
         "Nível": str(nivel_selecionado),
+        "Codigo_Atividade": str(codigo_atividade),
         "Papel_Institucional": str(papel_institucional),
         "Coordenador_Operacao": str(coordenador_operacao),
         "Nome da Atividade": str(nome_atividade),
@@ -925,17 +927,24 @@ elif modo == "📊 Visualizar Base":
                         df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_servidor]
                         lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist()) if not df_servidores_filtrados.empty else [email_logado]
                         
-                        # 🚀 LÍDER DE CAMPO E INTEGRANTE
+                        # 🚀 1. CÓDIGO DA ATIVIDADE NA EDIÇÃO
+                        codigo_atividade = st.text_input(
+                            "Código da Atividade/Missão (Agrupador):", 
+                            value=str(registro_alvo.get("Codigo_Atividade", "")), 
+                            key=f"t1_cod_atv_{id_referencia}"
+                        ).strip().upper()
+
+                        # 🚀 2. SERVIDOR PRIMEIRO, FUNÇÃO DE CAMPO SEGUNDO
                         c_t1_rh1, c_t1_rh2 = st.columns(2)
                         with c_t1_rh1:
-                            coord_op_atual = str(registro_alvo.get("Coordenador_Operacao", "")).strip()
-                            idx_cop = lista_nomes_servidores.index(coord_op_atual) if coord_op_atual in lista_nomes_servidores else 0
-                            coordenador_operacao = st.selectbox("Líder / Coordenador da Atividade em Campo:", lista_nomes_servidores, index=idx_cop, key=f"t1_cop_{id_referencia}")
-                        with c_t1_rh2:
                             srv_alvo = str(registro_alvo.get("Servidor", "")).strip()
                             idx_srv = lista_nomes_servidores.index(srv_alvo) if srv_alvo in lista_nomes_servidores else 0
                             servidor = st.selectbox("Servidor Integrante / Responsável:", lista_nomes_servidores, index=idx_srv, key=f"t1_srv_atv_{id_referencia}")
-                            
+                        with c_t1_rh2:
+                            func_atual = str(registro_alvo.get("Coordenador_Operacao", "Apoio de Campo")).strip()
+                            idx_func = LISTA_FUNCOES_CAMPO.index(func_atual) if func_atual in LISTA_FUNCOES_CAMPO else 1
+                            funcao_campo = st.selectbox("Função na Atividade de Campo:", LISTA_FUNCOES_CAMPO, index=idx_func, key=f"t1_func_campo_{id_referencia}")
+
                         if not df_servidores_filtrados.empty and servidor in df_servidores_filtrados["Servidor"].values:
                             dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
                             uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_servidor))
@@ -1004,8 +1013,11 @@ elif modo == "📊 Visualizar Base":
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # 🚀 BOTÃO DE GRAVAÇÃO ATUALIZADO
+                # 🚀 BOTÃO DE GRAVAÇÃO ATUALIZADO (BLINDADO)
                 if st.button("💾 Gravar Alterações no SharePoint", type="primary", key="btn_salvar_indiv_t1"):
+                    coord_op_envio = "" if nivel_selecionado == "Ação" else funcao_campo
+                    cod_atv_envio = "" if nivel_selecionado == "Ação" else codigo_atividade
+                    
                     payload_unico = payload_gerador(
                         val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
                         nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
@@ -1014,7 +1026,8 @@ elif modo == "📊 Visualizar Base":
                         estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
                         origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
                         rec_e_passagens, rec_e_outras, obs, justificativa, id_referencia, "📝 Editar Linha Existente", df_atual,
-                        papel_institucional=papel_inst, coordenador_operacao=coordenador_operacao, meta_indicador=meta_indicador
+                        papel_institucional=papel_inst, coordenador_operacao=coord_op_envio, meta_indicador=meta_indicador,
+                        codigo_atividade=cod_atv_envio
                     )
                     executar_envio_sharepoint([payload_unico])
                     st.session_state["selecoes_macro"] = {}
@@ -1413,17 +1426,50 @@ elif modo == "➕ Inserir Nova Linha":
             periculosidade = st.selectbox("Periculosidade/Insalubridade", LISTA_PERIGOS, key="atv_sel_perigo")
 
         with aba3:
+            st.markdown("##### 👥 Recursos Humanos & Liderança da Operação")
+            
             uf_filtro_servidor = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
             df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_servidor]
             lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist()) if not df_servidores_filtrados.empty else [email_logado]
             
-            # 🚀 LÍDER DE CAMPO VS SERVIDOR INTEGRANTE
+            # 🚀 1. IDENTIFICAÇÃO DO CÓDIGO DA ATIVIDADE (AGRUPADOR DA MISSÃO)
+            c_cod_atv1, c_cod_atv2 = st.columns([2, 1])
+            with c_cod_atv1:
+                cod_atv_sugerido = f"{val_num_acao}-{uf_filtro_servidor}-ATV01" if val_num_acao else f"ATV-{datetime.now().strftime('%m%d%H%M')}"
+                codigo_atividade = st.text_input(
+                    "Código da Atividade/Missão (Agrupador de Equipe):", 
+                    value=cod_atv_sugerido, 
+                    help="Servidores que participam da mesma operação devem usar o mesmo Código de Atividade.",
+                    key="atv_input_cod_agrupador"
+                ).strip().upper()
+                
+            with c_cod_atv2:
+                # Localiza quem é o Ponto Focal cadastrado na Ação estadual
+                linha_acao_pai = df_atual[
+                    (df_atual["Nível"] == "Ação") & 
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == str(val_num_acao).strip()) &
+                    (df_atual["UF_Acao_PNAPA"].astype(str).str.strip() == str(uf_filtro_servidor).strip())
+                ]
+                ponto_focal_estado = str(linha_acao_pai["Servidor"].iloc[0]).strip() if not linha_acao_pai.empty else ""
+                st.caption(f"👑 **Ponto Focal da Ação em {uf_filtro_servidor}:** `{ponto_focal_estado if ponto_focal_estado else 'Não definido'}`")
+
+            # 🚀 2. SELEÇÃO DO SERVIDOR (PRIMEIRO)
             c_rh1, c_rh2 = st.columns(2)
             with c_rh1:
-                coordenador_operacao = st.selectbox("Líder / Coordenador da Atividade em Campo:", lista_nomes_servidores, key="atv_sel_coord_op")
-            with c_rh2:
                 servidor = st.selectbox("Servidor Integrante / Responsável:", lista_nomes_servidores, key="atv_sel_servidor")
-                
+
+            # 🚀 3. PREENCHIMENTO AUTOMÁTICO DA FUNÇÃO DE CAMPO (SEGUNDO)
+            with c_rh2:
+                # Se for o ponto focal estadual, sugere 'Coordenador de Campo' (idx 0), senão 'Apoio de Campo' (idx 1)
+                idx_funcao_sugerida = 0 if (ponto_focal_estado and servidor == ponto_focal_estado) else 1
+                funcao_campo = st.selectbox(
+                    "Função na Atividade de Campo:", 
+                    LISTA_FUNCOES_CAMPO, 
+                    index=idx_funcao_sugerida, 
+                    key=f"atv_funcao_campo_{servidor}"
+                )
+
+            # Informações funcionais automáticas do servidor selecionado
             if not df_servidores_filtrados.empty and servidor in df_servidores_filtrados["Servidor"].values:
                 dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
                 uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_servidor))
@@ -1489,21 +1535,49 @@ elif modo == "➕ Inserir Nova Linha":
     
     btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", key="btn_gravar_individual_reativo")
 
-    # 1. ENVIO INDIVIDUAL
+    # =================================================================
+    # 1. ENVIO INDIVIDUAL (CORRIGIDO E SEGURO)
+    # =================================================================
     if btn_enviar_individual:
-        payload_unico = payload_gerador(
-            val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
-            nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
-            importancia, tema, objetivo, tipo_atividade, periculosidade, servidor, 
-            uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
-            estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
-            origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
-            rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual,
-            papel_institucional=papel_inst, coordenador_operacao=coordenador_operacao, meta_indicador=meta_indicador
-        )
-        executar_envio_sharepoint([payload_unico])
+        bloquear_envio = False
+        
+        # Define variáveis de forma segura para Ação vs Atividade
+        if nivel_selecionado == "Atividade":
+            coord_op_final = funcao_campo
+            cod_atv_final = str(codigo_atividade)
+            
+            # 🔒 Validação de coordenador único para a mesma atividade
+            if funcao_campo == "Coordenador de Campo":
+                coordenadores_existentes = df_atual[
+                    (df_atual["Nível"] == "Atividade") &
+                    (df_atual["Codigo_Atividade"].astype(str).str.strip() == str(codigo_atividade).strip()) &
+                    (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
+                ]
+                if not coordenadores_existentes.empty:
+                    nome_outro_coord = coordenadores_existentes["Servidor"].iloc[0]
+                    st.error(f"⛔ **Conflito de Liderança:** A atividade `{codigo_atividade}` já possui **{nome_outro_coord}** cadastrado como Coordenador de Campo. Uma atividade só pode ter 1 coordenador.")
+                    bloquear_envio = True
+        else:
+            coord_op_final = ""
+            cod_atv_final = ""
 
+        if not bloquear_envio:
+            payload_unico = payload_gerador(
+                val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
+                nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
+                importancia, tema, objetivo, tipo_atividade, periculosidade, servidor, 
+                uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
+                estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
+                origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
+                rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual,
+                papel_institucional=papel_inst, coordenador_operacao=coord_op_final, meta_indicador=meta_indicador,
+                codigo_atividade=cod_atv_final
+            )
+            executar_envio_sharepoint([payload_unico])
+
+    # =================================================================
     # 2. CARGA EM LOTE (ATIVIDADE)
+    # =================================================================
     if modo == "➕ Inserir Nova Linha" and nivel_selecionado == "Atividade":
         st.markdown("---")
         with st.popover("👥 Deseja cadastrar esta atividade para múltiplos servidores? (Carga em Lote)", use_container_width=True):
@@ -1512,7 +1586,7 @@ elif modo == "➕ Inserir Nova Linha":
             lista_servidores_lote = st.text_area(
                 "Digite os nomes dos Servidores (um por linha):", 
                 value=servidor,
-                help="Cada linha gerará uma atividade idêntica no SharePoint."
+                help="Cada linha gerará uma atividade idêntica no SharePoint com o mesmo Código de Atividade."
             )
             
             servidores_finais = [s.strip() for s in lista_servidores_lote.split("\n") if s.strip()]
@@ -1545,6 +1619,9 @@ elif modo == "➕ Inserir Nova Linha":
                 for idx, serv_lote in enumerate(servidores_finais):
                     id_loop = str(id_base_calculado + idx)
                     
+                    # 🚀 Respeita a função do formulário para o servidor principal e coloca Apoio para os outros
+                    funcao_lote = funcao_campo if serv_lote == servidor else "Apoio de Campo"
+                    
                     p_nome_atv = nome_atividade if espelhar_detalhes else ""
                     p_andamento = andamento if espelhar_detalhes else "Não Iniciada"
                     p_res_ind = resultado_indicador if espelhar_detalhes else ""
@@ -1574,12 +1651,13 @@ elif modo == "➕ Inserir Nova Linha":
                     payload_linha = {
                         "Acao": "Inserir", 
                         "Id": id_loop, 
+                        "Codigo_Atividade": str(codigo_atividade),
                         "Ano da Ação": int(val_ano) if val_ano else 2026,
                         "Número da Ação PNAPA": str(val_num_acao), 
                         "Nome da Ação PNAPA": str(val_nome_acao), 
                         "Nível": nivel_selecionado, 
                         "Papel_Institucional": "Execução",
-                        "Coordenador_Operacao": str(coordenador_operacao),
+                        "Coordenador_Operacao": funcao_lote,
                         "Nome da Atividade": p_nome_atv, 
                         "Andamento": p_andamento,
                         "Indicador": str(val_indicador), 
