@@ -511,7 +511,7 @@ id_atual = ""
 # =================================================================
 
 # --- PÁGINA: DASHBOARDS EXECUTIVOS ---
-elif modo == "📈 Dashboards Executivos":
+if modo == "📈 Dashboards Executivos":
     st.markdown("<h2 style='color: #03170a;'>📈 Painel Executivo & Indicadores Estratégicos</h2>", unsafe_allow_html=True)
     st.caption("Visão consolidada das operações do Plano Nacional de Ação de Emergências Ambientais (PNAPA).")
     
