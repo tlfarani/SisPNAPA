@@ -604,7 +604,13 @@ elif modo == "📊 Visualizar Base":
 
                 cols_ac_validas = [c for c in COLS_TABELA_ACOES if c in df_exib_ac.columns]
                 df_tab_ac = df_exib_ac[cols_ac_validas].copy()
-                df_tab_ac["Id"] = pd.to_numeric(df_tab_ac["Id"], errors='coerce').fillna(0).astype(int)
+                
+                # 🚀 1. CONVERSÃO NUMÉRICA REAL DAS COLUNAS DE AÇÃO:
+                cols_numericas_ac = ["Id", "Meta_Indicador", "Dias_Gastos_Plan", "Rec_Plan_Total"]
+                for c_num in cols_numericas_ac:
+                    if c_num in df_tab_ac.columns:
+                        df_tab_ac[c_num] = pd.to_numeric(df_tab_ac[c_num], errors='coerce')
+                
                 df_tab_ac = df_tab_ac.sort_values(by="Id", ascending=False).reset_index(drop=True)
 
                 if "selecoes_acoes" not in st.session_state: st.session_state["selecoes_acoes"] = {}
@@ -618,14 +624,17 @@ elif modo == "📊 Visualizar Base":
                         st.rerun()
 
                 if pode_editar:
-                    df_tab_ac.insert(0, "Selecionar", [st.session_state["selecoes_acoes"].get(str(row_id), False) for row_id in df_tab_ac["Id"]])
+                    df_tab_ac.insert(0, "Selecionar", [st.session_state["selecoes_acoes"].get(str(int(row_id)), False) if pd.notna(row_id) else False for row_id in df_tab_ac["Id"]])
                     colunas_travadas_ac = {col: st.column_config.Column(disabled=True) for col in df_tab_ac.columns if col != "Selecionar"}
-                    colunas_travadas_ac["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
                 else:
                     colunas_travadas_ac = {col: st.column_config.Column(disabled=True) for col in df_tab_ac.columns}
-                    colunas_travadas_ac["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+
+                # 🚀 2. CONFIGURAÇÃO DE COLUNAS (ORDENAÇÃO NUMÉRICA & CRONOLÓGICA REAL)
+                colunas_travadas_ac["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+                colunas_travadas_ac["Meta_Indicador"] = st.column_config.NumberColumn("Meta da UF", format="%.1f", disabled=True)
+                colunas_travadas_ac["Dias_Gastos_Plan"] = st.column_config.NumberColumn("Dias Plan.", format="%.1f", disabled=True)
+                colunas_travadas_ac["Rec_Plan_Total"] = st.column_config.NumberColumn("Rec. Plan. Total", format="R$ %.2f", disabled=True)
                 
-                # 🚀 Formatação de Data com ordenação cronológica real:
                 colunas_travadas_ac["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_ac["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
 
@@ -834,7 +843,16 @@ elif modo == "📊 Visualizar Base":
 
                 cols_at_validas = [c for c in COLS_TABELA_ATIVIDADES if c in df_exib_at.columns]
                 df_tab_at = df_exib_at[cols_at_validas].copy()
-                df_tab_at["Id"] = pd.to_numeric(df_tab_at["Id"], errors='coerce').fillna(0).astype(int)
+                
+                # 🚀 1. CONVERSÃO NUMÉRICA REAL DAS COLUNAS DE ATIVIDADE:
+                cols_numericas_at = [
+                    "Id", "Resultado_Indicador", "Dias_Gastos_Plan", "Dias_Gastos_Exec", 
+                    "Rec_Plan_Total", "Rec_Exec_Total"
+                ]
+                for c_num in cols_numericas_at:
+                    if c_num in df_tab_at.columns:
+                        df_tab_at[c_num] = pd.to_numeric(df_tab_at[c_num], errors='coerce')
+                
                 df_tab_at = df_tab_at.sort_values(by="Id", ascending=False).reset_index(drop=True)
 
                 if "selecoes_atividades" not in st.session_state: st.session_state["selecoes_atividades"] = {}
@@ -847,14 +865,19 @@ elif modo == "📊 Visualizar Base":
                         st.rerun()
 
                 if pode_editar:
-                    df_tab_at.insert(0, "Selecionar", [st.session_state["selecoes_atividades"].get(str(row_id), False) for row_id in df_tab_at["Id"]])
+                    df_tab_at.insert(0, "Selecionar", [st.session_state["selecoes_atividades"].get(str(int(row_id)), False) if pd.notna(row_id) else False for row_id in df_tab_at["Id"]])
                     colunas_travadas_at = {col: st.column_config.Column(disabled=True) for col in df_tab_at.columns if col != "Selecionar"}
-                    colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
                 else:
                     colunas_travadas_at = {col: st.column_config.Column(disabled=True) for col in df_tab_at.columns}
-                    colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+
+                # 🚀 2. CONFIGURAÇÃO DE COLUNAS (ORDENAÇÃO NUMÉRICA & CRONOLÓGICA REAL)
+                colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+                colunas_travadas_at["Resultado_Indicador"] = st.column_config.NumberColumn("Resultado Indicador", format="%.1f", disabled=True)
+                colunas_travadas_at["Dias_Gastos_Plan"] = st.column_config.NumberColumn("Dias Plan.", format="%.1f", disabled=True)
+                colunas_travadas_at["Dias_Gastos_Exec"] = st.column_config.NumberColumn("Dias Exec.", format="%.1f", disabled=True)
+                colunas_travadas_at["Rec_Plan_Total"] = st.column_config.NumberColumn("Rec. Plan. Total", format="R$ %.2f", disabled=True)
+                colunas_travadas_at["Rec_Exec_Total"] = st.column_config.NumberColumn("Rec. Exec. Total", format="R$ %.2f", disabled=True)
                 
-                # 🚀 Formatação de Data com ordenação cronológica real:
                 colunas_travadas_at["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_at["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
 
