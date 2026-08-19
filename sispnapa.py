@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import time
 from datetime import date, datetime
+import plotly.express as px
 
 st.set_page_config(page_title="SisPNAPA - Emergências Ambientais e Climáticas", layout="wide")
 
@@ -541,9 +542,7 @@ if modo == "📈 Dashboards Executivos":
             - **Nível 3:** 20+ dias (Esforço intensivo).
             *Recomendação: Coordenadores estaduais devem evitar acumular mais de 2 ações de Nível 3.*
             """)
-
-        import plotly.express as px
-
+        
         # --- NOVO PAINEL DE MATRIZ DE PRIORIZAÇÃO ---
         st.markdown("---")
         st.markdown("### 🎯 Matriz de Priorização (Esforço x Importância)")
