@@ -1081,7 +1081,7 @@ elif modo == "📊 Visualizar Base":
                         justificativa = ""
                         st.info("ℹ️ Campo Justificativa ocultado. Regra aplicada: Habilitado apenas para cadastro de Ações.")
 
-                    papel_inst = "Execução"
+                    papel_inst = papel_estado_acao if papel_estado_acao in LISTA_PAPEIS_INSTITUCIONAIS else ""
                     meta_indicador = ""
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -1654,7 +1654,7 @@ elif modo == "➕ Inserir Nova Linha":
             justificativa = ""
             st.info("ℹ️ Campo Justificativa ocultado. Regra aplicada: Habilitado apenas para cadastro de Ações.")
 
-        papel_inst = "Execução"
+        papel_inst = papel_estado_acao if papel_estado_acao in LISTA_PAPEIS_INSTITUCIONAIS else ""
         meta_indicador = ""
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -1806,7 +1806,7 @@ elif modo == "➕ Inserir Nova Linha":
                         "Número da Ação PNAPA": str(val_num_acao), 
                         "Nome da Ação PNAPA": str(val_nome_acao), 
                         "Nível": nivel_selecionado, 
-                        "Papel_Institucional": "Execução",
+                        "Papel_Institucional": papel_inst,
                         "Coordenador_Operacao": funcao_lote,
                         "Nome da Atividade": p_nome_atv, 
                         "Andamento": p_andamento,
