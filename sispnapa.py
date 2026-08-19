@@ -36,6 +36,7 @@ LISTA_OBJETIVOS = ["Atendimento a Acidentes", "Prevenção e Gestão de Riscos",
 LISTA_TIPOS_ATIVIDADE = ["Capacitação", "Coleta de Amostras", "Desenvolvimento de Ferramentas", "Documentos de Análise", "Elaboração de Normativas", "Fiscalização", "Operação", "Outros tipos", "Reunião", "Simulados", "Vistoria"]
 LISTA_PERIGOS = ["Periculosidade", "Insalubridade", "Não se Aplica"]
 LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Ceneac", "Não se aplica", "Outras fontes"]
+LISTA_IMPORTANCIA = ["Ordinária", "Prioritária", "Estratégica"]
 
 LISTA_JUSTIFICATIVAS_ACAO = [
     "Indisponibilidade de meios orçamentários/financeiros para a execução da Ação",
@@ -780,8 +781,7 @@ elif modo == "📊 Visualizar Base":
                         apelido_ind = str(dados_aux_linha.get("Nome_Acao_Apelido", "")).strip()
                         val_nome_acao = apelido_ind if apelido_ind and apelido_ind.lower() != "nan" else str(dados_aux_linha.get("Nome_Acao_Completo", "")).strip()
                         val_indicador = str(dados_aux_linha["Indicador"])
-                        val_importancia_raw = str(dados_aux_linha.get("Importância", "Ordinária"))
-                        importancia = "Alta" if val_importancia_raw == "Estratégica" else ("Baixa" if val_importancia_raw == "Ordinária" else "Média")
+                        importancia = str(dados_aux_linha.get("Importância", "Ordinária")).strip()
                         
                         st.success(f"✅ Dados Vinculados: Código {val_num_acao} | {val_nome_acao[:60]}...")
                     else:
@@ -1021,8 +1021,7 @@ elif modo == "📊 Visualizar Base":
                             
                             val_ind_lt = str(dados_aux_lt["Indicador"])
                             
-                            val_imp_raw_lt = str(dados_aux_lt.get("Importância", "Ordinária"))
-                            val_imp_lt = "Alta" if val_imp_raw_lt == "Estratégica" else ("Baixa" if val_imp_raw_lt == "Ordinária" else "Média")
+                            val_imp_lt = str(dados_aux_lt.get("Importância", "Ordinária")).strip()
                             
                             st.success(f"✅ Dados Vinculados: Código {val_num_acao_lt} | {val_nome_acao_lt[:60]}...")
                         else:
@@ -1263,13 +1262,7 @@ elif modo == "➕ Inserir Nova Linha":
     # CONDICIONAL VISUAL: SE FOR AÇÃO
     # =================================================================
     if nivel_selecionado == "Ação":
-        val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária")) if 'dados_aux_linha' in locals() else "Ordinária"
-        if val_importancia_automatica == "Ordinária":
-            importancia = "Baixa"
-        elif val_importancia_automatica == "Estratégica":
-            importancia = "Alta"
-        else:
-            importancia = "Média"
+        importancia = str(dados_aux_linha.get("Importância", "Ordinária")).strip() if 'dados_aux_linha' in locals() else "Ordinária"
 
         aba1, aba2, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "4. Cronograma & Custos", "5. Justificativas"])
         
@@ -1349,8 +1342,7 @@ elif modo == "➕ Inserir Nova Linha":
             doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI)", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "", key="atv_doc_sei")
             uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
             
-            val_importancia_automatica = str(dados_aux_linha.get("Importância", "Ordinária")) if 'dados_aux_linha' in locals() else "Ordinária"
-            importancia = "Alta" if val_importancia_automatica == "Estratégica" else ("Baixa" if val_importancia_automatica == "Ordinária" else "Média")
+            importancia = str(dados_aux_linha.get("Importância", "Ordinária")).strip() if 'dados_aux_linha' in locals() else "Ordinária"
             st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
             
             tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="atv_sel_tema")
@@ -2145,7 +2137,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             with c_ind:
                 novo_indicador = st.text_input("Indicador Associado:", key="cad_pna_ind").strip()
             with c_imp:
-                nova_importancia = st.selectbox("Importância Padrão:", ["Ordinária", "Estratégica"], key="cad_pna_imp")
+                nova_importancia = st.selectbox("Importância Padrão:", LISTA_IMPORTANCIA, index=0, key="cad_pna_imp")
                 
             if st.button("🚀 Gravar Nova Ação no Catálogo", type="primary", key="btn_gravar_nova_acao_pna"):
                 if not novo_num_pna or not novo_nome_comp:
@@ -2183,12 +2175,11 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             st.error(f"❌ Erro de conexão: {e}")
 
         # =================================================================
-        # ABA 2: EDITAR AÇÃO EXISTENTE (REATIVO E CASCATA COMPLETA)
+        # ABA 2: EDITAR AÇÃO EXISTENTE (REATIVO E CASCATA DIRETA)
         # =================================================================
         with tab_edt_pna:
             st.markdown("##### 📝 Atualizar Dados de Ação PNAPA")
             if not df_pnapas.empty:
-                # 1. Lista de seleção
                 lista_acoes_edt = sorted((df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist())
                 acao_edt_sel = st.selectbox("Selecione a Ação para visualizar/alterar:", lista_acoes_edt, key="edt_pna_sel")
                 
@@ -2198,7 +2189,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 id_col_nome = "ID_PNAPA" if "ID_PNAPA" in dados_alvo_edt else "Id"
                 id_pna_edit = int(float(dados_alvo_edt[id_col_nome]))
                 
-                # Valores atuais brutos
                 val_atual_ano = int(dados_alvo_edt.get("Ano", 2026))
                 val_atual_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip().upper()
                 val_atual_comp = str(dados_alvo_edt.get("Nome_Acao_Completo", "")).strip()
@@ -2209,7 +2199,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 st.markdown(f"#### 🗂️ Ficha da Ação: **{cod_alvo_edt}** `(ID: {id_pna_edit})`")
                 st.caption("Modificações nesta ação serão refletidas em cascata em todas as atividades vinculadas na base principal.")
 
-                # Campos com chaves dinâmicas atreladas ao ID
                 c_e_ano, c_e_num = st.columns(2)
                 with c_e_ano:
                     e_ano = st.number_input(
@@ -2247,10 +2236,14 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         key=f"edt_pna_ind_{id_pna_edit}"
                     ).strip()
                 with c_e_imp:
-                    idx_imp = 1 if val_atual_imp == "Estratégica" else 0
+                    try:
+                        idx_imp = LISTA_IMPORTANCIA.index(val_atual_imp)
+                    except ValueError:
+                        idx_imp = 0
+                    
                     e_imp = st.selectbox(
                         "Importância Padrão:", 
-                        ["Ordinária", "Estratégica"], 
+                        LISTA_IMPORTANCIA, 
                         index=idx_imp, 
                         key=f"edt_pna_imp_{id_pna_edit}"
                     )
@@ -2266,7 +2259,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     else:
                         nova_chave_acao_ano = f"{e_num}-{e_ano}"
                         novo_nome_display = e_apelido if e_apelido else e_comp
-                        nova_imp_macro = "Alta" if e_imp == "Estratégica" else ("Baixa" if e_imp == "Ordinária" else "Média")
 
                         # 1. Atualiza o Catálogo de Ações no SharePoint
                         payload_edt = {
@@ -2307,12 +2299,12 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                                     p_item["Acao"] = "Editar"
                                     p_item["Id"] = str(row_orig["Id"])
                                     
-                                    # 🚀 Atualiza metadados da Ação na linha macro
+                                    # 🚀 Atualiza metadados oficiais da Ação na linha macro
                                     p_item["Ano da Ação"] = int(e_ano)
                                     p_item["Número da Ação PNAPA"] = str(nova_chave_acao_ano)
                                     p_item["Nome da Ação PNAPA"] = str(novo_nome_display)
                                     p_item["Indicador"] = str(e_ind)
-                                    p_item["Importância da Atividade"] = str(nova_imp_macro)
+                                    p_item["Importância da Atividade"] = str(e_imp)  # <- Gravação direta
                                     
                                     payload_sanit = {
                                         k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) 
@@ -2339,7 +2331,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
 
                         msg_sucesso = f"🎉 Ação **{nova_chave_acao_ano}** atualizada com sucesso!"
                         if qtd_macro_afetadas > 0:
-                            msg_sucesso += f" ({sucessos_macro}/{qtd_macro_afetadas} atividades/ações na base principal migradas em cascata)."
+                            msg_sucesso += f" ({sucessos_macro}/{qtd_macro_afetadas} atividades sincronizadas em cascata)."
                         st.success(msg_sucesso)
                         
                         time.sleep(1.5)
@@ -2359,7 +2351,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 id_col_del = "ID_PNAPA" if "ID_PNAPA" in dados_alvo_del else "Id"
                 id_pna_del = int(float(dados_alvo_del[id_col_del]))
                 
-                # Verificação de dependências na Planilha Principal
                 linhas_dependentes = df_atual[
                     (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_alvo_del) |
                     (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == str(dados_alvo_del.get("Num_Acao_PNAPA", "")).strip())
