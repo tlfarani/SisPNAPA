@@ -282,7 +282,10 @@ if "df" not in st.session_state:
 
 df_atual = st.session_state.df
 
-# [O restante do seu arquivo de controle visual (CSS, SSO, Menus, Telas 1 a 7) continua exatamente igual]
+# 🛡️ BLINDAGEM CONTRA KEYERROR: Garante que todas as colunas oficiais existam no DataFrame
+for col_oficial in COLUNAS_PNAPA:
+    if col_oficial not in df_atual.columns:
+        df_atual[col_oficial] = ""
 
 # =================================================================
 # III. DESIGN & CSS: BLINDAGEM DE INTERFACE CORPORATIVA
@@ -1417,10 +1420,13 @@ elif modo == "➕ Inserir Nova Linha":
             st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
             st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
             
-            # 🚀 GESTOR INTELIGENTE DE CÓDIGO DA ATIVIDADE
+            # 🚀 GESTOR INTELIGENTE DE CÓDIGO DA ATIVIDADE (BLINDADO)
             st.markdown("##### 🏷️ Código e Agrupador da Atividade")
             
-            # Localiza atividades existentes para esta Ação
+            # Garante que Codigo_Atividade existe antes de filtrar
+            if "Codigo_Atividade" not in df_atual.columns:
+                df_atual["Codigo_Atividade"] = ""
+            
             df_atvs_acao = df_atual[
                 (df_atual["Nível"] == "Atividade") &
                 (
