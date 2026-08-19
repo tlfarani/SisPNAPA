@@ -34,7 +34,7 @@ MAPEAMENTO_ESTADOS_COMPLETO = {
 LISTA_TEMAS = ["Dutos", "Emergências Climáticas", "Fauna", "Ferrovias", "Nuclear", "Outros temas", "Planejamento", "Plataformas", "Portos", "Rodovias", "SCI"]
 LISTA_OBJETIVOS = ["Atendimento a Acidentes", "Prevenção e Gestão de Riscos", "Preparação"]
 LISTA_TIPOS_ATIVIDADE = ["Capacitação", "Coleta de Amostras", "Desenvolvimento de Ferramentas", "Documentos de Análise", "Elaboração de Normativas", "Fiscalização", "Operação", "Outros tipos", "Reunião", "Simulados", "Vistoria"]
-LISTA_PERIGOS = ["Periculosidade", "Insalubridade", "Não se Aplica"]
+LISTA_PERIGOS = ["Não se Aplica", "Periculosidade", "Insalubridade"]
 LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Ceneac", "Não se aplica", "Outras fontes"]
 LISTA_IMPORTANCIA = ["Ordinária", "Prioritária", "Estratégica"]
 LISTA_PAPEIS_INSTITUCIONAIS = ["Coordenação", "Apoio"]
@@ -111,7 +111,7 @@ def executar_envio_sharepoint(lista_payloads):
 def payload_gerador(
     val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
     nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
-    importancia, tema, objectivo, tipo_atividade, periculosidade, servidor, 
+    importancia, tema, objetivo, tipo_atividade, periculosidade, servidor, 
     uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
     estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
     origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
@@ -144,7 +144,7 @@ def payload_gerador(
         "UF_Acao_PNAPA": str(uf_acao),
         "Importância da Atividade": str(importancia),
         "Tema da Atividade": str(tema),
-        "Objetivo da Atividade": str(objectivo),
+        "Objetivo da Atividade": str(objetivo),
         "Tipo de Atividade": str(tipo_atividade),
         "Periculosidade/Insalubridade": str(periculosidade),
         "Servidor": str(servidor),
@@ -1094,7 +1094,7 @@ elif modo == "📊 Visualizar Base":
                     payload_unico = payload_gerador(
                         val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
                         nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
-                        importancia, tema, objectivo, tipo_atividade, periculosidade, servidor, 
+                        importancia, tema, objetivo, tipo_atividade, periculosidade, servidor, 
                         uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
                         estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
                         origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
