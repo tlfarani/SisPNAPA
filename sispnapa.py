@@ -1031,7 +1031,7 @@ elif modo == "📊 Visualizar Base":
                         # Identifica o Ponto Focal da Ação Pai
                         ponto_focal_estado_at, papel_estado_at = obter_ponto_focal_acao(df_atual, val_num_acao_at, uf_acao_at)
 
-                        aba1_at, aba2_at, aba3_at, aba4_at, aba5_at = st.tabs(["1. Identificação & Agrupador", "2. Detalhes & Indicadores", "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações"])
+                        aba1_at, aba2_at, aba3_at, aba4_at, aba5_at = st.tabs(["1. Identificação & Agrupador", "2. Detalhes & Indicadores", "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Justificativas"])
                         
                         with aba1_at:
                             st.text_input("Ano da Ação", value=str(val_ano_at), disabled=True, key=f"t1_at_ano_{id_at_ref}")
@@ -1041,13 +1041,12 @@ elif modo == "📊 Visualizar Base":
                             st.markdown("##### 🏷️ Código e Agrupador da Atividade")
                             cod_atv_atual = str(reg_at_alvo.get("Codigo_Atividade", "")).strip().upper()
                             
-                            # Auto-correção para incluir UF
                             if cod_atv_atual and f"-{uf_acao_at}-" not in cod_atv_atual and "-ATV" in cod_atv_atual:
                                 cod_atv_sug = cod_atv_atual.replace("-ATV", f"-{uf_acao_at}-ATV")
                             else:
                                 cod_atv_sug = cod_atv_atual if cod_atv_atual else f"{val_num_acao_at}-{uf_acao_at}-ATV01"
 
-                            ed_cod_atv = st.text_input("Código da Atividade/Missão:", value=cod_atv_sug, key=f"t1_at_cod_{id_at_ref}").strip().upper()
+                            ed_cod_atv = st.text_input("Código da Atividade/Missão:", value=cod_atv_sug, key=f"t1_cod_atv_txt_{id_at_ref}").strip().upper()
                             ed_nome_atv = st.text_input("Nome da Atividade / Operação:", value=str(reg_at_alvo.get("Nome da Atividade", "")), key=f"t1_at_nomeatv_{id_at_ref}").strip()
                             
                             lista_and_at = ["Prevista", "Concluída"]
@@ -1067,13 +1066,13 @@ elif modo == "📊 Visualizar Base":
 
                         with aba3_at:
                             df_srv_at = df_servidores[df_servidores["UF_Servidor"] == uf_acao_at]
-                            srvs_at_lista = sorted(df_srv_at["Servidor"].dropna().unique().tolist()) if not df_srv_at.empty else [email_logado]
+                            lista_nomes_servidores = sorted(df_srv_at["Servidor"].dropna().unique().tolist()) if not df_srv_at.empty else [email_logado]
                             
                             c_at_rh1, c_at_rh2 = st.columns(2)
                             with c_at_rh1:
                                 srv_atual_at = str(reg_at_alvo.get("Servidor", "")).strip()
-                                idx_srv_at = srvs_at_lista.index(srv_atual_at) if srv_atual_at in srvs_at_lista else 0
-                                ed_servidor_at = st.selectbox("Servidor Integrante / Responsável:", srvs_at_lista, index=idx_srv_at, key=f"t1_at_srv_{id_at_ref}")
+                                idx_srv_at = lista_nomes_servidores.index(srv_atual_at) if srv_atual_at in lista_nomes_servidores else 0
+                                ed_servidor_at = st.selectbox("Servidor Integrante / Responsável:", lista_nomes_servidores, index=idx_srv_at, key=f"t1_at_srv_{id_at_ref}")
                             with c_at_rh2:
                                 func_salva_at = str(reg_at_alvo.get("Coordenador_Operacao", "")).strip()
                                 if func_salva_at in LISTA_FUNCOES_CAMPO:
@@ -1111,7 +1110,6 @@ elif modo == "📊 Visualizar Base":
                         with aba4_at:
                             val_dti_at = converter_para_data_segura(reg_at_alvo.get("Data de Início"))
                             val_dtf_at = converter_para_data_segura(reg_at_alvo.get("Data de Término"))
-                            
                             ed_dt_i_at = st.date_input("Data de Início:", value=val_dti_at, format="DD/MM/YYYY", key=f"t1_at_dti_{id_at_ref}")
                             ed_dt_f_at = st.date_input("Data de Término:", value=val_dtf_at, format="DD/MM/YYYY", key=f"t1_at_dtf_{id_at_ref}")
                             
@@ -1160,20 +1158,14 @@ elif modo == "📊 Visualizar Base":
                             st.session_state["version_ed_at"] += 1
                             st.rerun()
 
-                    # =================================================================
-                    # EDIÇÃO EM LOTE: MULTIPLAS ATIVIDADES
-                    # =================================================================
+                    # Edição em Lote de Atividades
                     else:
-                        # Verifica se todas as atividades selecionadas possuem o mesmo código
                         codigos_unicos = df_at_sel["Codigo_Atividade"].dropna().astype(str).str.strip().str.upper().unique()
                         mesma_atividade = (len(codigos_unicos) == 1 and codigos_unicos[0] != "")
-    
+
                         if mesma_atividade:
                             st.warning(f"👥 **Edição em Lote:** Todas as {qtd_at_sel} atividades compartilham o código `{codigos_unicos[0]}`. Você pode editar os dados da operação, exceto Recursos Humanos.")
-                            
                             ref_lote = df_at_sel.iloc[0]
-                            
-                            # --- FORMULÁRIO DE LOTE (SEM RH) ---
                             with st.form("form_lote_atv"):
                                 c_l1, c_l2 = st.columns(2)
                                 with c_l1:
@@ -1182,7 +1174,6 @@ elif modo == "📊 Visualizar Base":
                                 with c_l2:
                                     ed_tema_lote = st.selectbox("Tema:", LISTA_TEMAS, index=LISTA_TEMAS.index(ref_lote["Tema da Atividade"]) if ref_lote.get("Tema da Atividade") in LISTA_TEMAS else 0)
                                     ed_obj_lote = st.selectbox("Objetivo:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(ref_lote["Objetivo da Atividade"]) if ref_lote.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0)
-    
                                 if st.form_submit_button("💾 Atualizar Todas as Atividades do Grupo"):
                                     payloads_lote = []
                                     for _, row in df_at_sel.iterrows():
@@ -1196,26 +1187,21 @@ elif modo == "📊 Visualizar Base":
                                         payloads_lote.append(p)
                                     executar_envio_sharepoint(payloads_lote)
                                     st.rerun()
-
-                    else:
-                        st.warning(f"ℹ️ **Edição Restrita:** As {qtd_at_sel} atividades possuem códigos diferentes. Apenas o status pode ser alterado em massa.")
-                        
-                        novo_and_lote = st.selectbox("Alterar Andamento para TODOS:", ["Prevista", "Concluída"], key="lt_at_and")
-                        
-                        if st.button(f"💾 Atualizar Andamento de {qtd_at_sel} Atividades", type="primary", key="btn_salvar_lote_at"):
-                            payloads_lote_at = []
-                            for _, row_orig in df_at_sel.iterrows():
-                                p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
-                                p_item["Acao"] = "Editar"
-                                p_item["Id"] = str(row_orig["Id"])
-                                p_item["Andamento"] = str(novo_and_lote)
-                                payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
-                                payloads_lote_at.append(payload_sanit)
-                            
-                            executar_envio_sharepoint(payloads_lote_at)
-                            st.session_state["selecoes_atividades"] = {}
-                            st.session_state["version_ed_at"] += 1
-                            st.rerun()
+                        else:
+                            st.warning(f"ℹ️ **Edição Restrita:** As {qtd_at_sel} atividades possuem códigos diferentes. Apenas o status pode ser alterado em massa.")
+                            novo_and_lote = st.selectbox("Alterar Andamento para TODOS:", ["Prevista", "Concluída"], key="lt_at_and")
+                            if st.button(f"💾 Atualizar Andamento de {qtd_at_sel} Atividades", type="primary", key="btn_salvar_lote_at"):
+                                payloads_lote_at = []
+                                for _, row_orig in df_at_sel.iterrows():
+                                    p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                                    p_item["Acao"] = "Editar"
+                                    p_item["Id"] = str(row_orig["Id"])
+                                    p_item["Andamento"] = str(novo_and_lote)
+                                    payloads_lote_at.append(p_item)
+                                executar_envio_sharepoint(payloads_lote_at)
+                                st.session_state["selecoes_atividades"] = {}
+                                st.session_state["version_ed_at"] += 1
+                                st.rerun()
 
 # --- TELA 2: FORMULÁRIO DA PLANILHA MACRO (INSERIR NOVA LINHA) ---
 elif modo == "➕ Inserir Nova Linha":
