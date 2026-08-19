@@ -1574,56 +1574,218 @@ elif modo == "➕ Inserir Nova Linha":
                 
                 executar_envio_sharepoint(payloads_lote)
 
-# --- TELA 5: GERENCIAR UNIDADES ---
+# --- TELA 5: GERENCIAR UNIDADES (COM PREENCHIMENTO AUTOMÁTICO E CASCATA) ---
 elif modo == "🏢 Gerenciar Unidades":
-    st.markdown(f"<h3>🏢 Gerenciamento de Unidades / Lotações (Tabela Auxiliar via SharePoint)</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #03170a;'>🏢 Gerenciamento de Unidades / Lotações (Tabela Auxiliar)</h3>", unsafe_allow_html=True)
+    st.caption("Catálogo corporativo de setores e unidades de lotação dos servidores.")
+    
+    # 1. VISUALIZAÇÃO CONDICIONAL POR PERFIL
     df_visualizacao_uni = df_lotacoes if perfil_usuario == "Administrador" else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
     
-    st.write("#### 📋 Unidades Ativas cadastradas no Excel")
+    st.write("#### 📋 Unidades Ativas Cadastradas")
     if df_visualizacao_uni.empty:
         st.info(f"Nenhuma unidade cadastrada para a UF {uf_usuario}.")
     else:
         colunas_validas = [col for col in ["ID_UF", "UF", "Unidade"] if col in df_visualizacao_uni.columns]
         df_limpo_uni = df_visualizacao_uni[colunas_validas]
         def estilar_uni(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
-        st.dataframe(df_limpo_uni.reset_index(drop=True).style.apply(estilar_uni, axis=1), use_container_width=True)
+        st.dataframe(df_limpo_uni.reset_index(drop=True).style.apply(estilar_uni, axis=1), use_container_width=True, hide_index=True)
     
     st.markdown("---")
-    t_add, t_edit, t_del = st.tabs(["➕ Adicionar Unidade", "📝 Editar Unidade", "🗑️ Excluir Unidade"])
-    LISTA_UFS_COMPLETA = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Ceneac"]
-    
-    with t_add:
-        uf_uni = st.selectbox("Selecione a UF / Órgão para adicionar a unidade:", LISTA_UFS_COMPLETA, key="uni_add_uf") if perfil_usuario == "Administrador" else st.text_input("UF da Lotação:", value=uf_usuario, disabled=True, key="uni_add_uf_rep")
-        nova_uni = st.text_input("Nome da Nova Unidade:")
-        if st.button("Salvar Unidade"):
-            with st.spinner("Sincronizando nova unidade com o SharePoint..."):
-                executar_api_unidades({"Acao": "Inserir", "UF": uf_uni, "Unidade": nova_uni})
-                time.sleep(2)
-                st.cache_data.clear()
-            st.success(f"Unidade '{nova_uni}' salva com sucesso!")
-            st.rerun()
+    t_add, t_edit, t_del = st.tabs(["➕ Adicionar Unidade", "📝 Alterar Unidade", "🗑️ Excluir Unidade"])
 
+    # =================================================================
+    # ABA 1: ADICIONAR NOVA UNIDADE
+    # =================================================================
+    with t_add:
+        st.markdown("##### ➕ Cadastro de Nova Lotação")
+        c_add1, c_add2 = st.columns(2)
+        with c_add1:
+            if perfil_usuario == "Administrador":
+                uf_uni_add = st.selectbox("UF / Órgão da Unidade:", LISTA_UFS_COMPLETA, key="uni_add_uf")
+            else:
+                st.text_input("UF da Lotação (Travada):", value=uf_usuario, disabled=True, key="uni_add_uf_rep")
+                uf_uni_add = uf_usuario
+        with c_add2:
+            nova_uni = st.text_input("Nome da Nova Unidade (Ex: Nupaem-SP, SUPES-RJ):", key="uni_add_nome").strip()
+            
+        if st.button("🚀 Gravar Unidade", type="primary", key="btn_salvar_nova_uni"):
+            if not nova_uni:
+                st.error("⚠️ O nome da unidade é obrigatório.")
+            else:
+                with st.spinner("Sincronizando nova unidade com o SharePoint..."):
+                    executar_api_unidades({"Acao": "Inserir", "UF": uf_uni_add, "Unidade": nova_uni})
+                    time.sleep(2)
+                    st.cache_data.clear()
+                st.success(f"✅ Unidade '{nova_uni}' salva com sucesso!")
+                st.rerun()
+
+    # =================================================================
+    # ABA 2: ALTERAR UNIDADE (PREENCHIMENTO REATIVO E CASCATA COMPLETA)
+    # =================================================================
     with t_edit:
-        uf_filtrada_edit = st.selectbox("1. Filtrar Unidades por UF/Órgão:", sorted(df_lotacoes["UF"].dropna().unique().tolist()), key="uf_filt_edit") if perfil_usuario == "Administrador" else uf_usuario
+        st.markdown("##### 📝 Alteração de Dados da Unidade")
+        
+        # 1. Filtro de UF para o Administrador localizar a unidade
+        if perfil_usuario == "Administrador":
+            lista_ufs_uni = sorted(df_lotacoes["UF"].dropna().unique().tolist())
+            uf_filtrada_edit = st.selectbox("1. Filtrar Unidades por UF/Órgão:", lista_ufs_uni, key="uf_filt_edit")
+        else:
+            uf_filtrada_edit = uf_usuario
+
         df_unidades_filtradas = df_lotacoes[df_lotacoes["UF"] == uf_filtrada_edit]
             
-        if not df_unidades_filtradas.empty:
-            sel_uni = st.selectbox("2. Selecione a Unidade para alterar:", df_unidades_filtradas["Unidade"].tolist(), key="uni_sel_edit")
+        if df_unidades_filtradas.empty:
+            st.warning(f"⚠️ Nenhuma unidade encontrada para a UF: {uf_filtrada_edit}")
+        else:
+            # 2. Dropdown de Seleção da Unidade
+            lista_nomes_unidades = sorted(df_unidades_filtradas["Unidade"].dropna().unique().tolist())
+            sel_uni = st.selectbox("2. Selecione a Unidade para visualizar/alterar:", lista_nomes_unidades, key="uni_sel_edit")
+            
             linha_filtrada = df_unidades_filtradas[df_unidades_filtradas["Unidade"].astype(str).str.strip() == str(sel_uni).strip()]
             
             if not linha_filtrada.empty:
-                id_uf_edit = int(float(linha_filtrada["ID_UF"].iloc[0]))
-                m_uni = st.text_input("3. Novo nome da Unidade:", value=sel_uni, key="uni_novo_nome")
-                if st.button("Modificar Unidade"):
-                    with st.spinner("Sincronizando alterações..."):
-                        executar_api_unidades({"Acao": "Editar", "ID_UF": id_uf_edit, "UF": uf_filtrada_edit, "Unidade": m_uni})
-                        time.sleep(2)
-                        st.cache_data.clear()
-                    st.success("Unidade modificada com sucesso!")
-                    st.rerun()
+                dados_alvo_uni = linha_filtrada.iloc[0]
+                id_uf_edit = int(float(dados_alvo_uni["ID_UF"]))
+                val_atual_uf_uni = str(dados_alvo_uni.get("UF", uf_filtrada_edit)).strip()
+                val_atual_nome_uni = str(dados_alvo_uni.get("Unidade", sel_uni)).strip()
 
+                st.markdown(f"#### 🏢 Ficha da Unidade: **{val_atual_nome_uni}** `(ID: {id_uf_edit})`")
+                st.caption("Modificações nesta unidade atualizarão automaticamente a tabela de Equipes e as Atividades vinculadas na base principal.")
+
+                # Campos com chaves dinâmicas para recarregamento instantâneo
+                col_ed_u1, col_ed_u2 = st.columns(2)
+                with col_ed_u1:
+                    if perfil_usuario == "Administrador":
+                        try:
+                            idx_uf_ed = LISTA_UFS_COMPLETA.index(val_atual_uf_uni)
+                        except ValueError:
+                            idx_uf_ed = 0
+                        nova_uf_uni = st.selectbox(
+                            "UF / Órgão da Unidade:", 
+                            LISTA_UFS_COMPLETA, 
+                            index=idx_uf_ed, 
+                            key=f"ed_uf_uni_sel_{id_uf_edit}"
+                        )
+                    else:
+                        st.text_input(
+                            "UF da Lotação (Travada para Editor Regional):", 
+                            value=val_atual_uf_uni, 
+                            disabled=True, 
+                            key=f"ed_uf_uni_dis_{id_uf_edit}"
+                        )
+                        nova_uf_uni = val_atual_uf_uni
+
+                with col_ed_u2:
+                    novo_nome_uni = st.text_input(
+                        "Nome da Unidade:", 
+                        value=val_atual_nome_uni, 
+                        key=f"ed_nome_uni_txt_{id_uf_edit}"
+                    ).strip()
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- DISPARO DA ATUALIZAÇÃO EM CASCATA ---
+                from concurrent.futures import ThreadPoolExecutor
+
+                if st.button("💾 Salvar Alterações e Sincronizar Equipes/Base Principal", type="primary", key=f"btn_salvar_uni_{id_uf_edit}"):
+                    if not novo_nome_uni:
+                        st.error("⚠️ O Nome da Unidade não pode ficar em branco.")
+                    else:
+                        # 1. Atualiza a Tabela Auxiliar de Unidades
+                        with st.spinner(f"1/3 Atualizando Unidade '{novo_nome_uni}' no SharePoint..."):
+                            executar_api_unidades({
+                                "Acao": "Editar", 
+                                "ID_UF": id_uf_edit, 
+                                "UF": nova_uf_uni, 
+                                "Unidade": novo_nome_uni
+                            })
+
+                        # 2. Atualiza em Cascata os Servidores (Equipes.xlsx)
+                        servidores_afetados = df_servidores[
+                            (df_servidores["Lotacao"].astype(str).str.strip() == str(sel_uni).strip()) &
+                            (df_servidores["UF_Servidor"].astype(str).str.strip() == str(val_atual_uf_uni).strip())
+                        ]
+                        qtd_srv_afetados = len(servidores_afetados)
+
+                        if qtd_srv_afetados > 0:
+                            with st.spinner(f"2/3 Atualizando lotação de {qtd_srv_afetados} servidor(es) na tabela de equipes..."):
+                                for _, srv_row in servidores_afetados.iterrows():
+                                    payload_srv_cascata = {
+                                        "Acao": "Editar",
+                                        "ID_SERV": int(float(srv_row["ID_SERV"])),
+                                        "Servidor": str(srv_row.get("Servidor", "")),
+                                        "UF_Servidor": str(nova_uf_uni),
+                                        "Lotacao": str(novo_nome_uni),
+                                        "Equipe_Emergencias": str(srv_row.get("Equipe_Emergencias", "Não")),
+                                        "Fiscal": str(srv_row.get("Fiscal", "Não")),
+                                        "AEAC": str(srv_row.get("AEAC", "Não")),
+                                        "E_mail": str(srv_row.get("E_mail", "")),
+                                        "Funcao": str(srv_row.get("Funcao", "")),
+                                        "Perfil": str(srv_row.get("Perfil", "Visualização")),
+                                        "Token": str(srv_row.get("Token", ""))
+                                    }
+                                    executar_api_equipes(payload_srv_cascata)
+
+                        # 3. Atualiza em Cascata as Atividades na Planilha Principal (Macro)
+                        linhas_macro_afetadas = df_atual[
+                            (df_atual["Lotação"].astype(str).str.strip() == str(sel_uni).strip()) &
+                            (df_atual["UF_Servidor"].astype(str).str.strip() == str(val_atual_uf_uni).strip())
+                        ]
+                        qtd_macro_afetadas = len(linhas_macro_afetadas)
+                        sucessos_macro = 0
+
+                        if qtd_macro_afetadas > 0:
+                            with st.spinner(f"3/3 Atualizando {qtd_macro_afetadas} atividade(s) vinculadas na Planilha Principal..."):
+                                payloads_cascata_macro = []
+                                for _, row_orig in linhas_macro_afetadas.iterrows():
+                                    p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                                    p_item["Acao"] = "Editar"
+                                    p_item["Id"] = str(row_orig["Id"])
+                                    p_item["Lotação"] = str(novo_nome_uni)
+                                    p_item["UF_Servidor"] = str(nova_uf_uni)
+                                    
+                                    payload_sanit = {
+                                        k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) 
+                                        for k, v in p_item.items()
+                                    }
+                                    payloads_cascata_macro.append(payload_sanit)
+
+                                def enviar_req_macro(p):
+                                    try:
+                                        r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
+                                        return 1 if r.status_code in [200, 202] else 0
+                                    except:
+                                        return 0
+
+                                with ThreadPoolExecutor(max_workers=10) as executor:
+                                    resultados = list(executor.map(enviar_req_macro, payloads_cascata_macro))
+                                    sucessos_macro = sum(resultados)
+
+                        # 4. Limpeza de cache e feedback
+                        time.sleep(2.0)
+                        st.cache_data.clear()
+                        if "df" in st.session_state:
+                            del st.session_state.df
+
+                        msg_sucesso = f"🎉 Unidade **{novo_nome_uni}** atualizada com sucesso!"
+                        if qtd_srv_afetados > 0 or qtd_macro_afetadas > 0:
+                            msg_sucesso += f" ({qtd_srv_afetados} servidores e {sucessos_macro}/{qtd_macro_afetadas} atividades sincronizados em cascata)."
+                        st.success(msg_sucesso)
+                        
+                        time.sleep(1.5)
+                        st.rerun()
+
+    # =================================================================
+    # ABA 3: EXCLUIR UNIDADE (COM VERIFICAÇÃO DE DEPENDÊNCIAS)
+    # =================================================================
     with t_del:
-        uf_filtrada_del = st.selectbox("1. Filtrar Unidades por UF/Órgão:", sorted(df_lotacoes["UF"].dropna().unique().tolist()), key="uf_filt_del") if perfil_usuario == "Administrador" else uf_usuario
+        st.markdown("##### 🗑️ Exclusão de Unidade")
+        if perfil_usuario == "Administrador":
+            uf_filtrada_del = st.selectbox("1. Filtrar Unidades por UF/Órgão:", sorted(df_lotacoes["UF"].dropna().unique().tolist()), key="uf_filt_del")
+        else:
+            uf_filtrada_del = uf_usuario
+
         df_unidades_filtradas_del = df_lotacoes[df_lotacoes["UF"] == uf_filtrada_del]
             
         if not df_unidades_filtradas_del.empty:
@@ -1632,12 +1794,23 @@ elif modo == "🏢 Gerenciar Unidades":
             
             if not linha_filtrada_del.empty:
                 id_uf_del = int(float(linha_filtrada_del["ID_UF"].iloc[0]))
-                if st.button("❌ Excluir Unidade", disabled=not st.checkbox(f"Confirmo que desejo excluir permanentemente a unidade {del_uni}")):
-                    with st.spinner("Removendo registro..."):
+                
+                # Alerta de dependências (se houver servidores ativos nela)
+                servidores_nesta_unidade = df_servidores[
+                    (df_servidores["Lotacao"].astype(str).str.strip() == str(del_uni).strip()) &
+                    (df_servidores["UF_Servidor"].astype(str).str.strip() == str(uf_filtrada_del).strip())
+                ]
+                
+                if not servidores_nesta_unidade.empty:
+                    st.warning(f"⚠️ **Atenção:** Existem **{len(servidores_nesta_unidade)} servidor(es)** cadastrados nesta unidade. Recomenda-se remanejá-los antes de excluir.")
+                
+                if st.button("❌ Confirmar Exclusão Permanente", disabled=not st.checkbox(f"Confirmo que desejo excluir a unidade {del_uni} ({uf_filtrada_del})", key=f"chk_del_uni_{id_uf_del}")):
+                    with st.spinner("Removendo registro do SharePoint..."):
                         executar_api_unidades({"Acao": "Excluir", "ID_UF": id_uf_del})
                         time.sleep(2)
                         st.cache_data.clear()
-                    st.success("Unidade removida com sucesso!")
+                    st.success(f"💥 Unidade '{del_uni}' removida com sucesso!")
+                    time.sleep(1.5)
                     st.rerun()
 
 # --- TELA 6: GERENCIAR EQUIPES ---
