@@ -37,7 +37,7 @@ LISTA_TIPOS_ATIVIDADE = ["Capacitação", "Coleta de Amostras", "Desenvolvimento
 LISTA_PERIGOS = ["Periculosidade", "Insalubridade", "Não se Aplica"]
 LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Ceneac", "Não se aplica", "Outras fontes"]
 LISTA_IMPORTANCIA = ["Ordinária", "Prioritária", "Estratégica"]
-LISTA_PAPEIS_INSTITUCIONAIS
+LISTA_PAPEIS_INSTITUCIONAIS = ["Coordenação", "Apoio"]
 
 LISTA_JUSTIFICATIVAS_ACAO = [
     "Indisponibilidade de meios orçamentários/financeiros para a execução da Ação",
