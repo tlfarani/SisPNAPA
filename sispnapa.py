@@ -1160,11 +1160,47 @@ elif modo == "📊 Visualizar Base":
                             st.session_state["version_ed_at"] += 1
                             st.rerun()
 
-                    # Edição em Lote de Atividades
+                    # =================================================================
+                # EDIÇÃO EM LOTE: MULTIPLAS ATIVIDADES
+                # =================================================================
+                else:
+                    # Verifica se todas as atividades selecionadas possuem o mesmo código
+                    codigos_unicos = df_at_sel["Codigo_Atividade"].dropna().astype(str).str.strip().str.upper().unique()
+                    mesma_atividade = (len(codigos_unicos) == 1 and codigos_unicos[0] != "")
+
+                    if mesma_atividade:
+                        st.warning(f"👥 **Edição em Lote:** Todas as {qtd_at_sel} atividades compartilham o código `{codigos_unicos[0]}`. Você pode editar os dados da operação, exceto Recursos Humanos.")
+                        
+                        ref_lote = df_at_sel.iloc[0]
+                        
+                        # --- FORMULÁRIO DE LOTE (SEM RH) ---
+                        with st.form("form_lote_atv"):
+                            c_l1, c_l2 = st.columns(2)
+                            with c_l1:
+                                ed_nome_lote = st.text_input("Nome da Atividade:", value=str(ref_lote.get("Nome da Atividade", "")))
+                                ed_and_lote = st.selectbox("Andamento:", ["Prevista", "Concluída"], index=0 if ref_lote.get("Andamento")=="Prevista" else 1)
+                            with c_l2:
+                                ed_tema_lote = st.selectbox("Tema:", LISTA_TEMAS, index=LISTA_TEMAS.index(ref_lote["Tema da Atividade"]) if ref_lote.get("Tema da Atividade") in LISTA_TEMAS else 0)
+                                ed_obj_lote = st.selectbox("Objetivo:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(ref_lote["Objetivo da Atividade"]) if ref_lote.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0)
+
+                            if st.form_submit_button("💾 Atualizar Todas as Atividades do Grupo"):
+                                payloads_lote = []
+                                for _, row in df_at_sel.iterrows():
+                                    p = {col: row[col] for col in df_atual.columns if col in row}
+                                    p["Acao"] = "Editar"
+                                    p["Id"] = str(row["Id"])
+                                    p["Nome da Atividade"] = ed_nome_lote
+                                    p["Andamento"] = ed_and_lote
+                                    p["Tema da Atividade"] = ed_tema_lote
+                                    p["Objetivo da Atividade"] = ed_obj_lote
+                                    payloads_lote.append(p)
+                                executar_envio_sharepoint(payloads_lote)
+                                st.rerun()
+
                     else:
-                        st.info(f"👥 **Edição em Lote:** {qtd_at_sel} atividades selecionadas.")
-                        lista_todos_and = ["Prevista", "Concluída"]
-                        novo_and_lote = st.selectbox("Atualizar Andamento em Massa:", lista_todos_and, key="lt_at_and")
+                        st.warning(f"ℹ️ **Edição Restrita:** As {qtd_at_sel} atividades possuem códigos diferentes. Apenas o status pode ser alterado em massa.")
+                        
+                        novo_and_lote = st.selectbox("Alterar Andamento para TODOS:", ["Prevista", "Concluída"], key="lt_at_and")
                         
                         if st.button(f"💾 Atualizar Andamento de {qtd_at_sel} Atividades", type="primary", key="btn_salvar_lote_at"):
                             payloads_lote_at = []
