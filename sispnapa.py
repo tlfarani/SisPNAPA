@@ -589,8 +589,8 @@ elif modo == "📊 Visualizar Base":
                 if f_and_ac != "Todos": df_exib_ac = df_exib_ac[df_exib_ac["Andamento"].astype(str).str.strip() == f_and_ac]
                 if f_tema_ac != "Todos": df_exib_ac = df_exib_ac[df_exib_ac["Tema da Atividade"].astype(str).str.strip() == f_tema_ac]
 
-                df_exib_ac["Data de Início"] = df_exib_ac["Data_Inicio_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
-                df_exib_ac["Data de Término"] = df_exib_ac["Data_Termino_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
+                df_exib_ac["Data de Início"] = df_exib_ac["Data_Inicio_Datetime"].dt.date
+                df_exib_ac["Data de Término"] = df_exib_ac["Data_Termino_Datetime"].dt.date
 
                 # 📋 COLUNAS RELEVANTES PARA AÇÕES (Sem colunas de atividades)
                 COLS_TABELA_ACOES = [
@@ -624,6 +624,10 @@ elif modo == "📊 Visualizar Base":
                 else:
                     colunas_travadas_ac = {col: st.column_config.Column(disabled=True) for col in df_tab_ac.columns}
                     colunas_travadas_ac["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+                
+                # 🚀 Formatação de Data com ordenação cronológica real:
+                colunas_travadas_ac["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
+                colunas_travadas_ac["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
 
                 key_dinamica_ac = f"editor_acoes_v{st.session_state['version_ed_ac']}"
                 tabela_ac = st.data_editor(
@@ -812,8 +816,8 @@ elif modo == "📊 Visualizar Base":
                 if f_and_at != "Todos": df_exib_at = df_exib_at[df_exib_at["Andamento"].astype(str).str.strip() == f_and_at]
                 if f_tema_at != "Todos": df_exib_at = df_exib_at[df_exib_at["Tema da Atividade"].astype(str).str.strip() == f_tema_at]
 
-                df_exib_at["Data de Início"] = df_exib_at["Data_Inicio_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
-                df_exib_at["Data de Término"] = df_exib_at["Data_Termino_Datetime"].dt.strftime('%d/%m/%Y').fillna("")
+                df_exib_at["Data de Início"] = df_exib_at["Data_Inicio_Datetime"].dt.date
+                df_exib_at["Data de Término"] = df_exib_at["Data_Termino_Datetime"].dt.date
 
                 # 📋 COLUNAS RELEVANTES PARA ATIVIDADES (Sem Meta_Indicador ou Justificativa)
                 COLS_TABELA_ATIVIDADES = [
@@ -849,6 +853,10 @@ elif modo == "📊 Visualizar Base":
                 else:
                     colunas_travadas_at = {col: st.column_config.Column(disabled=True) for col in df_tab_at.columns}
                     colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+                
+                # 🚀 Formatação de Data com ordenação cronológica real:
+                colunas_travadas_at["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
+                colunas_travadas_at["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
 
                 key_dinamica_at = f"editor_atividades_v{st.session_state['version_ed_at']}"
                 tabela_at = st.data_editor(
