@@ -111,7 +111,7 @@ def executar_envio_sharepoint(lista_payloads):
 def payload_gerador(
     val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
     nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
-    importancia, tema, objective, tipo_atividade, periculosidade, servidor, 
+    importancia, tema, objectivo, tipo_atividade, periculosidade, servidor, 
     uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
     estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
     origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
@@ -144,7 +144,7 @@ def payload_gerador(
         "UF_Acao_PNAPA": str(uf_acao),
         "Importância da Atividade": str(importancia),
         "Tema da Atividade": str(tema),
-        "Objetivo da Atividade": str(objective),
+        "Objetivo da Atividade": str(objectivo),
         "Tipo de Atividade": str(tipo_atividade),
         "Periculosidade/Insalubridade": str(periculosidade),
         "Servidor": str(servidor),
@@ -1085,7 +1085,7 @@ elif modo == "📊 Visualizar Base":
                     payload_unico = payload_gerador(
                         val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
                         nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
-                        importancia, tema, objective, tipo_atividade, periculosidade, servidor, 
+                        importancia, tema, objectivo, tipo_atividade, periculosidade, servidor, 
                         uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
                         estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
                         origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
@@ -1502,8 +1502,8 @@ elif modo == "➕ Inserir Nova Linha":
             opcoes_atvs_existentes = []
             mapa_dados_atv_existente = {}
             
-            for cod_unic in sorted(df_atvs_acao["Codigo_Atividade"].dropna().unique()):
-                linhas_deste_cod = df_atvs_acao[df_atvs_acao["Codigo_Atividade"] == cod_unic]
+            for cod_unic in sorted(df_atvs_acao_uf["Codigo_Atividade"].dropna().unique()):
+                linhas_deste_cod = df_atvs_acao_uf[df_atvs_acao_uf["Codigo_Atividade"] == cod_unic]
                 nome_deste_cod = str(linhas_deste_cod["Nome da Atividade"].iloc[0]).strip()
                 label_opc = f"{cod_unic} — {nome_deste_cod}"
                 opcoes_atvs_existentes.append(label_opc)
