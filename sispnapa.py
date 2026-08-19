@@ -613,6 +613,34 @@ elif modo == "📊 Visualizar Base":
             num = pd.to_numeric(val, errors='coerce')
             return 0.0 if pd.isna(num) else float(num)
 
+        # Função universal de filtragem cruzada (responsiva)
+        def aplicar_filtros_responsivos(df_orig, dict_filtros, chave_ignorar=None):
+            df_res = df_orig.copy()
+            for k, (col_nome, val) in dict_filtros.items():
+                if k == chave_ignorar or val in ["Todos", "Todas", None, ""]:
+                    continue
+                if col_nome == "Ano da Ação":
+                    df_res = df_res[df_res["Ano da Ação"].astype(str).str.split('.').str[0] == str(val)]
+                elif col_nome == "Número da Ação PNAPA":
+                    cod_alvo = str(val).split(" - ")[0].strip()
+                    cod_puro = cod_alvo.split("-")[0].strip()
+                    df_res = df_res[
+                        (df_res["Número da Ação PNAPA"].astype(str).str.strip() == cod_alvo) |
+                        (df_res["Número da Ação PNAPA"].astype(str).str.strip() == cod_puro)
+                    ]
+                elif col_nome == "Data_Inicio_Datetime":
+                    if isinstance(val, (tuple, list)) and len(val) == 2:
+                        ts_ini = pd.to_datetime(val[0])
+                        ts_fim = pd.to_datetime(val[1]) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+                        df_res = df_res[
+                            df_res["Data_Inicio_Datetime"].isna() |
+                            ((df_res["Data_Inicio_Datetime"] >= ts_ini) & (df_res["Data_Inicio_Datetime"] <= ts_fim))
+                        ]
+                else:
+                    if col_nome in df_res.columns:
+                        df_res = df_res[df_res[col_nome].astype(str).str.strip() == str(val).strip()]
+            return df_res
+
         df_trabalho = df_atual.copy()
         
         # Garante a existência de todas as colunas
@@ -640,40 +668,101 @@ elif modo == "📊 Visualizar Base":
             if df_base_acoes.empty:
                 st.info("Nenhuma Ação Estadual cadastrada na base.")
             else:
-                # --- FILTROS ESPECÍFICOS DE AÇÕES ---
+                # --- DICIONÁRIO DE ESTADO ATUAL DOS FILTROS DE AÇÕES ---
+                filtros_ac = {
+                    "ano": ("Ano da Ação", st.session_state.get("f_ano_ac", "Todos")),
+                    "pna": ("Número da Ação PNAPA", st.session_state.get("f_pna_ac", "Todas")),
+                    "uf": ("UF_Acao_PNAPA", st.session_state.get("f_uf_ac", "Todas")),
+                    "papel": ("Papel_Institucional", st.session_state.get("f_papel_ac", "Todos")),
+                    "focal": ("Servidor", st.session_state.get("f_focal_ac", "Todos")),
+                    "and": ("Andamento", st.session_state.get("f_and_ac", "Todos")),
+                    "tema": ("Tema da Atividade", st.session_state.get("f_tema_ac", "Todos")),
+                    "data": ("Data_Inicio_Datetime", st.session_state.get("f_slider_dts_ac", None))
+                }
+
+                # --- LINHA 1 DE FILTROS RESPONSIVOS ---
                 col_ac1, col_ac2, col_ac3, col_ac4 = st.columns(4)
                 with col_ac1:
-                    anos_ac = sorted([str(a).split('.')[0] for a in df_base_acoes["Ano da Ação"].dropna().unique() if str(a).strip() != ""], reverse=True)
-                    f_ano_ac = st.selectbox("📅 Ano:", ["Todos"] + anos_ac, key="f_ano_ac")
+                    df_p_ano = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "ano")
+                    anos_ac = sorted([str(a).split('.')[0] for a in df_p_ano["Ano da Ação"].dropna().unique() if str(a).strip() != ""], reverse=True)
+                    opcs_ano_ac = ["Todos"] + anos_ac
+                    idx_ano_ac = opcs_ano_ac.index(filtros_ac["ano"][1]) if filtros_ac["ano"][1] in opcs_ano_ac else 0
+                    f_ano_ac = st.selectbox("📅 Ano:", opcs_ano_ac, index=idx_ano_ac, key="f_ano_ac")
+                    filtros_ac["ano"] = ("Ano da Ação", f_ano_ac)
+
                 with col_ac2:
-                    acoes_ac = sorted(df_base_acoes["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
-                    f_pna_ac = st.selectbox("🗂️ Ação PNAPA:", ["Todas"] + acoes_ac, key="f_pna_ac")
+                    df_p_pna = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "pna")
+                    acoes_ac = sorted(df_p_pna["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
+                    opcs_pna_ac = ["Todas"] + acoes_ac
+                    idx_pna_ac = opcs_pna_ac.index(filtros_ac["pna"][1]) if filtros_ac["pna"][1] in opcs_pna_ac else 0
+                    f_pna_ac = st.selectbox("🗂️ Ação PNAPA:", opcs_pna_ac, index=idx_pna_ac, key="f_pna_ac")
+                    filtros_ac["pna"] = ("Número da Ação PNAPA", f_pna_ac)
+
                 with col_ac3:
-                    ufs_ac = sorted([str(u).strip() for u in df_base_acoes["UF_Acao_PNAPA"].dropna().unique() if str(u).strip() != ""])
-                    f_uf_ac = st.selectbox("📍 UF da Ação:", ["Todas"] + ufs_ac, key="f_uf_ac")
+                    df_p_uf = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "uf")
+                    ufs_ac = sorted([str(u).strip() for u in df_p_uf["UF_Acao_PNAPA"].dropna().unique() if str(u).strip() != ""])
+                    opcs_uf_ac = ["Todas"] + ufs_ac
+                    idx_uf_ac = opcs_uf_ac.index(filtros_ac["uf"][1]) if filtros_ac["uf"][1] in opcs_uf_ac else 0
+                    f_uf_ac = st.selectbox("📍 UF da Ação:", opcs_uf_ac, index=idx_uf_ac, key="f_uf_ac")
+                    filtros_ac["uf"] = ("UF_Acao_PNAPA", f_uf_ac)
+
                 with col_ac4:
-                    f_papel_ac = st.selectbox("🏛️ Papel da UF:", ["Todos", "Coordenação", "Apoio"], key="f_papel_ac")
+                    df_p_papel = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "papel")
+                    papeis_disp = [p for p in ["Coordenação", "Apoio"] if p in df_p_papel["Papel_Institucional"].astype(str).str.strip().unique()]
+                    opcs_papel_ac = ["Todos"] + (papeis_disp if papeis_disp else ["Coordenação", "Apoio"])
+                    idx_papel_ac = opcs_papel_ac.index(filtros_ac["papel"][1]) if filtros_ac["papel"][1] in opcs_papel_ac else 0
+                    f_papel_ac = st.selectbox("🏛️ Papel da UF:", opcs_papel_ac, index=idx_papel_ac, key="f_papel_ac")
+                    filtros_ac["papel"] = ("Papel_Institucional", f_papel_ac)
 
-                col_ac5, col_ac6, col_ac7 = st.columns(3)
+                # --- LINHA 2 DE FILTROS RESPONSIVOS + SLIDER ---
+                col_ac5, col_ac6, col_ac7, col_ac8 = st.columns([1, 1, 1, 2])
                 with col_ac5:
-                    focais_ac = sorted([str(s).strip() for s in df_base_acoes["Servidor"].dropna().unique() if str(s).strip() != ""])
-                    f_focal_ac = st.selectbox("👑 Ponto Focal:", ["Todos"] + focais_ac, key="f_focal_ac")
-                with col_ac6:
-                    ands_ac = sorted([str(a).strip() for a in df_base_acoes["Andamento"].dropna().unique() if str(a).strip() != ""])
-                    f_and_ac = st.selectbox("🔄 Andamento:", ["Todos"] + ands_ac, key="f_and_ac")
-                with col_ac7:
-                    temas_ac = sorted([str(t).strip() for t in df_base_acoes["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
-                    f_tema_ac = st.selectbox("🏷️ Tema:", ["Todos"] + temas_ac, key="f_tema_ac")
+                    df_p_focal = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "focal")
+                    focais_ac = sorted([str(s).strip() for s in df_p_focal["Servidor"].dropna().unique() if str(s).strip() != ""])
+                    opcs_focal_ac = ["Todos"] + focais_ac
+                    idx_focal_ac = opcs_focal_ac.index(filtros_ac["focal"][1]) if filtros_ac["focal"][1] in opcs_focal_ac else 0
+                    f_focal_ac = st.selectbox("👑 Ponto Focal:", opcs_focal_ac, index=idx_focal_ac, key="f_focal_ac")
+                    filtros_ac["focal"] = ("Servidor", f_focal_ac)
 
-                # Aplicação dos filtros
-                df_exib_ac = df_base_acoes.copy()
-                if f_ano_ac != "Todos": df_exib_ac = df_exib_ac[df_exib_ac["Ano da Ação"].astype(str).str.split('.').str[0] == f_ano_ac]
-                if f_pna_ac != "Todas": df_exib_ac = df_exib_ac[df_exib_ac["Número da Ação PNAPA"].astype(str).str.strip() == f_pna_ac]
-                if f_uf_ac != "Todas": df_exib_ac = df_exib_ac[df_exib_ac["UF_Acao_PNAPA"].astype(str).str.strip() == f_uf_ac]
-                if f_papel_ac != "Todos": df_exib_ac = df_exib_ac[df_exib_ac["Papel_Institucional"].astype(str).str.strip() == f_papel_ac]
-                if f_focal_ac != "Todos": df_exib_ac = df_exib_ac[df_exib_ac["Servidor"].astype(str).str.strip() == f_focal_ac]
-                if f_and_ac != "Todos": df_exib_ac = df_exib_ac[df_exib_ac["Andamento"].astype(str).str.strip() == f_and_ac]
-                if f_tema_ac != "Todos": df_exib_ac = df_exib_ac[df_exib_ac["Tema da Atividade"].astype(str).str.strip() == f_tema_ac]
+                with col_ac6:
+                    df_p_and = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "and")
+                    ands_ac = sorted([str(a).strip() for a in df_p_and["Andamento"].dropna().unique() if str(a).strip() != ""])
+                    opcs_and_ac = ["Todos"] + ands_ac
+                    idx_and_ac = opcs_and_ac.index(filtros_ac["and"][1]) if filtros_ac["and"][1] in opcs_and_ac else 0
+                    f_and_ac = st.selectbox("🔄 Andamento:", opcs_and_ac, index=idx_and_ac, key="f_and_ac")
+                    filtros_ac["and"] = ("Andamento", f_and_ac)
+
+                with col_ac7:
+                    df_p_tema = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "tema")
+                    temas_ac = sorted([str(t).strip() for t in df_p_tema["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
+                    opcs_tema_ac = ["Todos"] + temas_ac
+                    idx_tema_ac = opcs_tema_ac.index(filtros_ac["tema"][1]) if filtros_ac["tema"][1] in opcs_tema_ac else 0
+                    f_tema_ac = st.selectbox("🏷️ Tema:", opcs_tema_ac, index=idx_tema_ac, key="f_tema_ac")
+                    filtros_ac["tema"] = ("Tema da Atividade", f_tema_ac)
+
+                with col_ac8:
+                    # Cálculo dos limites do slider de datas para Ações
+                    dts_validas_ac = df_base_acoes["Data_Inicio_Datetime"].dropna()
+                    if not dts_validas_ac.empty:
+                        min_dt_ac = dts_validas_ac.min().date()
+                        max_dt_ac = dts_validas_ac.max().date()
+                    else:
+                        min_dt_ac, max_dt_ac = date(2025, 1, 1), date(2026, 12, 31)
+                    if min_dt_ac >= max_dt_ac:
+                        max_dt_ac = min_dt_ac + pd.Timedelta(days=1)
+
+                    f_slider_dts_ac = st.slider(
+                        "⏳ Período (Data de Início):",
+                        min_value=min_dt_ac,
+                        max_value=max_dt_ac,
+                        value=(min_dt_ac, max_dt_ac),
+                        format="DD/MM/YYYY",
+                        key="f_slider_dts_ac"
+                    )
+                    filtros_ac["data"] = ("Data_Inicio_Datetime", f_slider_dts_ac)
+
+                # Aplicação final de todos os filtros
+                df_exib_ac = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, None)
 
                 df_exib_ac["Data de Início"] = df_exib_ac["Data_Inicio_Datetime"].dt.date
                 df_exib_ac["Data de Término"] = df_exib_ac["Data_Termino_Datetime"].dt.date
@@ -696,7 +785,8 @@ elif modo == "📊 Visualizar Base":
                     if c_num in df_tab_ac.columns:
                         df_tab_ac[c_num] = pd.to_numeric(df_tab_ac[c_num], errors='coerce')
                 
-                df_tab_ac = df_tab_ac.sort_values(by="Id", ascending=False).reset_index(drop=True)
+                # 🚀 ORDENAÇÃO PADRÃO: DATA DE INÍCIO CRESCENTE (Cronológica Real)
+                df_tab_ac = df_tab_ac.sort_values(by=["Data de Início", "Id"], ascending=[True, True], na_position='last').reset_index(drop=True)
 
                 if "selecoes_acoes" not in st.session_state: st.session_state["selecoes_acoes"] = {}
                 if "version_ed_ac" not in st.session_state: st.session_state["version_ed_ac"] = 0
@@ -879,44 +969,109 @@ elif modo == "📊 Visualizar Base":
             if df_base_atvs.empty:
                 st.info("Nenhuma Atividade de Campo cadastrada na base.")
             else:
-                # --- FILTROS ESPECÍFICOS DE ATIVIDADES ---
+                # --- DICIONÁRIO DE ESTADO ATUAL DOS FILTROS DE ATIVIDADES ---
+                filtros_at = {
+                    "ano": ("Ano da Ação", st.session_state.get("f_ano_at", "Todos")),
+                    "pna": ("Número da Ação PNAPA", st.session_state.get("f_pna_at", "Todas")),
+                    "cod": ("Codigo_Atividade", st.session_state.get("f_cod_at", "Todos")),
+                    "uf": ("UF_Acao_PNAPA", st.session_state.get("f_uf_at", "Todas")),
+                    "srv": ("Servidor", st.session_state.get("f_srv_at", "Todos")),
+                    "func": ("Coordenador_Operacao", st.session_state.get("f_func_at", "Todas")),
+                    "and": ("Andamento", st.session_state.get("f_and_at", "Todos")),
+                    "tema": ("Tema da Atividade", st.session_state.get("f_tema_at", "Todos")),
+                    "data": ("Data_Inicio_Datetime", st.session_state.get("f_slider_dts_at", None))
+                }
+
+                # --- LINHA 1 DE FILTROS RESPONSIVOS ---
                 col_at1, col_at2, col_at3, col_at4 = st.columns(4)
                 with col_at1:
-                    anos_at = sorted([str(a).split('.')[0] for a in df_base_atvs["Ano da Ação"].dropna().unique() if str(a).strip() != ""], reverse=True)
-                    f_ano_at = st.selectbox("📅 Ano:", ["Todos"] + anos_at, key="f_ano_at")
-                with col_at2:
-                    acoes_at = sorted(df_base_atvs["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
-                    f_pna_at = st.selectbox("🗂️ Ação PNAPA:", ["Todas"] + acoes_at, key="f_pna_at")
-                with col_at3:
-                    cods_at = sorted([str(c).strip() for c in df_base_atvs["Codigo_Atividade"].dropna().unique() if str(c).strip() != ""])
-                    f_cod_at = st.selectbox("🏷️ Código Atividade:", ["Todos"] + cods_at, key="f_cod_at")
-                with col_at4:
-                    ufs_at = sorted([str(u).strip() for u in df_base_atvs["UF_Acao_PNAPA"].dropna().unique() if str(u).strip() != ""])
-                    f_uf_at = st.selectbox("📍 UF da Ação:", ["Todas"] + ufs_at, key="f_uf_at")
+                    df_p_ano_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "ano")
+                    anos_at = sorted([str(a).split('.')[0] for a in df_p_ano_at["Ano da Ação"].dropna().unique() if str(a).strip() != ""], reverse=True)
+                    opcs_ano_at = ["Todos"] + anos_at
+                    idx_ano_at = opcs_ano_at.index(filtros_at["ano"][1]) if filtros_at["ano"][1] in opcs_ano_at else 0
+                    f_ano_at = st.selectbox("📅 Ano:", opcs_ano_at, index=idx_ano_at, key="f_ano_at")
+                    filtros_at["ano"] = ("Ano da Ação", f_ano_at)
 
+                with col_at2:
+                    df_p_pna_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "pna")
+                    acoes_at = sorted(df_p_pna_at["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
+                    opcs_pna_at = ["Todas"] + acoes_at
+                    idx_pna_at = opcs_pna_at.index(filtros_at["pna"][1]) if filtros_at["pna"][1] in opcs_pna_at else 0
+                    f_pna_at = st.selectbox("🗂️ Ação PNAPA:", opcs_pna_at, index=idx_pna_at, key="f_pna_at")
+                    filtros_at["pna"] = ("Número da Ação PNAPA", f_pna_at)
+
+                with col_at3:
+                    df_p_cod_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "cod")
+                    cods_at = sorted([str(c).strip() for c in df_p_cod_at["Codigo_Atividade"].dropna().unique() if str(c).strip() != ""])
+                    opcs_cod_at = ["Todos"] + cods_at
+                    idx_cod_at = opcs_cod_at.index(filtros_at["cod"][1]) if filtros_at["cod"][1] in opcs_cod_at else 0
+                    f_cod_at = st.selectbox("🏷️ Código Atividade:", opcs_cod_at, index=idx_cod_at, key="f_cod_at")
+                    filtros_at["cod"] = ("Codigo_Atividade", f_cod_at)
+
+                with col_at4:
+                    df_p_uf_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "uf")
+                    ufs_at = sorted([str(u).strip() for u in df_p_uf_at["UF_Acao_PNAPA"].dropna().unique() if str(u).strip() != ""])
+                    opcs_uf_at = ["Todas"] + ufs_at
+                    idx_uf_at = opcs_uf_at.index(filtros_at["uf"][1]) if filtros_at["uf"][1] in opcs_uf_at else 0
+                    f_uf_at = st.selectbox("📍 UF da Ação:", opcs_uf_at, index=idx_uf_at, key="f_uf_at")
+                    filtros_at["uf"] = ("UF_Acao_PNAPA", f_uf_at)
+
+                # --- LINHA 2 DE FILTROS RESPONSIVOS ---
                 col_at5, col_at6, col_at7, col_at8 = st.columns(4)
                 with col_at5:
-                    srvs_at = sorted([str(s).strip() for s in df_base_atvs["Servidor"].dropna().unique() if str(s).strip() != ""])
-                    f_srv_at = st.selectbox("👤 Servidor:", ["Todos"] + srvs_at, key="f_srv_at")
-                with col_at6:
-                    f_func_at = st.selectbox("🎖️ Função de Campo:", ["Todas"] + LISTA_FUNCOES_CAMPO, key="f_func_at")
-                with col_at7:
-                    ands_at = sorted([str(a).strip() for a in df_base_atvs["Andamento"].dropna().unique() if str(a).strip() != ""])
-                    f_and_at = st.selectbox("🔄 Andamento:", ["Todos"] + ands_at, key="f_and_at")
-                with col_at8:
-                    temas_at = sorted([str(t).strip() for t in df_base_atvs["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
-                    f_tema_at = st.selectbox("🏷️ Tema:", ["Todos"] + temas_at, key="f_tema_at")
+                    df_p_srv_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "srv")
+                    srvs_at = sorted([str(s).strip() for s in df_p_srv_at["Servidor"].dropna().unique() if str(s).strip() != ""])
+                    opcs_srv_at = ["Todos"] + srvs_at
+                    idx_srv_at = opcs_srv_at.index(filtros_at["srv"][1]) if filtros_at["srv"][1] in opcs_srv_at else 0
+                    f_srv_at = st.selectbox("👤 Servidor:", opcs_srv_at, index=idx_srv_at, key="f_srv_at")
+                    filtros_at["srv"] = ("Servidor", f_srv_at)
 
-                # Aplicação dos filtros
-                df_exib_at = df_base_atvs.copy()
-                if f_ano_at != "Todos": df_exib_at = df_exib_at[df_exib_at["Ano da Ação"].astype(str).str.split('.').str[0] == f_ano_at]
-                if f_pna_at != "Todas": df_exib_at = df_exib_at[df_exib_at["Número da Ação PNAPA"].astype(str).str.strip() == f_pna_at]
-                if f_cod_at != "Todos": df_exib_at = df_exib_at[df_exib_at["Codigo_Atividade"].astype(str).str.strip() == f_cod_at]
-                if f_uf_at != "Todas": df_exib_at = df_exib_at[df_exib_at["UF_Acao_PNAPA"].astype(str).str.strip() == f_uf_at]
-                if f_srv_at != "Todos": df_exib_at = df_exib_at[df_exib_at["Servidor"].astype(str).str.strip() == f_srv_at]
-                if f_func_at != "Todas": df_exib_at = df_exib_at[df_exib_at["Coordenador_Operacao"].astype(str).str.strip() == f_func_at]
-                if f_and_at != "Todos": df_exib_at = df_exib_at[df_exib_at["Andamento"].astype(str).str.strip() == f_and_at]
-                if f_tema_at != "Todos": df_exib_at = df_exib_at[df_exib_at["Tema da Atividade"].astype(str).str.strip() == f_tema_at]
+                with col_at6:
+                    df_p_func_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "func")
+                    funcs_disp = [f for f in LISTA_FUNCOES_CAMPO if f in df_p_func_at["Coordenador_Operacao"].astype(str).str.strip().unique()]
+                    opcs_func_at = ["Todas"] + (funcs_disp if funcs_disp else LISTA_FUNCOES_CAMPO)
+                    idx_func_at = opcs_func_at.index(filtros_at["func"][1]) if filtros_at["func"][1] in opcs_func_at else 0
+                    f_func_at = st.selectbox("🎖️ Função de Campo:", opcs_func_at, index=idx_func_at, key="f_func_at")
+                    filtros_at["func"] = ("Coordenador_Operacao", f_func_at)
+
+                with col_at7:
+                    df_p_and_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "and")
+                    ands_at = sorted([str(a).strip() for a in df_p_and_at["Andamento"].dropna().unique() if str(a).strip() != ""])
+                    opcs_and_at = ["Todos"] + ands_at
+                    idx_and_at = opcs_and_at.index(filtros_at["and"][1]) if filtros_at["and"][1] in opcs_and_at else 0
+                    f_and_at = st.selectbox("🔄 Andamento:", opcs_and_at, index=idx_and_at, key="f_and_at")
+                    filtros_at["and"] = ("Andamento", f_and_at)
+
+                with col_at8:
+                    df_p_tema_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "tema")
+                    temas_at = sorted([str(t).strip() for t in df_p_tema_at["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
+                    opcs_tema_at = ["Todos"] + temas_at
+                    idx_tema_at = opcs_tema_at.index(filtros_at["tema"][1]) if filtros_at["tema"][1] in opcs_tema_at else 0
+                    f_tema_at = st.selectbox("🏷️ Tema:", opcs_tema_at, index=idx_tema_at, key="f_tema_at")
+                    filtros_at["tema"] = ("Tema da Atividade", f_tema_at)
+
+                # --- LINHA 3: SLIDER DE DATAS RESPONSIVO DE ATIVIDADES ---
+                dts_validas_at = df_base_atvs["Data_Inicio_Datetime"].dropna()
+                if not dts_validas_at.empty:
+                    min_dt_at = dts_validas_at.min().date()
+                    max_dt_at = dts_validas_at.max().date()
+                else:
+                    min_dt_at, max_dt_at = date(2025, 1, 1), date(2026, 12, 31)
+                if min_dt_at >= max_dt_at:
+                    max_dt_at = min_dt_at + pd.Timedelta(days=1)
+
+                f_slider_dts_at = st.slider(
+                    "⏳ Período (Data de Início da Atividade):",
+                    min_value=min_dt_at,
+                    max_value=max_dt_at,
+                    value=(min_dt_at, max_dt_at),
+                    format="DD/MM/YYYY",
+                    key="f_slider_dts_at"
+                )
+                filtros_at["data"] = ("Data_Inicio_Datetime", f_slider_dts_at)
+
+                # Aplicação final de todos os filtros
+                df_exib_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, None)
 
                 df_exib_at["Data de Início"] = df_exib_at["Data_Inicio_Datetime"].dt.date
                 df_exib_at["Data de Término"] = df_exib_at["Data_Termino_Datetime"].dt.date
@@ -945,7 +1100,8 @@ elif modo == "📊 Visualizar Base":
                     if c_num in df_tab_at.columns:
                         df_tab_at[c_num] = pd.to_numeric(df_tab_at[c_num], errors='coerce')
                 
-                df_tab_at = df_tab_at.sort_values(by="Id", ascending=False).reset_index(drop=True)
+                # 🚀 ORDENAÇÃO PADRÃO: DATA DE INÍCIO CRESCENTE (Cronológica Real)
+                df_tab_at = df_tab_at.sort_values(by=["Data de Início", "Id"], ascending=[True, True], na_position='last').reset_index(drop=True)
 
                 if "selecoes_atividades" not in st.session_state: st.session_state["selecoes_atividades"] = {}
                 if "version_ed_at" not in st.session_state: st.session_state["version_ed_at"] = 0
@@ -1030,13 +1186,11 @@ elif modo == "📊 Visualizar Base":
 
                         aba1_at, aba2_at, aba3_at, aba4_at, aba5_at = st.tabs([
                             "1. Identificação & Agrupador", "2. Detalhes & Indicadores", 
-                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Justificativas"
+                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações"
                         ])
                         
                         with aba1_at:
                             st.markdown("##### 🗂️ Ação PNAPA Vinculada (Pai)")
-                            
-                            # 🚀 NOVO: Seletor para alterar a Ação Pai
                             lista_opcoes_vinc = sorted((df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas.empty else []
                             cod_atual_salvo = str(reg_at_alvo.get("Número da Ação PNAPA", "")).strip()
                             
@@ -1169,7 +1323,7 @@ elif modo == "📊 Visualizar Base":
 
                             st.text_input("UF do Servidor (Automático)", value=ed_uf_srv_at, disabled=True, key=f"t1_at_ufsrv_{id_at_ref}")
                             st.text_input("Lotação (Automático)", value=ed_lot_at, disabled=True, key=f"t1_at_lot_{id_at_ref}")
-                            st.text_input("Equipe de Emergências? (Automático)", value=ed_eq_at, disabled=True, key=f"t1_at_eq_{id_at_ref}")
+                            st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=ed_eq_at, disabled=True, key=f"t1_at_eq_{id_at_ref}")
                             ed_pcdp_at = st.text_input("Número da PCDP:", value=str(reg_at_alvo.get("Número da PCDP", "")), key=f"t1_at_pcdp_{id_at_ref}")
                             
                             st.markdown("<p style='font-weight:bold; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
@@ -1183,7 +1337,7 @@ elif modo == "📊 Visualizar Base":
                             mun_lista_at = obter_municipios_ibge(ed_uf_oc_at)
                             mun_atual_at = str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
                             idx_mun_at = mun_lista_at.index(mun_atual_at) if mun_atual_at in mun_lista_at else 0
-                            ed_mun_at = st.selectbox("Município Onde Ocorreu/Ocorrerá a Ação:", mun_lista_at if mun_lista_at else ["Superintendência Sede"], index=idx_mun_at, key=f"t1_at_mun_{id_at_ref}_{ed_uf_oc_at}")
+                            ed_mun_at = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação:", mun_lista_at if mun_lista_at else ["Superintendência Sede"], index=idx_mun_at, key=f"t1_at_mun_{id_at_ref}_{ed_uf_oc_at}")
 
                         with aba4_at:
                             val_dti_at = converter_para_data_segura(reg_at_alvo.get("Data de Início"))
@@ -1206,7 +1360,7 @@ elif modo == "📊 Visualizar Base":
                                 ed_rp_d_at = st.number_input("Rec_Plan_Diarias:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Diarias")), step=50.0, format="%.2f", key=f"t1_at_rpd_{id_at_ref}")
                                 ed_rp_p_at = st.number_input("Rec_Plan_Passagens:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Passagens")), step=50.0, format="%.2f", key=f"t1_at_rpp_{id_at_ref}")
                                 ed_rp_o_at = st.number_input("Rec_Plan_Outras_Despesas:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_at_rpo_{id_at_ref}")
-                                st.text_input("Rec_Plan_Total (Soma):", value=f"{(ed_rp_d_at + ed_rp_p_at + ed_rp_o_at):,.2f}", disabled=True, key=f"t1_at_totpl_{id_at_ref}")
+                                st.text_input("Rec_Plan_Total (Soma):", value=f"{(ed_rp_d_at + ed_rp_p_at + ed_rp_o_ac if 'ed_rp_o_ac' in locals() else ed_rp_d_at + ed_rp_p_at + ed_rp_o_at):,.2f}", disabled=True, key=f"t1_at_totpl_{id_at_ref}")
                             with c_at_ex:
                                 st.caption("Executado")
                                 ed_re_d_at = st.number_input("Rec_Exec_Diarias:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Diarias")), step=50.0, format="%.2f", key=f"t1_at_red_{id_at_ref}")
@@ -1220,7 +1374,6 @@ elif modo == "📊 Visualizar Base":
                         ed_papel_heranca = papel_estado_at if papel_estado_at in LISTA_PAPEIS_INSTITUCIONAIS else ""
 
                         if st.button("💾 Gravar Alterações da Atividade", type="primary", key=f"btn_salvar_at_{id_at_ref}"):
-                            # Validação do Coordenador de Campo
                             bloqueio_coord = False
                             if ed_funcao_campo == "Coordenador de Campo":
                                 coordenadores_existentes = df_atual[
@@ -1423,7 +1576,6 @@ elif modo == "📊 Visualizar Base":
 
                                 if not bloqueio_lote:
                                     for _, row in df_at_sel.iterrows():
-                                        # Mescla os valores originais com os editados
                                         v_ano = edicoes_lote.get("Ano da Ação", row.get("Ano da Ação", 2026))
                                         v_num_acao = edicoes_lote.get("Número da Ação PNAPA", row.get("Número da Ação PNAPA", ""))
                                         v_nome_acao = edicoes_lote.get("Nome da Ação PNAPA", row.get("Nome da Ação PNAPA", ""))
