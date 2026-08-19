@@ -37,6 +37,7 @@ LISTA_TIPOS_ATIVIDADE = ["Capacitação", "Coleta de Amostras", "Desenvolvimento
 LISTA_PERIGOS = ["Periculosidade", "Insalubridade", "Não se Aplica"]
 LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Ceneac", "Não se aplica", "Outras fontes"]
 LISTA_IMPORTANCIA = ["Ordinária", "Prioritária", "Estratégica"]
+LISTA_PAPEIS_INSTITUCIONAIS
 
 LISTA_JUSTIFICATIVAS_ACAO = [
     "Indisponibilidade de meios orçamentários/financeiros para a execução da Ação",
@@ -68,6 +69,7 @@ def obter_municipios_ibge(sigla_uf):
 
 COLUNAS_PNAPA = [
     "Id", "Ano da Ação", "Número da Ação PNAPA", "Nome da Ação PNAPA", "Nível", 
+    "Papel_Institucional", "Coordenador_Operacao",
     "Nome da Atividade", "Andamento", "Indicador", "Meta_Indicador", "Resultado_Indicador", 
     "Doc_Probatorio_Exec", "UF_Acao_PNAPA", "Importância da Atividade", "Tema da Atividade", 
     "Objetivo da Atividade", "Tipo de Atividade", "Periculosidade/Insalubridade", "Servidor", 
@@ -112,9 +114,9 @@ def payload_gerador(
     uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
     estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
     origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
-    rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual
+    rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual,
+    papel_institucional="", coordenador_operacao="", meta_indicador=""
 ):
-    # Calcula o próximo ID sequencial se for inserção, ou preserva o ID atual se for edição
     if modo == "➕ Inserir Nova Linha":
         id_final = str(int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1)) if not df_atual.empty else "1"
         acao_switch = "Inserir"
@@ -123,16 +125,18 @@ def payload_gerador(
         acao_switch = "Editar"
 
     return {
-        "Acao": acao_switch,  # <- Alinhado exatamente ao seu Switch do Power Automate
+        "Acao": acao_switch,
         "Id": id_final,
         "Ano da Ação": int(val_ano) if val_ano else 2026,
         "Número da Ação PNAPA": str(val_num_acao),
         "Nome da Ação PNAPA": str(val_nome_acao),
         "Nível": str(nivel_selecionado),
+        "Papel_Institucional": str(papel_institucional),
+        "Coordenador_Operacao": str(coordenador_operacao),
         "Nome da Atividade": str(nome_atividade),
         "Andamento": str(andamento),
         "Indicador": str(val_indicador),
-        "Meta_Indicador": "",
+        "Meta_Indicador": str(meta_indicador),
         "Resultado_Indicador": str(resultado_indicador),
         "Doc_Probatorio_Exec": str(doc_probatorio),
         "UF_Acao_PNAPA": str(uf_acao),
@@ -255,7 +259,13 @@ def carregar_bases_vias_power_automate():
     
     df_lot = pd.DataFrame(dados_uni) if dados_uni else pd.DataFrame(columns=["ID_UF", "UF", "Unidade"])
     df_serv = pd.DataFrame(dados_srv) if dados_srv else pd.DataFrame(columns=["ID_SERV", "Servidor", "UF_Servidor", "Lotacao", "Equipe_Emergencias", "Fiscal", "AEAC", "Funcao", "E_mail", "Perfil", "Token"])
-    df_pna = pd.DataFrame(dados_pna) if dados_pna else pd.DataFrame(columns=["ID_PNAPA", "Ano", "Num_Acao_PNAPA", "Acao_Ano", "Nome_Acao_Completo", "Nome_Acao_Apelido", "Importância", "Indicador"])
+    
+    # 🚀 Inclui as colunas de Governança Nacional
+    cols_pna_padrao = ["ID_PNAPA", "Ano", "Num_Acao_PNAPA", "Acao_Ano", "Nome_Acao_Completo", "Nome_Acao_Apelido", "Importância", "Indicador", "UF_Dono", "Dono_Acao", "Meta_Nacional"]
+    df_pna = pd.DataFrame(dados_pna) if dados_pna else pd.DataFrame(columns=cols_pna_padrao)
+    for c in cols_pna_padrao:
+        if c not in df_pna.columns:
+            df_pna[c] = ""
     
     return df_lot, df_serv, df_pna
 
@@ -1196,14 +1206,12 @@ elif modo == "📊 Visualizar Base":
 elif modo == "➕ Inserir Nova Linha":
     st.markdown(f"<h3 style='color: #03170a;'>Formulário de Dados PNAPA — Modo: {modo}</h3>", unsafe_allow_html=True)
     
-    # 🌟 CONTROLES DE ESCOPO COM REATIVIDADE INSTANTÂNEA
     idx_nivel_padrao = 0 if registro_selecionado is None or str(registro_selecionado.get("Nível", "")) == "Ação" else 1
-    nivel_selecionado = st.selectbox("O que deseja cadastrar/editar?", ["Ação", "Atividade"], index=idx_nivel_padrao, key="main_txt_nivel")
+    nivel_selecionado = st.selectbox("O que deseja cadastrar?", ["Ação", "Atividade"], index=idx_nivel_padrao, key="main_txt_nivel")
     
     st.markdown("#### 🔗 Vinculação Automática com o Catálogo de Ações PNAPA")
     if not df_pnapas.empty:
         anos_aux_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
-        
         ano_padrao_form = int(registro_selecionado["Ano da Ação"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Ano da Ação"]) else anos_aux_disponiveis[0]
         try: idx_ano_form = anos_aux_disponiveis.index(ano_padrao_form)
         except ValueError: idx_ano_form = 0
@@ -1213,7 +1221,6 @@ elif modo == "➕ Inserir Nova Linha":
         
         if not df_pnapas_ano.empty:
             lista_opcoes_vinc = (df_pnapas_ano["Acao_Ano"].astype(str) + " - " + df_pnapas_ano["Nome_Acao_Apelido"].astype(str)).tolist()
-            
             num_acao_gravada = str(registro_selecionado.get("Número da Ação PNAPA", "")) if registro_selecionado is not None else ""
             idx_pna_vinc = 0
             for i, opc in enumerate(lista_opcoes_vinc):
@@ -1223,28 +1230,30 @@ elif modo == "➕ Inserir Nova Linha":
             
             opcao_vinc_sel = st.selectbox("Selecione a Ação PNAPA correspondente:", lista_opcoes_vinc, index=idx_pna_vinc, key="form_pna_vinculo_sel")
             
-            # PROCV automático do Catálogo Auxiliar
             acao_ano_detectado = opcao_vinc_sel.split(" - ")[0]
             dados_aux_linha = df_pnapas_ano[df_pnapas_ano["Acao_Ano"].astype(str) == acao_ano_detectado].iloc[0]
             
             val_ano = int(dados_aux_linha["Ano"])
-            # 🚀 AJUSTADO: Puxa o código completo com o ano (ex: CEN001-2026)
             val_num_acao = str(dados_aux_linha.get("Acao_Ano", dados_aux_linha["Num_Acao_PNAPA"]))
             apelido_ins = str(dados_aux_linha.get("Nome_Acao_Apelido", "")).strip()
             val_nome_acao = apelido_ins if apelido_ins and apelido_ins.lower() != "nan" else str(dados_aux_linha.get("Nome_Acao_Completo", "")).strip()
             val_indicador = str(dados_aux_linha["Indicador"])
-            
-            st.success(f"✅ Dados Vinculados: Código {val_num_acao} | {val_nome_acao[:60]}...")
+            importancia = str(dados_aux_linha.get("Importância", "Ordinária")).strip()
+            dono_nacional = str(dados_aux_linha.get("Dono_Acao", "Ceneac")).strip()
+            uf_dono_nac = str(dados_aux_linha.get("UF_Dono", "Ceneac")).strip()
+            meta_nac_info = dados_aux_linha.get("Meta_Nacional", "")
+
+            # 💡 CARD INFORMATIVO DA LIDERANÇA NACIONAL
+            st.info(f"👑 **Liderança Nacional:** `{dono_nacional} ({uf_dono_nac})` | **Meta Global do Plano:** `{meta_nac_info}` | **Indicador:** `{val_indicador}`")
         else:
             st.warning("⚠️ Nenhuma ação cadastrada para este ano no catálogo auxiliar.")
-            val_ano, val_num_acao, val_nome_acao, val_indicador = None, "", "", ""
+            val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Ordinária"
     else:
         st.error("⚠️ O catálogo auxiliar de Ações PNAPA está vazio.")
-        val_ano, val_num_acao, val_nome_acao, val_indicador = None, "", "", ""
+        val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Ordinária"
 
     st.markdown("---")
     
-    # Fallbacks de Configuração Geral de Datas
     dt_inicio_convertida = pd.to_datetime(registro_selecionado["Data de Início"], errors='coerce') if registro_selecionado is not None else pd.NaT
     val_dt_inicio = dt_inicio_convertida.date() if pd.notna(dt_inicio_convertida) else date.today()
     dt_termino_convertida = pd.to_datetime(registro_selecionado["Data de Término"], errors='coerce') if registro_selecionado is not None else pd.NaT
@@ -1259,26 +1268,36 @@ elif modo == "➕ Inserir Nova Linha":
     st.text_input("ID do Registro", value=id_atual if id_atual else "Definido no envio", disabled=True)
     
     # =================================================================
-    # CONDICIONAL VISUAL: SE FOR AÇÃO
+    # CONDICIONAL VISUAL: SE FOR AÇÃO (MOMENTO 2 - PLANEJAMENTO DA UF)
     # =================================================================
     if nivel_selecionado == "Ação":
-        importancia = str(dados_aux_linha.get("Importância", "Ordinária")).strip() if 'dados_aux_linha' in locals() else "Ordinária"
-
-        aba1, aba2, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "4. Cronograma & Custos", "5. Justificativas"])
+        aba1, aba2, aba4, aba5 = st.tabs(["1. Identificação & Governança", "2. Detalhes & Metas", "4. Cronograma & Custos", "5. Justificativas"])
         
         with aba1:
             st.text_input("Ano da Ação (Automático)", value=str(val_ano if val_ano else ""), disabled=True)
             st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
             st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
             
+            # 🚀 PAPEL DO ESTADO & COORDENADOR DA AÇÃO NA UF
+            c_pap1, c_pap2 = st.columns(2)
+            with c_pap1:
+                papel_inst = st.selectbox("Papel da UF nesta Ação:", LISTA_PAPEIS_INSTITUCIONAIS, key="pna_papel_acao")
+            with c_pap2:
+                uf_filtro_pna = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
+                srvs_uf_pna = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_pna]["Servidor"].dropna().unique().tolist()
+                servidor = st.selectbox(f"Ponto Focal / Coordenador da Ação na UF ({uf_filtro_pna}):", srvs_uf_pna if srvs_uf_pna else [email_logado], key="pna_focal_acao")
+                uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Sim"
+
             lista_andamentos_acao = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
             try: idx_and = lista_andamentos_acao.index(registro_selecionado["Andamento"]) if registro_selecionado is not None else 0
             except: idx_and = 0
             andamento = st.selectbox("Andamento da Ação", lista_andamentos_acao, index=idx_and, key="pna_sel_andamento_acao")
 
         with aba2:
-            st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
-            meta_indicador = st.text_input("Meta do Indicador", value=str(registro_selecionado["Meta_Indicador"]) if registro_selecionado is not None else "")
+            st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True)
+            
+            # 🚀 META ESTADUAL DA UF
+            meta_indicador = st.number_input(f"Meta da Ação para a UF ({uf_usuario}):", min_value=0.0, value=1.0, step=1.0, key="pna_meta_uf_input")
             
             uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
             st.text_input("Importância da Atividade (Herdada do Catálogo)", value=importancia, disabled=True)
@@ -1290,7 +1309,6 @@ elif modo == "➕ Inserir Nova Linha":
         with aba4:
             dt_inicio = st.date_input("Data de Início", value=val_dt_inicio, key="pna_dt_ini_acao")
             dt_termino = st.date_input("Data de Término", value=val_dt_termino, key="pna_dt_fim_acao")
-            # 🚀 Incrementos de 0.5
             dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
             origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, key="pna_orig_acao")
             
@@ -1299,37 +1317,34 @@ elif modo == "➕ Inserir Nova Linha":
             rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), step=50.0, format="%.2f", key="pna_rpp_acao")
             rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), step=50.0, format="%.2f", key="pna_rpo_acao")
             
-            # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL
             calc_plan_acao = float(rec_p_diarias + rec_p_passagens + rec_p_outras)
             st.number_input("Rec_Plan_Total (Soma Automática)", value=calc_plan_acao, disabled=True, format="%.2f")
 
         with aba5:
             obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "", key="pna_obs_acao")
-            
             if andamento in ["Cancelada", "Não Demandada", "Não Executada"]:
                 justificativa = st.selectbox("Justificativa_Acao_PNAPA", LISTA_JUSTIFICATIVAS_ACAO, key="pna_just_acao")
             else:
                 justificativa = ""
                 st.info("ℹ️ Justificativa habilitada apenas para ações com andamento Cancelada, Não Demandada ou Não Executada.")
 
-        # Nulos regulamentares de Atividade para o construtor do payload
         nome_atividade, resultado_indicador, doc_probatorio, periculosidade = "", "", "", "Não se Aplica"
-        servidor, uf_servidor, lotacao, equipe_emergencia, num_pcdp = "", "", "", "Não", ""
+        coordenador_operacao, num_pcdp = "", ""
         pais, uf_ocorrencia, estado_local, municipio, dias_exec = "Brasil", "", "", "", 0.0
         rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
 
     # =================================================================
-    # CONDICIONAL VISUAL: SE FOR ATIVIDADE (100% REATIVO)
+    # CONDICIONAL VISUAL: SE FOR ATIVIDADE (MOMENTO 3 - OPERAÇÃO/CAMPO)
     # =================================================================
     elif nivel_selecionado == "Atividade":
-        aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
+        aba1, aba2, aba3, aba4, aba5 = st.tabs(["1. Identificação", "2. Detalhes & Indicadores", "3. Recursos Humanos & Local", "4. Cronograma & Custos", "5. Justificativas"])
         
         with aba1:
             st.text_input("Ano da Ação (Automático)", value=str(val_ano if val_ano else ""), disabled=True)
             st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
             st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
             
-            nome_atividade = st.text_input("Nome da Atividade", value=str(registro_selecionado["Nome da Atividade"]) if registro_selecionado is not None else "", key="atv_nome")
+            nome_atividade = st.text_input("Nome da Atividade / Operação:", value=str(registro_selecionado["Nome da Atividade"]) if registro_selecionado is not None else "", key="atv_nome")
             
             lista_andamentos_atividade = ["Prevista", "Concluída"]
             try: idx_and_atv = lista_andamentos_atividade.index(registro_selecionado["Andamento"]) if registro_selecionado is not None else 0
@@ -1338,11 +1353,9 @@ elif modo == "➕ Inserir Nova Linha":
 
         with aba2:
             st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
-            resultado_indicador = st.text_input("Resultado do Indicador", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "", key="atv_res_ind")
-            doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI)", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "", key="atv_doc_sei")
+            resultado_indicador = st.text_input("Resultado do Indicador (Aferição Real):", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "", key="atv_res_ind")
+            doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI):", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "", key="atv_doc_sei")
             uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
-            
-            importancia = str(dados_aux_linha.get("Importância", "Ordinária")).strip() if 'dados_aux_linha' in locals() else "Ordinária"
             st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
             
             tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="atv_sel_tema")
@@ -1353,22 +1366,22 @@ elif modo == "➕ Inserir Nova Linha":
         with aba3:
             uf_filtro_servidor = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
             df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_servidor]
+            lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist()) if not df_servidores_filtrados.empty else [email_logado]
             
-            if not df_servidores_filtrados.empty:
-                lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist())
-                servidor = st.selectbox("Servidor Responsável", lista_nomes_servidores, key="atv_sel_servidor")
+            # 🚀 LÍDER DE CAMPO VS SERVIDOR INTEGRANTE
+            c_rh1, c_rh2 = st.columns(2)
+            with c_rh1:
+                coordenador_operacao = st.selectbox("Líder / Coordenador da Atividade em Campo:", lista_nomes_servidores, key="atv_sel_coord_op")
+            with c_rh2:
+                servidor = st.selectbox("Servidor Integrante / Responsável:", lista_nomes_servidores, key="atv_sel_servidor")
                 
-                # 🚀 ATUALIZAÇÃO INSTANTÂNEA AO TROCAR O SERVIDOR:
+            if not df_servidores_filtrados.empty and servidor in df_servidores_filtrados["Servidor"].values:
                 dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
                 uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_servidor))
                 lotacao = str(dados_serv_linha.get("Lotacao", "Sede Superintendência"))
                 equipe_emergencia = str(dados_serv_linha.get("Equipe_Emergencias", "Não"))
             else:
-                st.warning(f"⚠️ Nenhum servidor localizado no catálogo auxiliar para a UF: {uf_filtro_servidor}")
-                servidor = st.text_input("Servidor (Entrada Manual Emergencial)", value="", key="atv_txt_servidor_manual")
-                uf_servidor = uf_filtro_servidor
-                lotacao = "Sede Superintendência"
-                equipe_emergencia = "Não"
+                uf_servidor, lotacao, equipe_emergencia = uf_filtro_servidor, "Sede Superintendência", "Não"
 
             st.text_input("UF do Servidor (Automático)", value=uf_servidor, disabled=True)
             st.text_input("Lotação (Automático)", value=lotacao, disabled=True)
@@ -1378,7 +1391,6 @@ elif modo == "➕ Inserir Nova Linha":
             st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
             pais = st.text_input("País", value="Brasil", disabled=True)
             
-            # 🚀 ATUALIZAÇÃO INSTANTÂNEA DA UF E MUNICÍPIOS IBGE:
             uf_ocorrencia = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA, key="atv_sel_uf_ocorrencia")
             estado_local = MAPEAMENTO_ESTADOS_COMPLETO[uf_ocorrencia]
             st.text_input("Estado_Local_Acao (Automático)", value=estado_local, disabled=True)
@@ -1390,7 +1402,6 @@ elif modo == "➕ Inserir Nova Linha":
             dt_inicio = st.date_input("Data de Início", value=val_dt_inicio, key="atv_dt_ini")
             dt_termino = st.date_input("Data de Término", value=val_dt_termino, key="atv_dt_fim")
             
-            # 🚀 Incrementos de 0.5
             c_d1_ins, c_d2_ins = st.columns(2)
             with c_d1_ins:
                 dias_plan = st.number_input("Dias_Gastos_Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="atv_dias_pl")
@@ -1406,8 +1417,6 @@ elif modo == "➕ Inserir Nova Linha":
                 rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), step=50.0, format="%.2f", key="atv_rpd")
                 rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), step=50.0, format="%.2f", key="atv_rpp")
                 rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), step=50.0, format="%.2f", key="atv_rpo")
-                
-                # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL (Planejado)
                 calc_tot_p_atv = float(rec_p_diarias + rec_p_passagens + rec_p_outras)
                 st.number_input("Rec_Plan_Total (Soma Automática)", value=calc_tot_p_atv, disabled=True, format="%.2f")
 
@@ -1416,8 +1425,6 @@ elif modo == "➕ Inserir Nova Linha":
                 rec_e_diarias = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Diarias"), step=50.0, format="%.2f", key="atv_red")
                 rec_e_passagens = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Passagens"), step=50.0, format="%.2f", key="atv_rep")
                 rec_e_outras = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Outras_Despesas"), step=50.0, format="%.2f", key="atv_reo")
-                
-                # 🚀 SOMA AUTOMÁTICA EM TEMPO REAL (Executado)
                 calc_tot_e_atv = float(rec_e_diarias + rec_e_passagens + rec_e_outras)
                 st.number_input("Rec_Exec_Total (Soma Automática)", value=calc_tot_e_atv, disabled=True, format="%.2f")
 
@@ -1426,18 +1433,14 @@ elif modo == "➕ Inserir Nova Linha":
             justificativa = ""
             st.info("ℹ️ Campo Justificativa ocultado. Regra aplicada: Habilitado apenas para cadastro de Ações.")
 
+        papel_inst = "Execução"
         meta_indicador = ""
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 🚀 BOTÃO PRINCIPAL DIRETO (Sem st.form)
     btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", key="btn_gravar_individual_reativo")
 
-    # =================================================================
-    # PROCESSAMENTO DO ENVIO: INDIVIDUAL OU EM LOTE
-    # =================================================================
-    
-    # 1. DISPARO DO ENVIO INDIVIDUAL
+    # 1. ENVIO INDIVIDUAL
     if btn_enviar_individual:
         payload_unico = payload_gerador(
             val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
@@ -1446,11 +1449,12 @@ elif modo == "➕ Inserir Nova Linha":
             uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
             estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
             origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
-            rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual
+            rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual,
+            papel_institucional=papel_inst, coordenador_operacao=coordenador_operacao, meta_indicador=meta_indicador
         )
         executar_envio_sharepoint([payload_unico])
 
-    # 2. OPÇÃO EM LOTE (Apenas para inserção de novas Atividades)
+    # 2. CARGA EM LOTE (ATIVIDADE)
     if modo == "➕ Inserir Nova Linha" and nivel_selecionado == "Atividade":
         st.markdown("---")
         with st.popover("👥 Deseja cadastrar esta atividade para múltiplos servidores? (Carga em Lote)", use_container_width=True):
@@ -1523,8 +1527,10 @@ elif modo == "➕ Inserir Nova Linha":
                         "Id": id_loop, 
                         "Ano da Ação": int(val_ano) if val_ano else 2026,
                         "Número da Ação PNAPA": str(val_num_acao), 
-                        "Nome da Ação PNAPA": str(val_nome_acao),
+                        "Nome da Ação PNAPA": str(val_nome_acao), 
                         "Nível": nivel_selecionado, 
+                        "Papel_Institucional": "Execução",
+                        "Coordenador_Operacao": str(coordenador_operacao),
                         "Nome da Atividade": p_nome_atv, 
                         "Andamento": p_andamento,
                         "Indicador": str(val_indicador), 
@@ -1556,7 +1562,7 @@ elif modo == "➕ Inserir Nova Linha":
                         "Rec_Plan_Outras_Despesas": p_rp_o,
                         "Rec_Plan_Total": (p_rp_d + p_rp_p + p_rp_o), 
                         "Rec_Exec_Diarias": p_re_d, 
-                        "Rec_Exec_Passagens": p_re_p,
+                        "Rec_Exec_Passagens": p_re_p, 
                         "Rec_Exec_Outras_Despesas": p_re_o, 
                         "Rec_Exec_Total": (p_re_d + p_re_p + p_re_o),
                         "Observações": p_obs, 
@@ -2090,25 +2096,20 @@ elif modo == "👥 Gerenciar Equipes":
                 st.success(f"Acesso revogado com sucesso!")
                 st.rerun()
 
-# --- TELA AUXILIAR: GERENCIAR AÇÕES PNAPA (COM PREENCHIMENTO REATIVO E CASCATA) ---
+# --- TELA AUXILIAR: GERENCIAR AÇÕES PNAPA ---
 elif modo == "🗂️ Gerenciar Ações PNAPA":
     st.markdown("<h3 style='color: #03170a;'>🗂️ Catálogo Oficial de Ações PNAPA</h3>", unsafe_allow_html=True)
-    st.caption("Tabela auxiliar corporativa para vinculação, metas e padronização das atividades operacionais.")
+    st.caption("Tabela auxiliar corporativa para governança nacional, vinculação e padronização das ações.")
     
-    # 🔒 VERIFICAÇÃO DE PERMISSÃO ADMINISTRATIVA
     pode_administrar_catalogo = (perfil_usuario == "Administrador") and acesso_liberado
 
-    # 1. VISUALIZAÇÃO DA TABELA (DISPONÍVEL PARA TODOS OS PERFIS)
     if df_pnapas.empty:
         st.warning("⚠️ O catálogo de Ações PNAPA está vazio no momento.")
     else:
         st.dataframe(df_pnapas, use_container_width=True, hide_index=True)
 
-    # 2. BLOQUEIO PARA PERFIS NÃO ADMINISTRADORES
     if not pode_administrar_catalogo:
         st.info("👁️ **Modo Somente Leitura:** Como Editor Regional, você pode consultar o catálogo de ações. A criação, alteração e exclusão de Ações PNAPA são operações de governança restritas ao **Administrador**.")
-    
-    # 3. PAINEL OPERACIONAL DE CRUD (EXCLUSIVO PARA ADMINISTRADOR)
     else:
         st.markdown("---")
         st.markdown("### ⚙️ Painel de Governança do Catálogo (Exclusivo Administrador)")
@@ -2133,6 +2134,17 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             novo_nome_comp = st.text_input("Nome Completo da Ação (Descrição Oficial):", key="cad_pna_nome_comp").strip()
             novo_nome_apelido = st.text_input("Nome Resumido / Apelido (Exibição Amigável):", key="cad_pna_nome_apelido").strip()
             
+            # 🚀 LIDERANÇA NACIONAL (DONO DA AÇÃO)
+            st.markdown("###### 👑 Liderança Nacional da Ação")
+            c_dn1, c_dn2, c_dn3 = st.columns([1, 2, 1])
+            with c_dn1:
+                novo_uf_dono = st.selectbox("UF/Órgão do Dono:", ["Ceneac"] + LISTA_UFS_COMPLETA, key="cad_pna_uf_dono")
+            with c_dn2:
+                srvs_dono_disp = df_servidores[df_servidores["UF_Servidor"] == novo_uf_dono]["Servidor"].dropna().unique().tolist()
+                novo_dono_acao = st.selectbox("Servidor Especialista (Dono da Ação):", srvs_dono_disp if srvs_dono_disp else ["Guttemberg"], key="cad_pna_dono")
+            with c_dn3:
+                nova_meta_nac = st.number_input("Meta Global Nacional:", min_value=0.0, value=12.0, step=1.0, key="cad_pna_meta_nac")
+
             c_ind, c_imp = st.columns(2)
             with c_ind:
                 novo_indicador = st.text_input("Indicador Associado:", key="cad_pna_ind").strip()
@@ -2157,7 +2169,10 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         "Nome_Acao_Completo": novo_nome_comp,
                         "Nome_Acao_Apelido": novo_nome_apelido if novo_nome_apelido else novo_nome_comp,
                         "Indicador": novo_indicador,
-                        "Importância": nova_importancia
+                        "Importância": nova_importancia,
+                        "UF_Dono": str(novo_uf_dono),
+                        "Dono_Acao": str(novo_dono_acao),
+                        "Meta_Nacional": float(nova_meta_nac)
                     }
                     
                     with st.spinner("Gravando no catálogo do SharePoint..."):
@@ -2175,7 +2190,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             st.error(f"❌ Erro de conexão: {e}")
 
         # =================================================================
-        # ABA 2: EDITAR AÇÃO EXISTENTE (REATIVO E CASCATA DIRETA)
+        # ABA 2: EDITAR AÇÃO EXISTENTE (REATIVO E CASCATA)
         # =================================================================
         with tab_edt_pna:
             st.markdown("##### 📝 Atualizar Dados de Ação PNAPA")
@@ -2195,62 +2210,45 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 val_atual_apelido = str(dados_alvo_edt.get("Nome_Acao_Apelido", "")).strip()
                 val_atual_ind = str(dados_alvo_edt.get("Indicador", "")).strip()
                 val_atual_imp = str(dados_alvo_edt.get("Importância", "Ordinária")).strip()
+                val_atual_uf_dono = str(dados_alvo_edt.get("UF_Dono", "Ceneac")).strip()
+                val_atual_dono = str(dados_alvo_edt.get("Dono_Acao", "")).strip()
+                val_atual_meta_nac = float(pd.to_numeric(dados_alvo_edt.get("Meta_Nacional", 0), errors='coerce') or 0.0)
 
                 st.markdown(f"#### 🗂️ Ficha da Ação: **{cod_alvo_edt}** `(ID: {id_pna_edit})`")
-                st.caption("Modificações nesta ação serão refletidas em cascata em todas as atividades vinculadas na base principal.")
 
                 c_e_ano, c_e_num = st.columns(2)
                 with c_e_ano:
-                    e_ano = st.number_input(
-                        "Ano da Ação:", 
-                        min_value=2020, 
-                        max_value=2040, 
-                        value=val_atual_ano, 
-                        step=1, 
-                        key=f"edt_pna_ano_{id_pna_edit}"
-                    )
+                    e_ano = st.number_input("Ano da Ação:", min_value=2020, max_value=2040, value=val_atual_ano, step=1, key=f"edt_pna_ano_{id_pna_edit}")
                 with c_e_num:
-                    e_num = st.text_input(
-                        "Código/Número (Ex: CEN001):", 
-                        value=val_atual_num, 
-                        key=f"edt_pna_num_{id_pna_edit}"
-                    ).strip().upper()
+                    e_num = st.text_input("Código/Número:", value=val_atual_num, key=f"edt_pna_num_{id_pna_edit}").strip().upper()
 
-                e_comp = st.text_input(
-                    "Nome Completo da Ação (Descrição Oficial):", 
-                    value=val_atual_comp, 
-                    key=f"edt_pna_comp_{id_pna_edit}"
-                ).strip()
-                
-                e_apelido = st.text_input(
-                    "Nome Resumido / Apelido (Exibição Amigável):", 
-                    value=val_atual_apelido, 
-                    key=f"edt_pna_apelido_{id_pna_edit}"
-                ).strip()
+                e_comp = st.text_input("Nome Completo da Ação:", value=val_atual_comp, key=f"edt_pna_comp_{id_pna_edit}").strip()
+                e_apelido = st.text_input("Nome Resumido / Apelido:", value=val_atual_apelido, key=f"edt_pna_apelido_{id_pna_edit}").strip()
+
+                # 🚀 EDIÇÃO DA LIDERANÇA NACIONAL
+                st.markdown("###### 👑 Liderança Nacional da Ação")
+                c_edn1, c_edn2, c_edn3 = st.columns([1, 2, 1])
+                with c_edn1:
+                    lista_ufs_dono_edit = ["Ceneac"] + LISTA_UFS_COMPLETA
+                    idx_uf_dn = lista_ufs_dono_edit.index(val_atual_uf_dono) if val_atual_uf_dono in lista_ufs_dono_edit else 0
+                    e_uf_dono = st.selectbox("UF/Órgão do Dono:", lista_ufs_dono_edit, index=idx_uf_dn, key=f"edt_pna_uf_dn_{id_pna_edit}")
+                with c_edn2:
+                    srvs_dono_edit = df_servidores[df_servidores["UF_Servidor"] == e_uf_dono]["Servidor"].dropna().unique().tolist()
+                    idx_dn = srvs_dono_edit.index(val_atual_dono) if val_atual_dono in srvs_dono_edit else 0
+                    e_dono = st.selectbox("Servidor Dono da Ação:", srvs_dono_edit if srvs_dono_edit else [val_atual_dono], index=idx_dn, key=f"edt_pna_dn_{id_pna_edit}")
+                with c_edn3:
+                    e_meta_nac = st.number_input("Meta Global Nacional:", min_value=0.0, value=val_atual_meta_nac, step=1.0, key=f"edt_pna_meta_nac_{id_pna_edit}")
 
                 c_e_ind, c_e_imp = st.columns(2)
                 with c_e_ind:
-                    e_ind = st.text_input(
-                        "Indicador Associado:", 
-                        value=val_atual_ind, 
-                        key=f"edt_pna_ind_{id_pna_edit}"
-                    ).strip()
+                    e_ind = st.text_input("Indicador Associado:", value=val_atual_ind, key=f"edt_pna_ind_{id_pna_edit}").strip()
                 with c_e_imp:
-                    try:
-                        idx_imp = LISTA_IMPORTANCIA.index(val_atual_imp)
-                    except ValueError:
-                        idx_imp = 0
-                    
-                    e_imp = st.selectbox(
-                        "Importância Padrão:", 
-                        LISTA_IMPORTANCIA, 
-                        index=idx_imp, 
-                        key=f"edt_pna_imp_{id_pna_edit}"
-                    )
+                    try: idx_imp = LISTA_IMPORTANCIA.index(val_atual_imp)
+                    except ValueError: idx_imp = 0
+                    e_imp = st.selectbox("Importância Padrão:", LISTA_IMPORTANCIA, index=idx_imp, key=f"edt_pna_imp_{id_pna_edit}")
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- DISPARO DA ATUALIZAÇÃO EM CASCATA ---
                 from concurrent.futures import ThreadPoolExecutor
 
                 if st.button("💾 Salvar Alterações e Sincronizar Base Principal", type="primary", key=f"btn_salvar_edt_pna_{id_pna_edit}"):
@@ -2260,7 +2258,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         nova_chave_acao_ano = f"{e_num}-{e_ano}"
                         novo_nome_display = e_apelido if e_apelido else e_comp
 
-                        # 1. Atualiza o Catálogo de Ações no SharePoint
                         payload_edt = {
                             "Acao": "Editar",
                             "Id": str(id_pna_edit),
@@ -2271,7 +2268,10 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             "Nome_Acao_Completo": e_comp,
                             "Nome_Acao_Apelido": novo_nome_display,
                             "Indicador": e_ind,
-                            "Importância": e_imp
+                            "Importância": e_imp,
+                            "UF_Dono": str(e_uf_dono),
+                            "Dono_Acao": str(e_dono),
+                            "Meta_Nacional": float(e_meta_nac)
                         }
                         
                         with st.spinner(f"1/2 Atualizando Ação '{nova_chave_acao_ano}' no Catálogo..."):
@@ -2280,7 +2280,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             except Exception as e:
                                 st.error(f"Erro ao conectar ao catálogo: {e}")
 
-                        # 2. Localiza atividades vinculadas na Planilha Principal (pelo código antigo)
                         cod_antigo_acao_ano = str(dados_alvo_edt.get("Acao_Ano", "")).strip()
                         cod_antigo_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip()
 
@@ -2298,13 +2297,11 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                                     p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
                                     p_item["Acao"] = "Editar"
                                     p_item["Id"] = str(row_orig["Id"])
-                                    
-                                    # 🚀 Atualiza metadados oficiais da Ação na linha macro
                                     p_item["Ano da Ação"] = int(e_ano)
                                     p_item["Número da Ação PNAPA"] = str(nova_chave_acao_ano)
                                     p_item["Nome da Ação PNAPA"] = str(novo_nome_display)
                                     p_item["Indicador"] = str(e_ind)
-                                    p_item["Importância da Atividade"] = str(e_imp)  # <- Gravação direta
+                                    p_item["Importância da Atividade"] = str(e_imp)
                                     
                                     payload_sanit = {
                                         k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) 
@@ -2323,22 +2320,17 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                                     resultados = list(executor.map(enviar_req_pna_macro, payloads_cascata_pna))
                                     sucessos_macro = sum(resultados)
 
-                        # 3. Limpeza de cache e feedback
                         time.sleep(2.0)
                         st.cache_data.clear()
                         if "df" in st.session_state:
                             del st.session_state.df
 
-                        msg_sucesso = f"🎉 Ação **{nova_chave_acao_ano}** atualizada com sucesso!"
-                        if qtd_macro_afetadas > 0:
-                            msg_sucesso += f" ({sucessos_macro}/{qtd_macro_afetadas} atividades sincronizadas em cascata)."
-                        st.success(msg_sucesso)
-                        
+                        st.success(f"🎉 Ação **{nova_chave_acao_ano}** e {sucessos_macro}/{qtd_macro_afetadas} atividades sincronizadas com sucesso!")
                         time.sleep(1.5)
                         st.rerun()
 
         # =================================================================
-        # ABA 3: EXCLUIR AÇÃO (COM VERIFICAÇÃO DE DEPENDÊNCIAS)
+        # ABA 3: EXCLUIR AÇÃO
         # =================================================================
         with tab_exc_pna:
             st.markdown("##### 🗑️ Exclusão de Ação PNAPA")
@@ -2357,7 +2349,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 ]
                 
                 if not linhas_dependentes.empty:
-                    st.warning(f"⚠️ **Atenção:** Existem **{len(linhas_dependentes)} registro(s)** vinculados a esta Ação na Planilha Principal. Excluí-la do catálogo impedirá novas vinculações.")
+                    st.warning(f"⚠️ **Atenção:** Existem **{len(linhas_dependentes)} registro(s)** vinculados a esta Ação na Planilha Principal.")
                 
                 if st.button("🔥 Confirmar Exclusão Permanente", type="primary", disabled=not st.checkbox(f"Confirmo que desejo excluir a ação {cod_alvo_del}", key=f"chk_del_pna_{id_pna_del}")):
                     payload_del_pna = {
