@@ -525,13 +525,19 @@ if modo == "📈 Dashboards Executivos":
         
         # Aplica a classificação
         df_dashboard = df_atual[df_atual["Nível"] == "Ação"].copy()
-        df_dashboard["Nivel_Carga"] = df_dashboard["Dias_Gastos_Plan"].apply(classificar_nivel_acao)
+        df_dashboard["Dias_Gastos_Plan"] = pd.to_numeric(df_dashboard["Dias_Gastos_Plan"], errors='coerce').fillna(0)
         
-        # Exibe resumo de carga por coordenador (Ponto Focal)
+        # 🚀 FORÇANDO A CATEGORIA "Indefinido"
+        df_dashboard["Nivel_Carga"] = df_dashboard["Dias_Gastos_Plan"].apply(classificar_nivel_acao)
+        ordem_carga = ["Nível 1 (Leve)", "Nível 2 (Médio)", "Nível 3 (Intensivo)", "Indefinido"]
+        df_dashboard["Nivel_Carga"] = pd.Categorical(df_dashboard["Nivel_Carga"], categories=ordem_carga, ordered=True)
+        
+        # Exibe resumo de carga por coordenador
         col_g3, col_g4 = st.columns(2)
         with col_g3:
             st.markdown("#### Carga por Coordenador")
-            df_carga = df_dashboard.groupby(["Servidor", "Nivel_Carga"]).size().unstack(fill_value=0)
+            # Agora garantimos que todas as colunas aparecem, mesmo com valor 0
+            df_carga = df_dashboard.groupby(["Servidor", "Nivel_Carga"], observed=False).size().unstack(fill_value=0)
             st.dataframe(df_carga, use_container_width=True)
         
         with col_g4:
@@ -546,25 +552,31 @@ if modo == "📈 Dashboards Executivos":
         # --- NOVO PAINEL DE MATRIZ DE PRIORIZAÇÃO ---
         st.markdown("---")
         st.markdown("### 🎯 Matriz de Priorização (Esforço x Importância)")
-        st.caption("Estratégia de Planejamento: Identifique 'Quick Wins' (Baixo Esforço/Alta Importância) e 'Time Sinks' (Alto Esforço/Baixa Importância).")
         
-        # Preparação dos dados para a matriz
-        df_matriz = df_atual[df_atual["Nível"] == "Ação"].copy()
-        df_matriz["Dias_Gastos_Plan"] = pd.to_numeric(df_matriz["Dias_Gastos_Plan"], errors='coerce').fillna(0)
-        # Ordena a importância para o eixo Y
         ordem_importancia = ["Ordinária", "Prioritária", "Estratégica"]
         
-        # Criando o gráfico
+        # Definindo cores fixas para identificar o "Indefinido" facilmente (Cinza)
+        cor_mapa = {
+            "Coordenação": "#1f77b4", 
+            "Apoio": "#ff7f0e"
+        }
+
         fig = px.scatter(
-            df_matriz, 
+            df_dashboard, 
             x="Dias_Gastos_Plan", 
             y="Importância da Atividade", 
             color="Papel_Institucional",
             hover_name="Nome da Ação PNAPA",
             size_max=15,
-            category_orders={"Importância da Atividade": ordem_importancia},
+            category_orders={
+                "Importância da Atividade": ordem_importancia,
+                "Nivel_Carga": ordem_carga
+            },
             title="Distribuição das Ações por Esforço Planejado e Importância Institucional"
         )
+        
+        # Adicionando um destaque visual para a legenda do Nível de Carga (opcional)
+        fig.update_traces(marker=dict(line=dict(width=1, color='DarkSlateGrey')))
         
         # Linhas de referência para os níveis de carga
         fig.add_vline(x=5, line_dash="dash", line_color="green", annotation_text="Nível 1 Limite")
