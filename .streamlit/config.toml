@@ -1,23 +1,6 @@
-#[theme]
-#backgroundColor = "#f2f5f3"
-#secondaryBackgroundColor = "#1c4029"
-#textColor = "#03170a"
-#primaryColor = "#4d6b53"
-#font = "sans serif"
-
-
 [theme]
-# Cor de fundo principal do aplicativo (Cinza bem claro/gelo)
-backgroundColor = "#F8FAFC"
-
-# Cor de fundo secundária (Usada para a barra lateral e caixas de seleção)
-secondaryBackgroundColor = "#FFFFFF"
-
-# Cor do texto principal (Cinza escuro quase preto)
-textColor = "#0F172A"
-
-# Cor primária de destaque (O verde do IBAMA que você já usa nos botões e sliders)
-primaryColor = "#4D6B53"
-
-# Fonte do sistema
+backgroundColor = "#f2f5f3"
+secondaryBackgroundColor = "#1c4029"
+textColor = "#03170a"
+primaryColor = "#4d6b53"
 font = "sans serif"
