@@ -547,28 +547,34 @@ if modo == "📈 Dashboards Executivos":
                 margin-bottom: 1rem !important;
             }
             
-            /* FORÇA BRUTA: Fundo branco e borda suave para Selectboxes */
-            div[data-baseweb="select"] > div {
+            /* FORÇA BRUTA: Limpa qualquer fundo de Selectbox para Branco Absoluto */
+            div[data-testid="stSelectbox"] > div,
+            div[data-baseweb="select"] > div,
+            div[data-baseweb="select"] > div:hover,
+            div[data-baseweb="select"] > div > div {
+                background: #ffffff !important;
                 background-color: #ffffff !important;
                 border: 1px solid #cbd5e1 !important;
-                border-radius: 6px !important;
             }
             
             /* FORÇA BRUTA: Força todo o texto dentro das caixas a ficar escuro */
-            div[data-baseweb="select"] > div * {
+            div[data-baseweb="select"] * {
                 color: #0f172a !important;
             }
             
             /* FORÇA BRUTA: Fundo e texto das listas suspensas (dropdowns) */
             ul[data-baseweb="menu"], 
             div[data-baseweb="popover"] ul {
+                background: #ffffff !important;
                 background-color: #ffffff !important;
             }
             ul[data-baseweb="menu"] li {
                 color: #0f172a !important;
+                background: #ffffff !important;
                 background-color: #ffffff !important;
             }
             ul[data-baseweb="menu"] li:hover {
+                background: #f1f5f9 !important;
                 background-color: #f1f5f9 !important;
             }
             
