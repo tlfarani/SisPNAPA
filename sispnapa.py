@@ -1368,7 +1368,7 @@ elif modo == "📊 Visualizar Base":
                         importancia_at = str(reg_at_alvo.get("Importância da Atividade", "Ordinária"))
                         uf_acao_at = str(reg_at_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
 
-                        aba1_at, aba2_at, aba3_at, aba4_at, aba5_at = st.tabs([
+                        aba1_at, aba2_at, aba3_at, aba4_at, aba5_at, aba6_at = st.tabs([
                             "1. Identificação & Agrupador", "2. Detalhes & Indicadores", 
                             "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações",
                             "6. Avaliação da Liderança"
@@ -1624,7 +1624,7 @@ elif modo == "📊 Visualizar Base":
                         
                         edicoes_lote = {}
                         
-                        l_aba1, l_aba2, l_aba3, l_aba4, l_aba5 = st.tabs([
+                        l_aba1, l_aba2, l_aba3, l_aba4, l_aba5, l_aba6 = st.tabs([
                             "1. Identificação & Agrupador", "2. Detalhes & Indicadores", 
                             "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações",
                             "6. Avaliação"
