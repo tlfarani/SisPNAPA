@@ -398,16 +398,29 @@ st.markdown("""
             color: #03170a !important; font-weight: bold !important;
         }
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg { fill: #03170a !important; }
+        
+        /* 🚀 AQUI ESTÁ A CORREÇÃO: Adicionamos o popover para as regras originais pegarem nele */
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
-        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div {
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div,
+        div[data-baseweb="popover"] div[data-baseweb="select"] > div {
             background-color: #ffffff !important; border: 1px solid #cbd5e1 !important;
         }
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] *,
-        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] * {
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] *,
+        div[data-baseweb="popover"] div[data-baseweb="select"] * {
             color: #03170a !important; background-color: transparent !important;
         }
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg,
-        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] svg { fill: #03170a !important; }
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] svg,
+        div[data-baseweb="popover"] div[data-baseweb="select"] svg { 
+            fill: #03170a !important; 
+        }
+        
+        /* Força a lista de opções (dropdown) do popover a ficar branca */
+        ul[data-baseweb="menu"] { background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; }
+        ul[data-baseweb="menu"] li { color: #03170a !important; background-color: transparent !important; }
+        ul[data-baseweb="menu"] li:hover { background-color: #f1f5f9 !important; }
+        
         div[data-testid="stNumberInput"] input { background-color: #ffffff !important; color: #03170a !important; }
         div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
         div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
@@ -532,11 +545,11 @@ if modo == "📈 Dashboards Executivos":
         import pandas as pd
 
         # =====================================================================
-        # 1. ESTILIZAÇÃO CSS: BARRA E CORREÇÃO DEFINITIVA DO VERDE ESCURO
+        # 1. ESTILIZAÇÃO CSS: BARRA DE FILTROS SUPERIOR FIXA (STICKY TOP BAR)
         # =====================================================================
         st.markdown("""
             <style>
-            /* Barra Fixa mais limpa */
+            div[data-testid="stVerticalBlock"] > div:has(.sticky-bar-marker),
             div.st-key-sticky_filter_container {
                 position: sticky !important;
                 top: 2.875rem !important;
@@ -546,41 +559,8 @@ if modo == "📈 Dashboards Executivos":
                 border-bottom: 1px solid #cbd5e1 !important;
                 margin-bottom: 1rem !important;
             }
-            
-            /* FORÇA BRUTA: Fundo branco e borda suave para Selectboxes */
-            div[data-baseweb="select"] > div {
-                background-color: #ffffff !important;
-                border: 1px solid #cbd5e1 !important;
-                border-radius: 6px !important;
-            }
-            
-            /* FORÇA BRUTA: Força todo o texto dentro das caixas a ficar escuro */
-            div[data-baseweb="select"] > div * {
-                color: #0f172a !important;
-            }
-            
-            /* FORÇA BRUTA: Fundo e texto das listas suspensas (dropdowns) */
-            ul[data-baseweb="menu"], 
-            div[data-baseweb="popover"] ul {
-                background-color: #ffffff !important;
-            }
-            ul[data-baseweb="menu"] li {
-                color: #0f172a !important;
-                background-color: #ffffff !important;
-            }
-            ul[data-baseweb="menu"] li:hover {
-                background-color: #f1f5f9 !important;
-            }
-            
-            /* Ícone da setinha do dropdown escuro */
-            div[data-baseweb="select"] svg {
-                fill: #0f172a !important;
-                color: #0f172a !important;
-            }
             </style>
         """, unsafe_allow_html=True)
-
-        hoje = pd.Timestamp(date.today())
 
         # =====================================================================
         # 2. PREPARAÇÃO DE DADOS E LÓGICA DE STATUS
