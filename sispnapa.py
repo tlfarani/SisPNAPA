@@ -80,7 +80,7 @@ COLUNAS_PNAPA = [
     "Data de Início", "Data de Término", "Dias_Gastos_Plan", "Dias_Gastos_Exec", "Origem do Recurso", 
     "Rec_Plan_Diarias", "Rec_Plan_Passagens", "Rec_Plan_Outras_Despesas", "Rec_Plan_Total", 
     "Rec_Exec_Diarias", "Rec_Exec_Passagens", "Rec_Exec_Outras_Despesas", "Rec_Exec_Total", 
-    "Observações", "Justificativa_Acao_PNAPA"
+    "Observações", "Justificativa_Acao_PNAPA", "Avaliacao_Qualidade", "Avaliacao_Feedback",
 ]
 
 # =================================================================
@@ -133,7 +133,8 @@ def payload_gerador(
     estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
     origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
     rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual,
-    papel_institucional="", coordenador_operacao="", meta_indicador="", codigo_atividade=""
+    papel_institucional="", coordenador_operacao="", meta_indicador="", codigo_atividade="",
+    aval_qualidade="", aval_feedback=""
 ):
     if modo == "➕ Inserir Nova Linha":
         id_final = str(int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1)) if not df_atual.empty else "1"
@@ -198,7 +199,9 @@ def payload_gerador(
         "Rec_Exec_Outras_Despesas": re_o,
         "Rec_Exec_Total": float(re_d + re_p + re_o),
         "Observações": str(obs),
-        "Justificativa_Acao_PNAPA": str(justificativa)
+        "Justificativa_Acao_PNAPA": str(justificativa),
+        "Avaliacao_Qualidade": str(aval_qualidade),
+        "Avaliacao_Feedback": str(aval_feedback)
     }
 
 def verificar_string_limpa(txt):
@@ -426,6 +429,11 @@ st.markdown("""
 # =================================================================
 # IV. GESTÃO DE AUTENTICAÇÃO E PERFIS DE ACESSO (SSO & PERFIS)
 # =================================================================
+try:
+    nome_usuario_logado = df_servidores[df_servidores["E_mail"] == email_logado]["Servidor"].iloc[0]
+except:
+    nome_usuario_logado = "Desconhecido"
+
 try:
     if hasattr(st, "user") and hasattr(st.user, "email"): email_logado = st.user.email
     elif hasattr(st, "experimental_user"): email_logado = st.experimental_user.email
@@ -1362,7 +1370,8 @@ elif modo == "📊 Visualizar Base":
 
                         aba1_at, aba2_at, aba3_at, aba4_at, aba5_at = st.tabs([
                             "1. Identificação & Agrupador", "2. Detalhes & Indicadores", 
-                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações"
+                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações",
+                            "6. Avaliação da Liderança"
                         ])
                         
                         with aba1_at:
@@ -1547,6 +1556,33 @@ elif modo == "📊 Visualizar Base":
                         with aba5_at:
                             ed_obs_at = st.text_area("Observações:", value=str(reg_at_alvo.get("Observações", "")), key=f"t1_at_obs_{id_at_ref}")
 
+                        with aba6_at:
+                            st.markdown("##### ⭐ Avaliação de Desempenho do Servidor")
+                            st.caption("Apenas o Coordenador da Atividade, Ponto Focal da UF ou Administrador podem avaliar.")
+                            
+                            # Lógica de Autorização (Trava de Segurança)
+                            is_coord = not df_atual[
+                                (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(ed_cod_atv).strip().upper()) & 
+                                (df_atual["Servidor"].astype(str).str.strip() == str(nome_usuario_logado)) & 
+                                (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
+                            ].empty
+                            
+                            is_focal = (str(nome_usuario_logado).strip() == str(ponto_focal_estado_at).strip())
+                            pode_avaliar = is_coord or is_focal or perfil_usuario == "Administrador"
+
+                            val_qualidade = str(reg_at_alvo.get("Avaliacao_Qualidade", "Não Avaliada")).strip()
+                            if val_qualidade == "" or val_qualidade == "nan": val_qualidade = "Não Avaliada"
+                            val_feedback = str(reg_at_alvo.get("Avaliacao_Feedback", "")).strip()
+
+                            lista_notas = ["Não Avaliada", "1 - Insatisfatório", "3 - Razoável", "5 - Excelente"]
+                            idx_nota = lista_notas.index(val_qualidade) if val_qualidade in lista_notas else 0
+
+                            ed_qual = st.selectbox("Nota de Qualidade / Entrega:", lista_notas, index=idx_nota, disabled=not pode_avaliar, key=f"t1_at_qual_{id_at_ref}")
+                            ed_feed = st.text_area("Feedback Privado da Liderança:", value=val_feedback, disabled=not pode_avaliar, key=f"t1_at_feed_{id_at_ref}")
+                            
+                            if not pode_avaliar:
+                                st.error("🔒 Você não tem permissão de liderança para avaliar este servidor nesta missão.")
+
                         ed_papel_heranca = papel_estado_at if papel_estado_at in LISTA_PAPEIS_INSTITUCIONAIS else ""
 
                         if st.button("💾 Gravar Alterações da Atividade", type="primary", key=f"btn_salvar_at_{id_at_ref}"):
@@ -1573,7 +1609,7 @@ elif modo == "📊 Visualizar Base":
                                     ed_orig_at, ed_rp_d_at, ed_rp_p_at, ed_rp_o_at, ed_re_d_at,
                                     ed_re_p_at, ed_re_o_at, ed_obs_at, "", id_at_ref, "📝 Editar Linha Existente", df_atual,
                                     papel_institucional=ed_papel_heranca, coordenador_operacao=ed_funcao_campo, meta_indicador="",
-                                    codigo_atividade=ed_cod_atv
+                                    codigo_atividade=ed_cod_atv, aval_qualidade=ed_qual, aval_feedback=ed_feed
                                 )
                                 executar_envio_sharepoint([payload_at])
                                 st.session_state["selecoes_atividades"] = {}
@@ -1590,7 +1626,8 @@ elif modo == "📊 Visualizar Base":
                         
                         l_aba1, l_aba2, l_aba3, l_aba4, l_aba5 = st.tabs([
                             "1. Identificação & Agrupador", "2. Detalhes & Indicadores", 
-                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações"
+                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações",
+                            "6. Avaliação"
                         ])
 
                         with l_aba1:
@@ -1733,6 +1770,12 @@ elif modo == "📊 Visualizar Base":
                         with l_aba5:
                             if st.checkbox("Alterar Observações?", key="chk_obs_lt"):
                                 edicoes_lote["Observações"] = st.text_area("Novas Observações:", key="in_obs_lt").strip()
+
+                        with l_aba6:
+                            st.caption("Atenção: A nota e o feedback dados aqui serão aplicados a todos os servidores marcados no lote.")
+                            if st.checkbox("Avaliar a Equipe Selecionada em Massa?", key="chk_aval_lt"):
+                                edicoes_lote["Avaliacao_Qualidade"] = st.selectbox("Nota de Qualidade Geral:", ["Não Avaliada", "1 - Insatisfatório", "3 - Razoável", "5 - Excelente"], key="in_qual_lt")
+                                edicoes_lote["Avaliacao_Feedback"] = st.text_area("Feedback da Liderança (Aplicado a todos):", key="in_feed_lt")
 
                         st.markdown("---")
                         st.markdown("### 📋 Resumo das Alterações (Serão aplicadas a todas as linhas selecionadas)")
