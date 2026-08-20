@@ -530,7 +530,7 @@ if modo == "📈 Dashboards Executivos":
         import plotly.express as px
 
         # =====================================================================
-        # 1. PREPARAÇÃO DE DADOS
+        # 1. PREPARAÇÃO DE DADOS E LÓGICA DE FILTRAGEM RESPONSIVA
         # =====================================================================
         df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
         
@@ -544,66 +544,125 @@ if modo == "📈 Dashboards Executivos":
         meses_pt = {1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'}
         df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt)
 
+        # Função de Cascata: Filtra os dados com base nos outros campos
+        def aplicar_filtros_dash(df_orig, dict_filtros, chave_ignorar=None):
+            df_res = df_orig.copy()
+            for k, (col_nome, val) in dict_filtros.items():
+                if k == chave_ignorar or val in ["Todos", "Todas", None, ""]:
+                    continue
+                if col_nome == "Ano da Ação":
+                    df_res = df_res[df_res["Ano da Ação"].astype(str).str.split('.').str[0] == str(val)]
+                elif col_nome == "Data_Inicio_DT":
+                    if isinstance(val, (tuple, list)) and len(val) == 2:
+                        ts_ini = pd.to_datetime(val[0])
+                        ts_fim = pd.to_datetime(val[1]) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+                        df_res = df_res[df_res["Data_Inicio_DT"].isna() | ((df_res["Data_Inicio_DT"] >= ts_ini) & (df_res["Data_Inicio_DT"] <= ts_fim))]
+                else:
+                    if col_nome in df_res.columns:
+                        df_res = df_res[df_res[col_nome].astype(str) == str(val)]
+            return df_res
+
         # =====================================================================
         # 2. BARRA SUPERIOR DE FILTROS (TOP BAR - CROSS-FILTERING)
         # =====================================================================
         st.markdown("##### 🔍 Contexto e Filtros Globais")
         
-        for k in ["fd_ano", "fd_uf", "fd_lot", "fd_srv", "fd_pna", "fd_tema", "fd_and"]:
-            if k not in st.session_state: st.session_state[k] = "Todos"
-            
-        dts_validas = df_dash_atv["Data_Inicio_DT"].dropna()
-        min_dt = dts_validas.min().date() if not dts_validas.empty else date(2025, 1, 1)
-        max_dt = dts_validas.max().date() if not dts_validas.empty else date(2026, 12, 31)
-        if min_dt >= max_dt: max_dt = min_dt + pd.Timedelta(days=1)
-        if "fd_dt_range" not in st.session_state: st.session_state["fd_dt_range"] = (min_dt, max_dt)
+        # Estado atual de todos os filtros
+        filtros_d = {
+            "ano": ("Ano da Ação", st.session_state.get("fd_ano", "Todos")),
+            "uf": ("UF_Acao_PNAPA", st.session_state.get("fd_uf", "Todos")),
+            "lot": ("Lotação", st.session_state.get("fd_lot", "Todos")),
+            "srv": ("Servidor", st.session_state.get("fd_srv", "Todos")),
+            "pna": ("Número da Ação PNAPA", st.session_state.get("fd_pna", "Todos")),
+            "tema": ("Tema da Atividade", st.session_state.get("fd_tema", "Todos")),
+            "and": ("Andamento", st.session_state.get("fd_and", "Todos")),
+            "data": ("Data_Inicio_DT", st.session_state.get("fd_dt_range", None))
+        }
 
         c_filt1, c_filt2, c_filt3, c_filt4 = st.columns([1, 1, 1, 0.5])
         
         with c_filt1:
             with st.popover("📅 Período Considerado", use_container_width=True):
-                anos_disp = ["Todos"] + sorted([str(int(a)) for a in df_dash_atv["Ano da Ação"].dropna().unique() if str(a).strip().isdigit()], reverse=True)
-                st.session_state["fd_ano"] = st.selectbox("Ano da Ação:", anos_disp, index=anos_disp.index(st.session_state["fd_ano"]) if st.session_state["fd_ano"] in anos_disp else 0)
-                st.session_state["fd_dt_range"] = st.slider("Data de Início:", min_value=min_dt, max_value=max_dt, value=st.session_state["fd_dt_range"], format="DD/MM/YYYY")
+                # 1. Filtro de Ano (Responsivo)
+                df_p_ano = aplicar_filtros_dash(df_dash_atv, filtros_d, "ano")
+                anos_disp = ["Todos"] + sorted([str(int(a)) for a in df_p_ano["Ano da Ação"].dropna().unique() if str(a).strip().isdigit()], reverse=True)
+                idx_ano = anos_disp.index(filtros_d["ano"][1]) if filtros_d["ano"][1] in anos_disp else 0
+                f_ano = st.selectbox("Ano da Ação:", anos_disp, index=idx_ano, key="fd_ano")
+                filtros_d["ano"] = ("Ano da Ação", f_ano)
+
+                # 2. Slider de Data (Responsivo Seguro)
+                df_p_data = aplicar_filtros_dash(df_dash_atv, filtros_d, "data")
+                dts_validas = df_p_data["Data_Inicio_DT"].dropna()
+                
+                min_dt = dts_validas.min().date() if not dts_validas.empty else date(2025, 1, 1)
+                max_dt = dts_validas.max().date() if not dts_validas.empty else date(2026, 12, 31)
+                if min_dt >= max_dt: max_dt = min_dt + pd.Timedelta(days=1)
+                
+                # Prevenção de erro caso a seleção anterior fique fora dos novos limites
+                val_atual = st.session_state.get("fd_dt_range", (min_dt, max_dt))
+                val_start = max(min_dt, min(val_atual[0], max_dt))
+                val_end = max(min_dt, min(val_atual[1], max_dt))
+                if val_start > val_end: val_start = min_dt
+                
+                f_dt = st.slider("Data de Início:", min_value=min_dt, max_value=max_dt, value=(val_start, val_end), format="DD/MM/YYYY", key="fd_dt_range")
+                filtros_d["data"] = ("Data_Inicio_DT", f_dt)
 
         with c_filt2:
             with st.popover("🗺️ UF / Lotação / Servidor", use_container_width=True):
-                ufs_disp = ["Todos"] + sorted(df_dash_atv["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
-                st.session_state["fd_uf"] = st.selectbox("UF da Ação:", ufs_disp, index=ufs_disp.index(st.session_state["fd_uf"]) if st.session_state["fd_uf"] in ufs_disp else 0)
-                lot_disp = ["Todos"] + sorted(df_dash_atv["Lotação"].dropna().astype(str).unique().tolist())
-                st.session_state["fd_lot"] = st.selectbox("Lotação:", lot_disp, index=lot_disp.index(st.session_state["fd_lot"]) if st.session_state["fd_lot"] in lot_disp else 0)
-                srvs_disp = ["Todos"] + sorted(df_dash_atv["Servidor"].dropna().astype(str).unique().tolist())
-                st.session_state["fd_srv"] = st.selectbox("Servidor:", srvs_disp, index=srvs_disp.index(st.session_state["fd_srv"]) if st.session_state["fd_srv"] in srvs_disp else 0)
+                # 3. UF
+                df_p_uf = aplicar_filtros_dash(df_dash_atv, filtros_d, "uf")
+                ufs_disp = ["Todos"] + sorted(df_p_uf["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
+                idx_uf = ufs_disp.index(filtros_d["uf"][1]) if filtros_d["uf"][1] in ufs_disp else 0
+                f_uf = st.selectbox("UF da Ação:", ufs_disp, index=idx_uf, key="fd_uf")
+                filtros_d["uf"] = ("UF_Acao_PNAPA", f_uf)
+
+                # 4. Lotação
+                df_p_lot = aplicar_filtros_dash(df_dash_atv, filtros_d, "lot")
+                lot_disp = ["Todos"] + sorted(df_p_lot["Lotação"].dropna().astype(str).unique().tolist())
+                idx_lot = lot_disp.index(filtros_d["lot"][1]) if filtros_d["lot"][1] in lot_disp else 0
+                f_lot = st.selectbox("Lotação:", lot_disp, index=idx_lot, key="fd_lot")
+                filtros_d["lot"] = ("Lotação", f_lot)
+
+                # 5. Servidor
+                df_p_srv = aplicar_filtros_dash(df_dash_atv, filtros_d, "srv")
+                srvs_disp = ["Todos"] + sorted(df_p_srv["Servidor"].dropna().astype(str).unique().tolist())
+                idx_srv = srvs_disp.index(filtros_d["srv"][1]) if filtros_d["srv"][1] in srvs_disp else 0
+                f_srv = st.selectbox("Servidor:", srvs_disp, index=idx_srv, key="fd_srv")
+                filtros_d["srv"] = ("Servidor", f_srv)
 
         with c_filt3:
             with st.popover("🏷️ Classificação Temática", use_container_width=True):
-                pnas_disp = ["Todos"] + sorted(df_dash_atv["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
-                st.session_state["fd_pna"] = st.selectbox("Ação PNAPA:", pnas_disp, index=pnas_disp.index(st.session_state["fd_pna"]) if st.session_state["fd_pna"] in pnas_disp else 0)
-                temas_disp = ["Todos"] + sorted(df_dash_atv["Tema da Atividade"].dropna().astype(str).unique().tolist())
-                st.session_state["fd_tema"] = st.selectbox("Tema:", temas_disp, index=temas_disp.index(st.session_state["fd_tema"]) if st.session_state["fd_tema"] in temas_disp else 0)
-                ands_disp = ["Todos"] + sorted(df_dash_atv["Andamento"].dropna().astype(str).unique().tolist())
-                st.session_state["fd_and"] = st.selectbox("Status:", ands_disp, index=ands_disp.index(st.session_state["fd_and"]) if st.session_state["fd_and"] in ands_disp else 0)
+                # 6. Ação PNAPA
+                df_p_pna = aplicar_filtros_dash(df_dash_atv, filtros_d, "pna")
+                pnas_disp = ["Todos"] + sorted(df_p_pna["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
+                idx_pna = pnas_disp.index(filtros_d["pna"][1]) if filtros_d["pna"][1] in pnas_disp else 0
+                f_pna = st.selectbox("Ação PNAPA:", pnas_disp, index=idx_pna, key="fd_pna")
+                filtros_d["pna"] = ("Número da Ação PNAPA", f_pna)
+
+                # 7. Tema
+                df_p_tema = aplicar_filtros_dash(df_dash_atv, filtros_d, "tema")
+                temas_disp = ["Todos"] + sorted(df_p_tema["Tema da Atividade"].dropna().astype(str).unique().tolist())
+                idx_tema = temas_disp.index(filtros_d["tema"][1]) if filtros_d["tema"][1] in temas_disp else 0
+                f_tema = st.selectbox("Tema:", temas_disp, index=idx_tema, key="fd_tema")
+                filtros_d["tema"] = ("Tema da Atividade", f_tema)
+
+                # 8. Andamento
+                df_p_and = aplicar_filtros_dash(df_dash_atv, filtros_d, "and")
+                ands_disp = ["Todos"] + sorted(df_p_and["Andamento"].dropna().astype(str).unique().tolist())
+                idx_and = ands_disp.index(filtros_d["and"][1]) if filtros_d["and"][1] in ands_disp else 0
+                f_and = st.selectbox("Status:", ands_disp, index=idx_and, key="fd_and")
+                filtros_d["and"] = ("Andamento", f_and)
 
         with c_filt4:
             if st.button("🧹 Limpar", use_container_width=True):
                 for k in ["fd_ano", "fd_uf", "fd_lot", "fd_srv", "fd_pna", "fd_tema", "fd_and"]: st.session_state[k] = "Todos"
-                st.session_state["fd_dt_range"] = (min_dt, max_dt)
+                st.session_state["fd_dt_range"] = (date(2025, 1, 1), date(2026, 12, 31)) # Reset fallback
                 if "clique_mes" in st.session_state: del st.session_state["clique_mes"]
                 if "clique_atv" in st.session_state: del st.session_state["clique_atv"]
                 st.rerun()
 
-        # --- APLICAÇÃO DOS FILTROS NA BASE ---
-        df_filt_atv = df_dash_atv.copy()
-        if st.session_state["fd_ano"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Ano da Ação"].astype(str).str.split('.').str[0] == st.session_state["fd_ano"]]
-        if st.session_state["fd_uf"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["UF_Acao_PNAPA"].astype(str) == st.session_state["fd_uf"]]
-        if st.session_state["fd_lot"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Lotação"].astype(str) == st.session_state["fd_lot"]]
-        if st.session_state["fd_srv"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Servidor"].astype(str) == st.session_state["fd_srv"]]
-        if st.session_state["fd_pna"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Número da Ação PNAPA"].astype(str) == st.session_state["fd_pna"]]
-        if st.session_state["fd_tema"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Tema da Atividade"].astype(str) == st.session_state["fd_tema"]]
-        if st.session_state["fd_and"] != "Todos": df_filt_atv = df_filt_atv[df_filt_atv["Andamento"].astype(str) == st.session_state["fd_and"]]
-        
-        ts_ini, ts_fim = pd.to_datetime(st.session_state["fd_dt_range"][0]), pd.to_datetime(st.session_state["fd_dt_range"][1]) + pd.Timedelta(days=1)
-        df_filt_atv = df_filt_atv[df_filt_atv["Data_Inicio_DT"].isna() | ((df_filt_atv["Data_Inicio_DT"] >= ts_ini) & (df_filt_atv["Data_Inicio_DT"] < ts_fim))]
+        # --- APLICAÇÃO GERAL DOS FILTROS ---
+        df_filt_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, None)
 
         # Filtros Cruzados (Cliques de Gráficos)
         if "clique_mes" in st.session_state and st.session_state["clique_mes"]:
@@ -615,6 +674,7 @@ if modo == "📈 Dashboards Executivos":
             st.warning(f"👆 Filtro cruzado ativo: **Atividade: {st.session_state['clique_atv']}**. Use o botão 'Limpar' para remover.")
 
         st.markdown("---")
+        
 
         # =====================================================================
         # 3. NAVEGAÇÃO POR ABAS TEMÁTICAS
