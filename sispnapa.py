@@ -399,31 +399,35 @@ st.markdown("""
         }
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg { fill: #03170a !important; }
         
-        /* 🚀 AQUI ESTÁ A CORREÇÃO: Adicionamos o popover para as regras originais pegarem nele */
+        /* 🚀 A CORREÇÃO: Adicionamos o stPopoverBody para as regras alcançarem as caixas do popover */
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
         div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div,
-        div[data-baseweb="popover"] div[data-baseweb="select"] > div {
+        div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] > div,
+        div[data-testid="stPopoverBody"] div[data-baseweb="select"] > div {
             background-color: #ffffff !important; border: 1px solid #cbd5e1 !important;
         }
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] *,
         div[data-testid="stAppViewContainer"] div[data-baseweb="select"] *,
-        div[data-baseweb="popover"] div[data-baseweb="select"] * {
+        div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] *,
+        div[data-testid="stPopoverBody"] div[data-baseweb="select"] * {
             color: #03170a !important; background-color: transparent !important;
         }
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg,
         div[data-testid="stAppViewContainer"] div[data-baseweb="select"] svg,
-        div[data-baseweb="popover"] div[data-baseweb="select"] svg { 
+        div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] svg,
+        div[data-testid="stPopoverBody"] div[data-baseweb="select"] svg { 
             fill: #03170a !important; 
         }
         
-        /* Força a lista de opções (dropdown) do popover a ficar branca */
-        ul[data-baseweb="menu"] { background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; }
-        ul[data-baseweb="menu"] li { color: #03170a !important; background-color: transparent !important; }
-        ul[data-baseweb="menu"] li:hover { background-color: #f1f5f9 !important; }
+        /* Forçando as listas de opções suspensas do Popover a ficarem brancas com texto escuro */
+        div[data-baseweb="popover"] ul { background-color: #ffffff !important; }
+        div[data-baseweb="popover"] ul li { color: #03170a !important; background-color: transparent !important; }
+        div[data-baseweb="popover"] ul li:hover { background-color: #f1f5f9 !important; }
         
         div[data-testid="stNumberInput"] input { background-color: #ffffff !important; color: #03170a !important; }
         div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
         div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
+        
         div[data-testid="stDateInput"] > div, div[data-testid="stDateInput"] div[role="button"], div[data-testid="stDateInput"] input {
             background-color: #ffffff !important; color: #03170a !important; border: 1px solid #cbd5e1 !important;
         }
@@ -431,10 +435,15 @@ st.markdown("""
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
         div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
+        
         div[data-testid="stTextInput"] input, div[data-testid="stTextArea"] textarea {
             border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; color: #03170a !important;
         }
-        div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p { color: #03170a !important; font-weight: 500; }
+        
+        div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p,
+        div[data-testid="stPopoverBody"] label[data-testid="stWidgetLabel"] p { 
+            color: #03170a !important; font-weight: 500; 
+        }
         h2, h3, [data-testid="stHeader"] { color: #03170a !important; font-weight: 700 !important; }
     </style>
 """, unsafe_allow_html=True)
