@@ -552,7 +552,7 @@ if modo == "📈 Dashboards Executivos":
         """, unsafe_allow_html=True)
 
         # =====================================================================
-        # 2. PREPARAÇÃO DE DADOS (LÓGICA DO POWER BI DAX -> PYTHON)
+        # 2. PREPARAÇÃO DE DADOS 
         # =====================================================================
         # Preparação das Atividades
         df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
@@ -566,12 +566,11 @@ if modo == "📈 Dashboards Executivos":
         meses_pt = {1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'}
         df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt)
 
-        # Preparação das Ações (Para a consolidação da Visão Executiva)
+        # Preparação das Ações
         df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
         df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], format='%d/%m/%Y', errors='coerce')
         df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
 
-        # Classificação de Status
         hoje = pd.Timestamp(date.today())
         def classificar_status(row):
             andamento = str(row.get("Andamento", "")).strip()
@@ -734,9 +733,9 @@ if modo == "📈 Dashboards Executivos":
 
         # --- APLICAÇÃO GERAL DOS FILTROS ---
         df_filt_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, None)
-        df_filt_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, None) # Filtra as ações correspondentes
+        df_filt_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, None) 
 
-        # Filtros Cruzados Visuais (Afetam apenas gráficos operacionais da Aba 2)
+        # Filtros Cruzados Visuais
         c_mes = st.session_state.get("clique_mes")
         c_atv = st.session_state.get("clique_atv")
         
@@ -773,10 +772,10 @@ if modo == "📈 Dashboards Executivos":
         # ---------------------------------------------------------------------
         with tab_exec:
             st.markdown("### Visão Geral do Portfólio")
-            total_atividades_filt = len(df_filt_atv)
+            total_atividades_filt = len(df_for_metrics)
             total_acoes_filt = len(df_filt_acao)
-            rec_plan_total = pd.to_numeric(df_filt_atv["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
-            rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
+            rec_plan_total = pd.to_numeric(df_for_metrics["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
+            rec_exec_total = pd.to_numeric(df_for_metrics["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
             col_m1.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
@@ -785,76 +784,97 @@ if modo == "📈 Dashboards Executivos":
             col_m4.metric("💳 Orçamento Executado", f"R$ {rec_exec_total:,.2f}")
             
             st.markdown("---")
-            st.markdown("### 🏆 Índice de Execução do PNAPA por Estado")
-            st.caption("Acompanhamento de Ações que atingiram a meta de seus indicadores baseadas nas atividades concluídas até o momento.")
+            st.markdown("### 🏆 Status de Execução Geral do PNAPA (Por UF e Nacional)")
+            st.caption("Consolidação baseada no atingimento de 80% da meta dos indicadores (apenas atividades concluídas).")
 
             if not df_filt_acao.empty:
-                # 1. Soma os resultados apenas das atividades CONCLUÍDAS
+                # 1. Filtra atividades concluídas e soma resultados
                 atv_concluidas = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
-                resultados_agrupados = atv_concluidas.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])["Resultado_Indicador"].sum().reset_index()
-                resultados_agrupados.rename(columns={"Resultado_Indicador": "Resultado_Total_Atividades"}, inplace=True)
-
-                # 2. Cruza o resultado com a tabela de Ações
-                df_acao_calc = pd.merge(df_filt_acao, resultados_agrupados, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left")
-                df_acao_calc["Resultado_Total_Atividades"] = df_acao_calc["Resultado_Total_Atividades"].fillna(0)
-
-                # 3. Calcula se bateu a meta de 80%
-                def verifica_meta_atingida(r):
-                    meta = r["Meta_Indicador"]
-                    realizado = r["Resultado_Total_Atividades"]
-                    if meta > 0:
-                        return (realizado / meta) >= 0.8
-                    elif realizado > 0:
-                        return True # Tinha meta 0 mas realizou algo
-                    return False
-
-                df_acao_calc["Atingiu_Meta"] = df_acao_calc.apply(verifica_meta_atingida, axis=1).astype(int)
-
-                # 4. Agrupa a totalização por Estado (UF)
-                df_uf_agg = df_acao_calc.groupby("UF_Acao_PNAPA").agg(
-                    Total_Acoes=('Id', 'count'),
-                    Acoes_Atingidas=('Atingiu_Meta', 'sum')
+                
+                # --- CÁLCULO ESTADUAL (Agrupado por Ação + UF) ---
+                meta_uf = df_filt_acao.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])["Meta_Indicador"].sum().reset_index()
+                res_uf = atv_concluidas.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])["Resultado_Indicador"].sum().reset_index()
+                
+                df_uf_calc = pd.merge(meta_uf, res_uf, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left").fillna(0)
+                
+                # Motor Matemático para evitar divisão por zero
+                def calc_pct(row):
+                    m = float(row["Meta_Indicador"])
+                    r = float(row["Resultado_Indicador"])
+                    if m > 0: return r / m
+                    if r > 0: return 1.0
+                    return 0.0
+                    
+                df_uf_calc["Pct_Exec"] = df_uf_calc.apply(calc_pct, axis=1)
+                df_uf_calc["Executada"] = (df_uf_calc["Pct_Exec"] >= 0.8).astype(int)
+                
+                # Agrupa por UF para Tabela 1
+                tab1_uf = df_uf_calc.groupby("UF_Acao_PNAPA").agg(
+                    Acoes_Planejadas=('Número da Ação PNAPA', 'count'),
+                    Acoes_Executadas=('Executada', 'sum')
                 ).reset_index()
-                df_uf_agg.rename(columns={"UF_Acao_PNAPA": "Unidade da Federação", "Total_Acoes": "Ações Planejadas", "Acoes_Atingidas": "Ações c/ Meta Atingida (≥ 80%)"}, inplace=True)
-                df_uf_agg = df_uf_agg[df_uf_agg["Unidade da Federação"].astype(str).str.strip() != ""]
-
-                # 5. Adiciona a Linha de Consolidação Nacional
-                total_nacional_plan = int(df_uf_agg["Ações Planejadas"].sum())
-                total_nacional_ating = int(df_uf_agg["Ações c/ Meta Atingida (≥ 80%)"].sum())
+                tab1_uf.rename(columns={"UF_Acao_PNAPA": "UF / Nível"}, inplace=True)
+                tab1_uf = tab1_uf[tab1_uf["UF / Nível"].astype(str).str.strip() != ""]
+                tab1_uf["% de Ações Executadas"] = (tab1_uf["Acoes_Executadas"] / tab1_uf["Acoes_Planejadas"]) * 100
+                
+                # --- CÁLCULO NACIONAL (Agrupado apenas por Ação Global) ---
+                meta_nac = df_filt_acao.groupby("Número da Ação PNAPA")["Meta_Indicador"].sum().reset_index()
+                res_nac = atv_concluidas.groupby("Número da Ação PNAPA")["Resultado_Indicador"].sum().reset_index()
+                
+                df_nac_calc = pd.merge(meta_nac, res_nac, on="Número da Ação PNAPA", how="left").fillna(0)
+                df_nac_calc["Pct_Exec"] = df_nac_calc.apply(calc_pct, axis=1)
+                df_nac_calc["Executada"] = (df_nac_calc["Pct_Exec"] >= 0.8).astype(int)
+                
+                # Linha Totalizadora Nacional
+                total_nac_plan = len(df_nac_calc)
+                total_nac_exec = int(df_nac_calc["Executada"].sum())
+                pct_nac_exec = (total_nac_exec / total_nac_plan * 100) if total_nac_plan > 0 else 0
                 
                 linha_nacional = pd.DataFrame([{
-                    "Unidade da Federação": "🇧🇷 BRASIL (CONSOLIDAÇÃO NACIONAL)",
-                    "Ações Planejadas": total_nacional_plan,
-                    "Ações c/ Meta Atingida (≥ 80%)": total_nacional_ating
+                    "UF / Nível": "🇧🇷 NACIONAL (Consolidado Global)",
+                    "% de Ações Executadas": pct_nac_exec,
+                    "Acoes_Planejadas": total_nac_plan,
+                    "Acoes_Executadas": total_nac_exec
                 }])
-                df_uf_agg = pd.concat([df_uf_agg, linha_nacional], ignore_index=True)
-
-                # 6. Calcula o Índice de Execução
-                df_uf_agg["Índice de Execução PNAPA (%)"] = (df_uf_agg["Ações c/ Meta Atingida (≥ 80%)"] / df_uf_agg["Ações Planejadas"]) * 100
-                df_uf_agg["Índice de Execução PNAPA (%)"] = df_uf_agg["Índice de Execução PNAPA (%)"].fillna(0)
-
-                # Reordena colunas
-                df_uf_agg = df_uf_agg[["Unidade da Federação", "Índice de Execução PNAPA (%)", "Ações Planejadas", "Ações c/ Meta Atingida (≥ 80%)"]]
-
-                # 7. Formatação Condicional de Cores
-                def cor_taxa_sucesso(val):
+                
+                # Formatação e Organização da Tabela 1
+                tab1_uf = pd.concat([tab1_uf, linha_nacional], ignore_index=True)
+                tab1_uf = tab1_uf[["UF / Nível", "% de Ações Executadas", "Acoes_Planejadas", "Acoes_Executadas"]]
+                tab1_uf.columns = ["UF / Nível", "% de Ações Executadas", "No. Ações Planejadas", "No. Ações Executadas"]
+                
+                # Regras de Cor Condicional
+                def cor_percentual(val):
                     if pd.isna(val) or isinstance(val, str): return ''
                     if val < 50: return 'background-color: #fca5a5; color: black; font-weight: bold;' # Vermelho
-                    elif val < 70: return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo
-                    elif val < 90: return 'background-color: #86efac; color: black; font-weight: bold;' # Verde
-                    else: return 'background-color: #93c5fd; color: black; font-weight: bold;' # Azul
+                    elif val < 80: return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo (50 a 79.9)
+                    elif val < 90: return 'background-color: #86efac; color: black; font-weight: bold;' # Verde (80 a 89.9)
+                    else: return 'background-color: #93c5fd; color: black; font-weight: bold;'          # Azul (>= 90)
 
                 try:
-                    df_tabela_estilizada = df_uf_agg.style.applymap(cor_taxa_sucesso, subset=['Índice de Execução PNAPA (%)']).format({
-                        "Índice de Execução PNAPA (%)": "{:.1f}%"
-                    })
+                    t1_styled = tab1_uf.style.applymap(cor_percentual, subset=['% de Ações Executadas']).format({"% de Ações Executadas": "{:.1f}%"})
                 except AttributeError:
-                    # Fallback para versões mais recentes do Pandas onde applymap virou map
-                    df_tabela_estilizada = df_uf_agg.style.map(cor_taxa_sucesso, subset=['Índice de Execução PNAPA (%)']).format({
-                        "Índice de Execução PNAPA (%)": "{:.1f}%"
-                    })
+                    t1_styled = tab1_uf.style.map(cor_percentual, subset=['% de Ações Executadas']).format({"% de Ações Executadas": "{:.1f}%"})
+                    
+                st.dataframe(t1_styled, use_container_width=True, hide_index=True)
+                
+                # --- Tabela 2: Por Ação Nacional ---
+                st.markdown("<br>#### 🎯 Status de Execução Geral do PNAPA (Por Ação Nacional)", unsafe_allow_html=True)
+                nomes_acoes = df_filt_acao[["Número da Ação PNAPA", "Nome da Ação PNAPA"]].drop_duplicates("Número da Ação PNAPA")
+                tab2_acao = pd.merge(df_nac_calc, nomes_acoes, on="Número da Ação PNAPA", how="left")
+                
+                tab2_acao["Ação PNAPA"] = tab2_acao["Número da Ação PNAPA"] + " - " + tab2_acao["Nome da Ação PNAPA"]
+                tab2_acao["% Execução"] = tab2_acao["Pct_Exec"] * 100
+                tab2_acao = tab2_acao[["Ação PNAPA", "% Execução", "Meta_Indicador", "Resultado_Indicador"]]
+                tab2_acao.columns = ["Ação PNAPA", "% Execução", "Meta", "Resultado"]
+                tab2_acao = tab2_acao.sort_values("% Execução", ascending=False).reset_index(drop=True)
+                
+                try:
+                    t2_styled = tab2_acao.style.applymap(cor_percentual, subset=['% Execução']).format({"% Execução": "{:.1f}%", "Meta": "{:.1f}", "Resultado": "{:.1f}"})
+                except AttributeError:
+                    t2_styled = tab2_acao.style.map(cor_percentual, subset=['% Execução']).format({"% Execução": "{:.1f}%", "Meta": "{:.1f}", "Resultado": "{:.1f}"})
+                    
+                st.dataframe(t2_styled, use_container_width=True, hide_index=True)
 
-                st.dataframe(df_tabela_estilizada, use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhuma Ação encontrada para o filtro selecionado.")
 
