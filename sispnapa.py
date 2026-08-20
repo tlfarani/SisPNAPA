@@ -528,28 +528,79 @@ if modo == "📈 Dashboards Executivos":
     else:
         import plotly.graph_objects as go
         import plotly.express as px
+        from datetime import date
+        import pandas as pd
 
         # =====================================================================
-        # 1. PREPARAÇÃO DE DADOS E LÓGICA DE FILTRAGEM RESPONSIVA
+        # 1. ESTILIZAÇÃO CSS: BARRA DE FILTROS SUPERIOR FIXA (STICKY TOP BAR)
         # =====================================================================
+        st.markdown("""
+            <style>
+            div[data-testid="stVerticalBlock"] > div:has(.sticky-bar-marker),
+            div.st-key-sticky_filter_container {
+                position: sticky !important;
+                top: 2.875rem !important;
+                z-index: 999 !important;
+                background-color: #f8fafc !important;
+                padding: 10px 14px !important;
+                border-radius: 8px !important;
+                border: 1px solid #cbd5e1 !important;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06) !important;
+                margin-bottom: 1rem !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        # =====================================================================
+        # 2. PREPARAÇÃO DE DADOS (LÓGICA DO POWER BI DAX -> PYTHON)
+        # =====================================================================
+        # Preparação das Atividades
         df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
-        
-        # Conversão de Datas e Numéricos para Atividades
         df_dash_atv["Data_Inicio_DT"] = pd.to_datetime(df_dash_atv["Data de Início"], format='%d/%m/%Y', errors='coerce')
         df_dash_atv["Data_Fim_DT"] = pd.to_datetime(df_dash_atv["Data de Término"], format='%d/%m/%Y', errors='coerce')
         df_dash_atv["Mes_Inicio"] = df_dash_atv["Data_Inicio_DT"].dt.month
         df_dash_atv["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Plan"], errors='coerce').fillna(0)
         df_dash_atv["Dias_Gastos_Exec"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0)
+        df_dash_atv["Resultado_Indicador"] = pd.to_numeric(df_dash_atv["Resultado_Indicador"], errors='coerce').fillna(0)
         
         meses_pt = {1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'}
         df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt)
 
-        # Função de Cascata: Filtra os dados com base nos outros campos
+        # Preparação das Ações (Para a consolidação da Visão Executiva)
+        df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
+        df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], format='%d/%m/%Y', errors='coerce')
+        df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
+
+        # Classificação de Status
+        hoje = pd.Timestamp(date.today())
+        def classificar_status(row):
+            andamento = str(row.get("Andamento", "")).strip()
+            doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
+            dt_fim = row.get("Data_Fim_DT")
+            
+            if andamento == "Concluída":
+                if not doc or doc.lower() == "nan" or doc == "none": return "Sem Documento de Execução"
+                return "Concluída"
+            elif andamento == "Prevista":
+                if pd.notna(dt_fim) and hoje > dt_fim: return "Atrasada"
+                return "Prevista"
+            return andamento
+            
+        df_dash_atv["Status_Atividade"] = df_dash_atv.apply(classificar_status, axis=1)
+
+        # =====================================================================
+        # 3. BARRA SUPERIOR DE FILTROS FIXA (STICKY TOP BAR)
+        # =====================================================================
+        todas_chaves_filtros = [
+            "fd_ano", "fd_uf", "fd_lot", "fd_srv", 
+            "fd_pna", "fd_tema", "fd_imp", "fd_obj", 
+            "fd_tipo", "fd_perigo", "fd_and"
+        ]
+
         def aplicar_filtros_dash(df_orig, dict_filtros, chave_ignorar=None):
             df_res = df_orig.copy()
             for k, (col_nome, val) in dict_filtros.items():
-                if k == chave_ignorar or val in ["Todos", "Todas", None, ""]:
-                    continue
+                if k == chave_ignorar or val in ["Todos", "Todas", None, ""]: continue
                 if col_nome == "Ano da Ação":
                     df_res = df_res[df_res["Ano da Ação"].astype(str).str.split('.').str[0] == str(val)]
                 elif col_nome == "Data_Inicio_DT":
@@ -559,26 +610,18 @@ if modo == "📈 Dashboards Executivos":
                         df_res = df_res[df_res["Data_Inicio_DT"].isna() | ((df_res["Data_Inicio_DT"] >= ts_ini) & (df_res["Data_Inicio_DT"] <= ts_fim))]
                 else:
                     if col_nome in df_res.columns:
-                        df_res = df_res[df_res[col_nome].astype(str) == str(val)]
+                        df_res = df_res[df_res[col_nome].astype(str).str.strip() == str(val).strip()]
             return df_res
 
-        # Callback Seguro para o botão Limpar
         def limpar_filtros_dashboard():
-            for k in ["fd_ano", "fd_uf", "fd_lot", "fd_srv", "fd_pna", "fd_tema", "fd_and"]:
-                st.session_state[k] = "Todos"
+            for k in todas_chaves_filtros: st.session_state[k] = "Todos"
             if "valor_slider_data" in st.session_state: del st.session_state["valor_slider_data"]
             if "clique_mes" in st.session_state: del st.session_state["clique_mes"]
             if "clique_atv" in st.session_state: del st.session_state["clique_atv"]
 
-        # =====================================================================
-        # 2. BARRA SUPERIOR DE FILTROS (TOP BAR - CROSS-FILTERING)
-        # =====================================================================
-        st.markdown("##### 🔍 Contexto e Filtros Globais")
-        
-        # Inicializa estado seguro dos filtros
-        for k in ["fd_ano", "fd_uf", "fd_lot", "fd_srv", "fd_pna", "fd_tema", "fd_and"]:
+        for k in todas_chaves_filtros:
             if k not in st.session_state: st.session_state[k] = "Todos"
-            
+
         filtros_d = {
             "ano": ("Ano da Ação", st.session_state["fd_ano"]),
             "uf": ("UF_Acao_PNAPA", st.session_state["fd_uf"]),
@@ -586,161 +629,234 @@ if modo == "📈 Dashboards Executivos":
             "srv": ("Servidor", st.session_state["fd_srv"]),
             "pna": ("Número da Ação PNAPA", st.session_state["fd_pna"]),
             "tema": ("Tema da Atividade", st.session_state["fd_tema"]),
+            "imp": ("Importância da Atividade", st.session_state["fd_imp"]),
+            "obj": ("Objetivo da Atividade", st.session_state["fd_obj"]),
+            "tipo": ("Tipo de Atividade", st.session_state["fd_tipo"]),
+            "perigo": ("Periculosidade/Insalubridade", st.session_state["fd_perigo"]),
             "and": ("Andamento", st.session_state["fd_and"]),
             "data": ("Data_Inicio_DT", st.session_state.get("valor_slider_data", None))
         }
 
-        c_filt1, c_filt2, c_filt3, c_filt4 = st.columns([1, 1, 1, 0.5])
-        
-        with c_filt1:
-            with st.popover("📅 Período Considerado", use_container_width=True):
-                # 1. Ano Responsivo
-                df_p_ano = aplicar_filtros_dash(df_dash_atv, filtros_d, "ano")
-                anos_disp = ["Todos"] + sorted([str(int(a)) for a in df_p_ano["Ano da Ação"].dropna().unique() if str(a).strip().isdigit()], reverse=True)
-                idx_ano = anos_disp.index(filtros_d["ano"][1]) if filtros_d["ano"][1] in anos_disp else 0
-                f_ano = st.selectbox("Ano da Ação:", anos_disp, index=idx_ano, key="fd_ano")
-                filtros_d["ano"] = ("Ano da Ação", f_ano)
+        with st.container(key="sticky_filter_container"):
+            st.markdown('<span class="sticky-bar-marker"></span>', unsafe_allow_html=True)
+            c_filt1, c_filt2, c_filt3, c_filt4 = st.columns([1, 1, 1.2, 0.5])
+            
+            with c_filt1:
+                with st.popover("📅 Período Considerado", use_container_width=True):
+                    df_p_ano = aplicar_filtros_dash(df_dash_atv, filtros_d, "ano")
+                    anos_disp = ["Todos"] + sorted([str(int(a)) for a in df_p_ano["Ano da Ação"].dropna().unique() if str(a).strip().isdigit()], reverse=True)
+                    idx_ano = anos_disp.index(filtros_d["ano"][1]) if filtros_d["ano"][1] in anos_disp else 0
+                    f_ano = st.selectbox("Ano da Ação:", anos_disp, index=idx_ano, key="fd_ano")
+                    filtros_d["ano"] = ("Ano da Ação", f_ano)
 
-                # 2. Slider Responsivo Seguro (Desvinculado do widget key nativo p/ evitar travamento)
-                df_p_data = aplicar_filtros_dash(df_dash_atv, filtros_d, "data")
-                dts_validas = df_p_data["Data_Inicio_DT"].dropna()
-                
-                min_dt_val = dts_validas.min().date() if not dts_validas.empty else date(2025, 1, 1)
-                max_dt_val = dts_validas.max().date() if not dts_validas.empty else date(2026, 12, 31)
-                if min_dt_val >= max_dt_val: max_dt_val = min_dt_val + pd.Timedelta(days=1)
-                
-                # Resgata o valor atual e ajusta matematicamente para não estourar ao mudar de Ano
-                val_atual = st.session_state.get("valor_slider_data", (min_dt_val, max_dt_val))
-                v_start = max(min_dt_val, min(val_atual[0], max_dt_val))
-                v_end = max(min_dt_val, min(val_atual[1], max_dt_val))
-                if v_start > v_end: v_start = min_dt_val
+                    df_p_data = aplicar_filtros_dash(df_dash_atv, filtros_d, "data")
+                    dts_validas = df_p_data["Data_Inicio_DT"].dropna()
+                    
+                    min_dt_val = dts_validas.min().date() if not dts_validas.empty else date(2025, 1, 1)
+                    max_dt_val = dts_validas.max().date() if not dts_validas.empty else date(2026, 12, 31)
+                    if min_dt_val >= max_dt_val: max_dt_val = min_dt_val + pd.Timedelta(days=1)
+                    
+                    val_atual = st.session_state.get("valor_slider_data", (min_dt_val, max_dt_val))
+                    v_start = max(min_dt_val, min(val_atual[0], max_dt_val))
+                    v_end = max(min_dt_val, min(val_atual[1], max_dt_val))
+                    if v_start > v_end: v_start = min_dt_val
 
-                # Slider sem o parâmetro "key", atualizamos o session_state pelo retorno visual
-                f_dt = st.slider("Data de Início:", min_value=min_dt_val, max_value=max_dt_val, value=(v_start, v_end), format="DD/MM/YYYY")
-                
-                st.session_state["valor_slider_data"] = f_dt
-                filtros_d["data"] = ("Data_Inicio_DT", f_dt)
+                    f_dt = st.slider("Data de Início:", min_value=min_dt_val, max_value=max_dt_val, value=(v_start, v_end), format="DD/MM/YYYY")
+                    st.session_state["valor_slider_data"] = f_dt
+                    filtros_d["data"] = ("Data_Inicio_DT", f_dt)
 
-        with c_filt2:
-            with st.popover("🗺️ UF / Lotação / Servidor", use_container_width=True):
-                # 3. UF
-                df_p_uf = aplicar_filtros_dash(df_dash_atv, filtros_d, "uf")
-                ufs_disp = ["Todos"] + sorted(df_p_uf["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
-                idx_uf = ufs_disp.index(filtros_d["uf"][1]) if filtros_d["uf"][1] in ufs_disp else 0
-                f_uf = st.selectbox("UF da Ação:", ufs_disp, index=idx_uf, key="fd_uf")
-                filtros_d["uf"] = ("UF_Acao_PNAPA", f_uf)
+            with c_filt2:
+                with st.popover("🗺️ UF / Lotação / Servidor", use_container_width=True):
+                    df_p_uf = aplicar_filtros_dash(df_dash_atv, filtros_d, "uf")
+                    ufs_disp = ["Todos"] + sorted(df_p_uf["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
+                    idx_uf = ufs_disp.index(filtros_d["uf"][1]) if filtros_d["uf"][1] in ufs_disp else 0
+                    f_uf = st.selectbox("UF da Ação:", ufs_disp, index=idx_uf, key="fd_uf")
+                    filtros_d["uf"] = ("UF_Acao_PNAPA", f_uf)
 
-                # 4. Lotação
-                df_p_lot = aplicar_filtros_dash(df_dash_atv, filtros_d, "lot")
-                lot_disp = ["Todos"] + sorted(df_p_lot["Lotação"].dropna().astype(str).unique().tolist())
-                idx_lot = lot_disp.index(filtros_d["lot"][1]) if filtros_d["lot"][1] in lot_disp else 0
-                f_lot = st.selectbox("Lotação:", lot_disp, index=idx_lot, key="fd_lot")
-                filtros_d["lot"] = ("Lotação", f_lot)
+                    df_p_lot = aplicar_filtros_dash(df_dash_atv, filtros_d, "lot")
+                    lot_disp = ["Todos"] + sorted(df_p_lot["Lotação"].dropna().astype(str).unique().tolist())
+                    idx_lot = lot_disp.index(filtros_d["lot"][1]) if filtros_d["lot"][1] in lot_disp else 0
+                    f_lot = st.selectbox("Lotação:", lot_disp, index=idx_lot, key="fd_lot")
+                    filtros_d["lot"] = ("Lotação", f_lot)
 
-                # 5. Servidor
-                df_p_srv = aplicar_filtros_dash(df_dash_atv, filtros_d, "srv")
-                srvs_disp = ["Todos"] + sorted(df_p_srv["Servidor"].dropna().astype(str).unique().tolist())
-                idx_srv = srvs_disp.index(filtros_d["srv"][1]) if filtros_d["srv"][1] in srvs_disp else 0
-                f_srv = st.selectbox("Servidor:", srvs_disp, index=idx_srv, key="fd_srv")
-                filtros_d["srv"] = ("Servidor", f_srv)
+                    df_p_srv = aplicar_filtros_dash(df_dash_atv, filtros_d, "srv")
+                    srvs_disp = ["Todos"] + sorted(df_p_srv["Servidor"].dropna().astype(str).unique().tolist())
+                    idx_srv = srvs_disp.index(filtros_d["srv"][1]) if filtros_d["srv"][1] in srvs_disp else 0
+                    f_srv = st.selectbox("Servidor:", srvs_disp, index=idx_srv, key="fd_srv")
+                    filtros_d["srv"] = ("Servidor", f_srv)
 
-        with c_filt3:
-            with st.popover("🏷️ Classificação Temática", use_container_width=True):
-                # 6. Ação PNAPA
-                df_p_pna = aplicar_filtros_dash(df_dash_atv, filtros_d, "pna")
-                pnas_disp = ["Todos"] + sorted(df_p_pna["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
-                idx_pna = pnas_disp.index(filtros_d["pna"][1]) if filtros_d["pna"][1] in pnas_disp else 0
-                f_pna = st.selectbox("Ação PNAPA:", pnas_disp, index=idx_pna, key="fd_pna")
-                filtros_d["pna"] = ("Número da Ação PNAPA", f_pna)
+            with c_filt3:
+                with st.popover("🏷️ Classificação Temática", use_container_width=True):
+                    df_p_pna = aplicar_filtros_dash(df_dash_atv, filtros_d, "pna")
+                    pnas_disp = ["Todos"] + sorted(df_p_pna["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
+                    idx_pna = pnas_disp.index(filtros_d["pna"][1]) if filtros_d["pna"][1] in pnas_disp else 0
+                    f_pna = st.selectbox("Ação PNAPA:", pnas_disp, index=idx_pna, key="fd_pna")
+                    filtros_d["pna"] = ("Número da Ação PNAPA", f_pna)
 
-                # 7. Tema
-                df_p_tema = aplicar_filtros_dash(df_dash_atv, filtros_d, "tema")
-                temas_disp = ["Todos"] + sorted(df_p_tema["Tema da Atividade"].dropna().astype(str).unique().tolist())
-                idx_tema = temas_disp.index(filtros_d["tema"][1]) if filtros_d["tema"][1] in temas_disp else 0
-                f_tema = st.selectbox("Tema:", temas_disp, index=idx_tema, key="fd_tema")
-                filtros_d["tema"] = ("Tema da Atividade", f_tema)
+                    df_p_tema = aplicar_filtros_dash(df_dash_atv, filtros_d, "tema")
+                    temas_disp = ["Todos"] + sorted(df_p_tema["Tema da Atividade"].dropna().astype(str).unique().tolist())
+                    idx_tema = temas_disp.index(filtros_d["tema"][1]) if filtros_d["tema"][1] in temas_disp else 0
+                    f_tema = st.selectbox("Tema:", temas_disp, index=idx_tema, key="fd_tema")
+                    filtros_d["tema"] = ("Tema da Atividade", f_tema)
 
-                # 8. Andamento
-                df_p_and = aplicar_filtros_dash(df_dash_atv, filtros_d, "and")
-                ands_disp = ["Todos"] + sorted(df_p_and["Andamento"].dropna().astype(str).unique().tolist())
-                idx_and = ands_disp.index(filtros_d["and"][1]) if filtros_d["and"][1] in ands_disp else 0
-                f_and = st.selectbox("Status:", ands_disp, index=idx_and, key="fd_and")
-                filtros_d["and"] = ("Andamento", f_and)
+                    df_p_imp = aplicar_filtros_dash(df_dash_atv, filtros_d, "imp")
+                    imps_disp = ["Todos"] + sorted([i for i in df_p_imp["Importância da Atividade"].dropna().astype(str).str.strip().unique() if i != ""])
+                    idx_imp = imps_disp.index(filtros_d["imp"][1]) if filtros_d["imp"][1] in imps_disp else 0
+                    f_imp = st.selectbox("Importância da Atividade:", imps_disp, index=idx_imp, key="fd_imp")
+                    filtros_d["imp"] = ("Importância da Atividade", f_imp)
 
-        with c_filt4:
-            # Uso do Callback de forma correta e segura
-            st.button("🧹 Limpar", use_container_width=True, on_click=limpar_filtros_dashboard)
+                    df_p_obj = aplicar_filtros_dash(df_dash_atv, filtros_d, "obj")
+                    objs_disp = ["Todos"] + sorted([o for o in df_p_obj["Objetivo da Atividade"].dropna().astype(str).str.strip().unique() if o != ""])
+                    idx_obj = objs_disp.index(filtros_d["obj"][1]) if filtros_d["obj"][1] in objs_disp else 0
+                    f_obj = st.selectbox("Objetivo da Atividade:", objs_disp, index=idx_obj, key="fd_obj")
+                    filtros_d["obj"] = ("Objetivo da Atividade", f_obj)
+
+                    df_p_tipo = aplicar_filtros_dash(df_dash_atv, filtros_d, "tipo")
+                    tipos_disp = ["Todos"] + sorted([t for t in df_p_tipo["Tipo de Atividade"].dropna().astype(str).str.strip().unique() if t != ""])
+                    idx_tipo = tipos_disp.index(filtros_d["tipo"][1]) if filtros_d["tipo"][1] in tipos_disp else 0
+                    f_tipo = st.selectbox("Tipo de Atividade:", tipos_disp, index=idx_tipo, key="fd_tipo")
+                    filtros_d["tipo"] = ("Tipo de Atividade", f_tipo)
+
+                    df_p_perigo = aplicar_filtros_dash(df_dash_atv, filtros_d, "perigo")
+                    perigos_disp = ["Todos"] + sorted([p for p in df_p_perigo["Periculosidade/Insalubridade"].dropna().astype(str).str.strip().unique() if p != ""])
+                    idx_perigo = perigos_disp.index(filtros_d["perigo"][1]) if filtros_d["perigo"][1] in perigos_disp else 0
+                    f_perigo = st.selectbox("Periculosidade/Insalubridade:", perigos_disp, index=idx_perigo, key="fd_perigo")
+                    filtros_d["perigo"] = ("Periculosidade/Insalubridade", f_perigo)
+
+                    df_p_and = aplicar_filtros_dash(df_dash_atv, filtros_d, "and")
+                    ands_disp = ["Todos"] + sorted([a for a in df_p_and["Andamento"].dropna().astype(str).str.strip().unique() if a != ""])
+                    idx_and = ands_disp.index(filtros_d["and"][1]) if filtros_d["and"][1] in ands_disp else 0
+                    f_and = st.selectbox("Status / Andamento:", ands_disp, index=idx_and, key="fd_and")
+                    filtros_d["and"] = ("Andamento", f_and)
+
+            with c_filt4:
+                st.button("🧹 Limpar", use_container_width=True, on_click=limpar_filtros_dashboard)
 
         # --- APLICAÇÃO GERAL DOS FILTROS ---
         df_filt_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, None)
+        df_filt_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, None) # Filtra as ações correspondentes
 
-        # Filtros Cruzados (Cliques de Gráficos)
-        if "clique_mes" in st.session_state and st.session_state["clique_mes"]:
-            df_filt_atv = df_filt_atv[df_filt_atv["Mes_Nome"] == st.session_state["clique_mes"]]
-            st.warning(f"👆 Filtro cruzado ativo: **Mês de {st.session_state['clique_mes'].capitalize()}**. Use o botão 'Limpar' para remover.")
-            
-        if "clique_atv" in st.session_state and st.session_state["clique_atv"]:
-            df_filt_atv = df_filt_atv[df_filt_atv["Nome da Atividade"] == st.session_state["clique_atv"]]
-            st.warning(f"👆 Filtro cruzado ativo: **Atividade: {st.session_state['clique_atv']}**. Use o botão 'Limpar' para remover.")
+        # Filtros Cruzados Visuais (Afetam apenas gráficos operacionais da Aba 2)
+        c_mes = st.session_state.get("clique_mes")
+        c_atv = st.session_state.get("clique_atv")
+        
+        df_for_gantt = df_filt_atv.copy()
+        if c_mes: df_for_gantt = df_for_gantt[df_for_gantt["Mes_Nome"] == c_mes]
+
+        df_for_metrics = df_for_gantt.copy()
+        if c_atv: df_for_metrics = df_for_metrics[df_for_metrics["Nome da Atividade"] == c_atv]
+
+        if c_mes or c_atv:
+            msg = "👆 Filtros Visuais Ativos na Aba Operacional: "
+            if c_mes: msg += f"**Mês: {c_mes.capitalize()}** | "
+            if c_atv: msg += f"**Atividade: {c_atv}**"
+            st.warning(msg)
+            if st.button("✕ Remover Seleções Visuais"):
+                if "clique_mes" in st.session_state: del st.session_state["clique_mes"]
+                if "clique_atv" in st.session_state: del st.session_state["clique_atv"]
+                st.rerun()
 
         st.markdown("---")
-              
 
         # =====================================================================
-        # 3. NAVEGAÇÃO POR ABAS TEMÁTICAS
+        # 4. NAVEGAÇÃO POR ABAS TEMÁTICAS
         # =====================================================================
         tab_exec, tab_oper, tab_gov, tab_desemp = st.tabs([
-            "📊 Visão Executiva", 
+            "📊 Visão Executiva (Nacional)", 
             "🗓️ Operações & Calendário", 
-            "⚖️ Governança & Carga", 
+            "⚖️ Governança & Carga (Ações)", 
             "⭐ Desempenho de Equipes"
         ])
 
         # ---------------------------------------------------------------------
-        # ABA 1: VISÃO EXECUTIVA
+        # ABA 1: VISÃO EXECUTIVA E CONSOLIDAÇÃO DO PNAPA
         # ---------------------------------------------------------------------
         with tab_exec:
             st.markdown("### Visão Geral do Portfólio")
             total_atividades_filt = len(df_filt_atv)
-            total_acoes_global = len(df_atual[df_atual["Nível"] == "Ação"])
+            total_acoes_filt = len(df_filt_acao)
             rec_plan_total = pd.to_numeric(df_filt_atv["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
             col_m1.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
-            col_m2.metric("🎯 Total de Ações Globais", f"{total_acoes_global}")
+            col_m2.metric("🎯 Ações Planejadas (Período)", f"{total_acoes_filt}")
             col_m3.metric("💰 Orçamento Planejado", f"R$ {rec_plan_total:,.2f}")
             col_m4.metric("💳 Orçamento Executado", f"R$ {rec_exec_total:,.2f}")
             
-            col_g1, col_g2, col_g3 = st.columns([1, 1, 1])
-            with col_g1:
-                st.markdown("##### 🔄 Status das Atividades")
-                df_and_chart = df_filt_atv["Andamento"].value_counts().reset_index()
-                df_and_chart.columns = ["Andamento", "Quantidade"]
-                st.bar_chart(df_and_chart.set_index("Andamento"), height=250)
+            st.markdown("---")
+            st.markdown("### 🏆 Índice de Execução do PNAPA por Estado")
+            st.caption("Acompanhamento de Ações que atingiram a meta de seus indicadores baseadas nas atividades concluídas até o momento.")
+
+            if not df_filt_acao.empty:
+                # 1. Soma os resultados apenas das atividades CONCLUÍDAS
+                atv_concluidas = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
+                resultados_agrupados = atv_concluidas.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])["Resultado_Indicador"].sum().reset_index()
+                resultados_agrupados.rename(columns={"Resultado_Indicador": "Resultado_Total_Atividades"}, inplace=True)
+
+                # 2. Cruza o resultado com a tabela de Ações
+                df_acao_calc = pd.merge(df_filt_acao, resultados_agrupados, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left")
+                df_acao_calc["Resultado_Total_Atividades"] = df_acao_calc["Resultado_Total_Atividades"].fillna(0)
+
+                # 3. Calcula se bateu a meta de 80%
+                def verifica_meta_atingida(r):
+                    meta = r["Meta_Indicador"]
+                    realizado = r["Resultado_Total_Atividades"]
+                    if meta > 0:
+                        return (realizado / meta) >= 0.8
+                    elif realizado > 0:
+                        return True # Tinha meta 0 mas realizou algo
+                    return False
+
+                df_acao_calc["Atingiu_Meta"] = df_acao_calc.apply(verifica_meta_atingida, axis=1).astype(int)
+
+                # 4. Agrupa a totalização por Estado (UF)
+                df_uf_agg = df_acao_calc.groupby("UF_Acao_PNAPA").agg(
+                    Total_Acoes=('Id', 'count'),
+                    Acoes_Atingidas=('Atingiu_Meta', 'sum')
+                ).reset_index()
+                df_uf_agg.rename(columns={"UF_Acao_PNAPA": "Unidade da Federação", "Total_Acoes": "Ações Planejadas", "Acoes_Atingidas": "Ações c/ Meta Atingida (≥ 80%)"}, inplace=True)
+                df_uf_agg = df_uf_agg[df_uf_agg["Unidade da Federação"].astype(str).str.strip() != ""]
+
+                # 5. Adiciona a Linha de Consolidação Nacional
+                total_nacional_plan = int(df_uf_agg["Ações Planejadas"].sum())
+                total_nacional_ating = int(df_uf_agg["Ações c/ Meta Atingida (≥ 80%)"].sum())
                 
-            with col_g2:
-                st.markdown("##### 📍 Concentração por UF")
-                df_uf_cont = df_filt_atv[df_filt_atv["UF_Acao_PNAPA"] != ""]["UF_Acao_PNAPA"].value_counts().reset_index()
-                df_uf_cont.columns = ["UF", "Quantidade"]
-                st.bar_chart(df_uf_cont.set_index("UF"), height=250)
-                
-            with col_g3:
-                st.markdown("##### 🍩 Dias Acumulados (Plan x Exec)")
-                tot_plan = df_filt_atv["Dias_Gastos_Plan"].sum()
-                tot_exec = df_filt_atv["Dias_Gastos_Exec"].sum()
-                falta_executar = tot_plan - tot_exec if tot_plan > tot_exec else 0
-                
-                fig_donut = go.Figure(data=[go.Pie(
-                    values=[tot_exec, falta_executar, max(tot_plan, tot_exec)], 
-                    marker_colors=['#4f7942', '#e2e8f0', 'rgba(0,0,0,0)'], 
-                    hole=0.7, direction='clockwise', sort=False, rotation=90, textinfo='none', hoverinfo='none'
-                )])
-                fig_donut.add_annotation(text=f"<b>{int(tot_exec)}</b>", x=0.5, y=0.4, font_size=40, showarrow=False)
-                fig_donut.add_annotation(text=f"0", x=0.1, y=0.5, font_size=14, showarrow=False)
-                fig_donut.add_annotation(text=f"{int(tot_plan)}", x=0.9, y=0.5, font_size=14, showarrow=False)
-                fig_donut.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=250, showlegend=False, plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_donut, use_container_width=True)
+                linha_nacional = pd.DataFrame([{
+                    "Unidade da Federação": "🇧🇷 BRASIL (CONSOLIDAÇÃO NACIONAL)",
+                    "Ações Planejadas": total_nacional_plan,
+                    "Ações c/ Meta Atingida (≥ 80%)": total_nacional_ating
+                }])
+                df_uf_agg = pd.concat([df_uf_agg, linha_nacional], ignore_index=True)
+
+                # 6. Calcula o Índice de Execução
+                df_uf_agg["Índice de Execução PNAPA (%)"] = (df_uf_agg["Ações c/ Meta Atingida (≥ 80%)"] / df_uf_agg["Ações Planejadas"]) * 100
+                df_uf_agg["Índice de Execução PNAPA (%)"] = df_uf_agg["Índice de Execução PNAPA (%)"].fillna(0)
+
+                # Reordena colunas
+                df_uf_agg = df_uf_agg[["Unidade da Federação", "Índice de Execução PNAPA (%)", "Ações Planejadas", "Ações c/ Meta Atingida (≥ 80%)"]]
+
+                # 7. Formatação Condicional de Cores
+                def cor_taxa_sucesso(val):
+                    if pd.isna(val) or isinstance(val, str): return ''
+                    if val < 50: return 'background-color: #fca5a5; color: black; font-weight: bold;' # Vermelho
+                    elif val < 70: return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo
+                    elif val < 90: return 'background-color: #86efac; color: black; font-weight: bold;' # Verde
+                    else: return 'background-color: #93c5fd; color: black; font-weight: bold;' # Azul
+
+                try:
+                    df_tabela_estilizada = df_uf_agg.style.applymap(cor_taxa_sucesso, subset=['Índice de Execução PNAPA (%)']).format({
+                        "Índice de Execução PNAPA (%)": "{:.1f}%"
+                    })
+                except AttributeError:
+                    # Fallback para versões mais recentes do Pandas onde applymap virou map
+                    df_tabela_estilizada = df_uf_agg.style.map(cor_taxa_sucesso, subset=['Índice de Execução PNAPA (%)']).format({
+                        "Índice de Execução PNAPA (%)": "{:.1f}%"
+                    })
+
+                st.dataframe(df_tabela_estilizada, use_container_width=True, hide_index=True)
+            else:
+                st.info("Nenhuma Ação encontrada para o filtro selecionado.")
 
         # ---------------------------------------------------------------------
         # ABA 2: OPERAÇÕES & CALENDÁRIO
@@ -756,8 +872,8 @@ if modo == "📈 Dashboards Executivos":
                 df_mensal = df_mensal.sort_values("Mes_Inicio")
                 
                 fig_bar = go.Figure()
-                fig_bar.add_trace(go.Bar(x=df_mensal["Mes_Nome"], y=df_mensal["Dias_Gastos_Plan"], name='Previstos', marker_color='#a3c1ad', text=df_mensal["Dias_Gastos_Plan"], textposition='outside'))
-                fig_bar.add_trace(go.Bar(x=df_mensal["Mes_Nome"], y=df_mensal["Dias_Gastos_Exec"], name='Executados', marker_color='#4f7942', text=df_mensal["Dias_Gastos_Exec"], textposition='outside'))
+                fig_bar.add_trace(go.Bar(x=df_mensal["Mes_Nome"], y=df_mensal["Dias_Gastos_Plan"], name='Dias Previstos', marker_color='#94b396', text=df_mensal["Dias_Gastos_Plan"], textposition='outside'))
+                fig_bar.add_trace(go.Bar(x=df_mensal["Mes_Nome"], y=df_mensal["Dias_Gastos_Exec"], name='Dias Executados', marker_color='#557056', text=df_mensal["Dias_Gastos_Exec"], textposition='outside'))
                 fig_bar.update_layout(barmode='group', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=10, b=0, l=0, r=0), height=300)
                 
                 try:
@@ -766,20 +882,40 @@ if modo == "📈 Dashboards Executivos":
                         mes_selecionado = evento_bar.selection.points[0]["x"]
                         if st.session_state.get("clique_mes") != mes_selecionado:
                             st.session_state["clique_mes"] = mes_selecionado
-                            st.session_state.pop("clique_atv", None)
                             st.rerun()
                 except:
                     st.plotly_chart(fig_bar, use_container_width=True)
 
+                st.markdown("##### 🍩 Planejadas x Executadas (Acumulado)")
+                tot_plan = df_for_metrics["Dias_Gastos_Plan"].sum()
+                tot_exec = df_for_metrics["Dias_Gastos_Exec"].sum()
+                falta_executar = tot_plan - tot_exec if tot_plan > tot_exec else 0
+                
+                fig_donut = go.Figure(data=[go.Pie(
+                    values=[tot_exec, falta_executar, max(tot_plan, tot_exec)], 
+                    marker_colors=['#557056', '#e2e8f0', 'rgba(0,0,0,0)'], 
+                    hole=0.7, direction='clockwise', sort=False, rotation=90, textinfo='none', hoverinfo='none'
+                )])
+                fig_donut.add_annotation(text=f"<b>{int(tot_exec)}</b>", x=0.5, y=0.4, font_size=40, showarrow=False)
+                fig_donut.add_annotation(text=f"0", x=0.1, y=0.5, font_size=14, showarrow=False)
+                fig_donut.add_annotation(text=f"{int(tot_plan)}", x=0.9, y=0.5, font_size=14, showarrow=False)
+                fig_donut.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=250, showlegend=False, plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_donut, use_container_width=True)
+
             with col_o2:
-                st.markdown("##### 🗓️ Calendário de Ocorrências (Gantt)")
-                df_gantt = df_filt_atv.dropna(subset=["Data_Inicio_DT", "Data_Fim_DT"]).copy()
+                st.markdown("##### 🗓️ Calendário de Atividades (Gantt)")
+                df_gantt = df_for_gantt.dropna(subset=["Data_Inicio_DT", "Data_Fim_DT"]).copy()
                 if not df_gantt.empty:
-                    cor_mapa_gantt = {"Concluída": "#4f7942", "Prevista": "#60a5fa", "Não Iniciada": "#facc15", "Atrasada": "#ef4444"}
-                    fig_gantt = px.timeline(df_gantt, x_start="Data_Inicio_DT", x_end="Data_Fim_DT", y="Nome da Atividade", color="Andamento", color_discrete_map=cor_mapa_gantt, hover_name="Servidor")
+                    cor_mapa_gantt = {
+                        "Concluída": "#22c55e", 
+                        "Sem Documento de Execução": "#facc15", 
+                        "Atrasada": "#ef4444", 
+                        "Prevista": "#60a5fa"
+                    }
+                    fig_gantt = px.timeline(df_gantt, x_start="Data_Inicio_DT", x_end="Data_Fim_DT", y="Nome da Atividade", color="Status_Atividade", color_discrete_map=cor_mapa_gantt, hover_name="Servidor")
                     fig_gantt.update_yaxes(autorange="reversed", title_text="", showticklabels=True)
                     fig_gantt.update_xaxes(title_text="")
-                    fig_gantt.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=10, b=0, l=0, r=0), height=300)
+                    fig_gantt.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=10, b=0, l=0, r=0), height=600)
                     try:
                         evento_gantt = st.plotly_chart(fig_gantt, use_container_width=True, on_select="rerun")
                         if evento_gantt and evento_gantt.selection and evento_gantt.selection.points:
@@ -787,7 +923,6 @@ if modo == "📈 Dashboards Executivos":
                             nome_atv_sel = df_gantt.iloc[idx_gantt]["Nome da Atividade"]
                             if st.session_state.get("clique_atv") != nome_atv_sel:
                                 st.session_state["clique_atv"] = nome_atv_sel
-                                st.session_state.pop("clique_mes", None)
                                 st.rerun()
                     except:
                         st.plotly_chart(fig_gantt, use_container_width=True)
@@ -796,7 +931,7 @@ if modo == "📈 Dashboards Executivos":
 
             st.markdown("##### 📋 Tabela Detalhada (Atividades Filtradas)")
             cols_tabela = ["Id", "Data de Início", "Data de Término", "Servidor", "Número da PCDP", "Número da Ação PNAPA", "Nome da Atividade"]
-            df_tabela = df_filt_atv[[c for c in cols_tabela if c in df_filt_atv.columns]].copy()
+            df_tabela = df_for_metrics[[c for c in cols_tabela if c in df_for_metrics.columns]].copy()
             df_tabela = df_tabela.sort_values("Data de Início").reset_index(drop=True)
             st.dataframe(df_tabela, use_container_width=True, hide_index=True)
 
@@ -833,7 +968,7 @@ if modo == "📈 Dashboards Executivos":
                 st.plotly_chart(fig_matriz, use_container_width=True)
 
         # ---------------------------------------------------------------------
-        # ABA 4: DESEMPENHO DAS EQUIPES (NOVO)
+        # ABA 4: DESEMPENHO DAS EQUIPES
         # ---------------------------------------------------------------------
         with tab_desemp:
             st.markdown("### ⭐ Avaliação de Qualidade e Entregas")
