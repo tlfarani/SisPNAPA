@@ -562,6 +562,8 @@ if modo == "📈 Dashboards Executivos":
         df_dash_atv["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Plan"], errors='coerce').fillna(0)
         df_dash_atv["Dias_Gastos_Exec"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0)
         df_dash_atv["Resultado_Indicador"] = pd.to_numeric(df_dash_atv["Resultado_Indicador"], errors='coerce').fillna(0)
+        df_dash_atv["Rec_Exec_Total"] = pd.to_numeric(df_dash_atv["Rec_Exec_Total"], errors='coerce').fillna(0)
+        df_dash_atv["Rec_Plan_Total"] = pd.to_numeric(df_dash_atv["Rec_Plan_Total"], errors='coerce').fillna(0)
         
         meses_pt = {1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'}
         df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt)
@@ -570,6 +572,7 @@ if modo == "📈 Dashboards Executivos":
         df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
         df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], format='%d/%m/%Y', errors='coerce')
         df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
+        df_dash_acao["Rec_Plan_Total"] = pd.to_numeric(df_dash_acao["Rec_Plan_Total"], errors='coerce').fillna(0)
 
         hoje = pd.Timestamp(date.today())
         def classificar_status(row):
@@ -774,8 +777,8 @@ if modo == "📈 Dashboards Executivos":
             st.markdown("### Visão Geral do Portfólio")
             total_atividades_filt = len(df_for_metrics)
             total_acoes_filt = len(df_filt_acao)
-            rec_plan_total = pd.to_numeric(df_for_metrics["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
-            rec_exec_total = pd.to_numeric(df_for_metrics["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
+            rec_plan_total = pd.to_numeric(df_filt_atv["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
+            rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
             col_m1.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
@@ -785,22 +788,41 @@ if modo == "📈 Dashboards Executivos":
             
             st.markdown("---")
             st.markdown("### 🏆 Status de Execução Geral do PNAPA (Por UF e Nacional)")
-            st.caption("Consolidação baseada no atingimento de 80% da meta dos indicadores (apenas atividades concluídas).")
+            
+            # Botão de Rádio para alternar a perspectiva
+            visao_consolidacao = st.radio(
+                "Selecione a perspectiva de cálculo da Execução:", 
+                ["🎯 Metas Físicas (Atingimento de Indicadores)", "💰 Orçamento (Execução Financeira)"], 
+                horizontal=True
+            )
 
             if not df_filt_acao.empty:
-                # 1. Filtra atividades concluídas e soma resultados
-                atv_concluidas = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
-                
+                # Motor Abstrato: Define as colunas com base na escolha do Rádio
+                if "Metas Físicas" in visao_consolidacao:
+                    st.caption("Consolidação baseada no atingimento de 80% da meta dos indicadores (considera apenas atividades concluídas).")
+                    atv_base = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
+                    col_meta = "Meta_Indicador"
+                    col_res = "Resultado_Indicador"
+                    nome_col_pct = "% de Ações Executadas (Meta Física ≥ 80%)"
+                    nome_col_atingidas = "Ações c/ Meta Atingida"
+                else:
+                    st.caption("Consolidação baseada na execução de 80% ou mais do orçamento planejado (considera os gastos de todas as atividades do período).")
+                    atv_base = df_filt_atv # Considera todas as atividades, pois gasta-se dinheiro antes de concluir
+                    col_meta = "Rec_Plan_Total"
+                    col_res = "Rec_Exec_Total"
+                    nome_col_pct = "% de Ações Executadas (Orçamento ≥ 80%)"
+                    nome_col_atingidas = "Ações c/ Orçamento Executado"
+
                 # --- CÁLCULO ESTADUAL (Agrupado por Ação + UF) ---
-                meta_uf = df_filt_acao.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])["Meta_Indicador"].sum().reset_index()
-                res_uf = atv_concluidas.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])["Resultado_Indicador"].sum().reset_index()
+                meta_uf = df_filt_acao.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_meta].sum().reset_index()
+                res_uf = atv_base.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_res].sum().reset_index()
                 
                 df_uf_calc = pd.merge(meta_uf, res_uf, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left").fillna(0)
                 
-                # Motor Matemático para evitar divisão por zero
+                # Motor Matemático
                 def calc_pct(row):
-                    m = float(row["Meta_Indicador"])
-                    r = float(row["Resultado_Indicador"])
+                    m = float(row[col_meta])
+                    r = float(row[col_res])
                     if m > 0: return r / m
                     if r > 0: return 1.0
                     return 0.0
@@ -815,11 +837,11 @@ if modo == "📈 Dashboards Executivos":
                 ).reset_index()
                 tab1_uf.rename(columns={"UF_Acao_PNAPA": "UF / Nível"}, inplace=True)
                 tab1_uf = tab1_uf[tab1_uf["UF / Nível"].astype(str).str.strip() != ""]
-                tab1_uf["% de Ações Executadas"] = (tab1_uf["Acoes_Executadas"] / tab1_uf["Acoes_Planejadas"]) * 100
+                tab1_uf[nome_col_pct] = (tab1_uf["Acoes_Executadas"] / tab1_uf["Acoes_Planejadas"]) * 100
                 
                 # --- CÁLCULO NACIONAL (Agrupado apenas por Ação Global) ---
-                meta_nac = df_filt_acao.groupby("Número da Ação PNAPA")["Meta_Indicador"].sum().reset_index()
-                res_nac = atv_concluidas.groupby("Número da Ação PNAPA")["Resultado_Indicador"].sum().reset_index()
+                meta_nac = df_filt_acao.groupby("Número da Ação PNAPA")[col_meta].sum().reset_index()
+                res_nac = atv_base.groupby("Número da Ação PNAPA")[col_res].sum().reset_index()
                 
                 df_nac_calc = pd.merge(meta_nac, res_nac, on="Número da Ação PNAPA", how="left").fillna(0)
                 df_nac_calc["Pct_Exec"] = df_nac_calc.apply(calc_pct, axis=1)
@@ -832,28 +854,28 @@ if modo == "📈 Dashboards Executivos":
                 
                 linha_nacional = pd.DataFrame([{
                     "UF / Nível": "🇧🇷 NACIONAL (Consolidado Global)",
-                    "% de Ações Executadas": pct_nac_exec,
+                    nome_col_pct: pct_nac_exec,
                     "Acoes_Planejadas": total_nac_plan,
                     "Acoes_Executadas": total_nac_exec
                 }])
                 
                 # Formatação e Organização da Tabela 1
                 tab1_uf = pd.concat([tab1_uf, linha_nacional], ignore_index=True)
-                tab1_uf = tab1_uf[["UF / Nível", "% de Ações Executadas", "Acoes_Planejadas", "Acoes_Executadas"]]
-                tab1_uf.columns = ["UF / Nível", "% de Ações Executadas", "No. Ações Planejadas", "No. Ações Executadas"]
+                tab1_uf = tab1_uf[["UF / Nível", nome_col_pct, "Acoes_Planejadas", "Acoes_Executadas"]]
+                tab1_uf.columns = ["UF / Nível", nome_col_pct, "No. Ações Planejadas", nome_col_atingidas]
                 
                 # Regras de Cor Condicional
                 def cor_percentual(val):
                     if pd.isna(val) or isinstance(val, str): return ''
-                    if val < 50: return 'background-color: #fca5a5; color: black; font-weight: bold;' # Vermelho
+                    if val < 50: return 'background-color: #fca5a5; color: black; font-weight: bold;' # Vermelho (0 a 49.9)
                     elif val < 80: return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo (50 a 79.9)
                     elif val < 90: return 'background-color: #86efac; color: black; font-weight: bold;' # Verde (80 a 89.9)
                     else: return 'background-color: #93c5fd; color: black; font-weight: bold;'          # Azul (>= 90)
 
                 try:
-                    t1_styled = tab1_uf.style.applymap(cor_percentual, subset=['% de Ações Executadas']).format({"% de Ações Executadas": "{:.1f}%"})
+                    t1_styled = tab1_uf.style.applymap(cor_percentual, subset=[nome_col_pct]).format({nome_col_pct: "{:.1f}%"})
                 except AttributeError:
-                    t1_styled = tab1_uf.style.map(cor_percentual, subset=['% de Ações Executadas']).format({"% de Ações Executadas": "{:.1f}%"})
+                    t1_styled = tab1_uf.style.map(cor_percentual, subset=[nome_col_pct]).format({nome_col_pct: "{:.1f}%"})
                     
                 st.dataframe(t1_styled, use_container_width=True, hide_index=True)
                 
@@ -864,14 +886,22 @@ if modo == "📈 Dashboards Executivos":
                 
                 tab2_acao["Ação PNAPA"] = tab2_acao["Número da Ação PNAPA"] + " - " + tab2_acao["Nome da Ação PNAPA"]
                 tab2_acao["% Execução"] = tab2_acao["Pct_Exec"] * 100
-                tab2_acao = tab2_acao[["Ação PNAPA", "% Execução", "Meta_Indicador", "Resultado_Indicador"]]
-                tab2_acao.columns = ["Ação PNAPA", "% Execução", "Meta", "Resultado"]
+                tab2_acao = tab2_acao[["Ação PNAPA", "% Execução", col_meta, col_res]]
+                
+                # Define Nomes e Formatação com base na visão selecionada
+                if "Metas Físicas" in visao_consolidacao:
+                    tab2_acao.columns = ["Ação PNAPA", "% Execução", "Meta (Física)", "Resultado (Físico)"]
+                    format_dict = {"% Execução": "{:.1f}%", "Meta (Física)": "{:.1f}", "Resultado (Físico)": "{:.1f}"}
+                else:
+                    tab2_acao.columns = ["Ação PNAPA", "% Execução", "Orçamento Planejado", "Orçamento Executado"]
+                    format_dict = {"% Execução": "{:.1f}%", "Orçamento Planejado": "R$ {:,.2f}", "Orçamento Executado": "R$ {:,.2f}"}
+
                 tab2_acao = tab2_acao.sort_values("% Execução", ascending=False).reset_index(drop=True)
                 
                 try:
-                    t2_styled = tab2_acao.style.applymap(cor_percentual, subset=['% Execução']).format({"% Execução": "{:.1f}%", "Meta": "{:.1f}", "Resultado": "{:.1f}"})
+                    t2_styled = tab2_acao.style.applymap(cor_percentual, subset=['% Execução']).format(format_dict)
                 except AttributeError:
-                    t2_styled = tab2_acao.style.map(cor_percentual, subset=['% Execução']).format({"% Execução": "{:.1f}%", "Meta": "{:.1f}", "Resultado": "{:.1f}"})
+                    t2_styled = tab2_acao.style.map(cor_percentual, subset=['% Execução']).format(format_dict)
                     
                 st.dataframe(t2_styled, use_container_width=True, hide_index=True)
 
