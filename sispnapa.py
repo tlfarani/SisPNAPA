@@ -551,8 +551,10 @@ if modo == "📈 Dashboards Executivos":
             </style>
         """, unsafe_allow_html=True)
 
+        hoje = pd.Timestamp(date.today())
+
         # =====================================================================
-        # 2. PREPARAÇÃO DE DADOS 
+        # 2. PREPARAÇÃO DE DADOS (ATV. E AÇÕES)
         # =====================================================================
         # Preparação das Atividades
         df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
@@ -568,19 +570,10 @@ if modo == "📈 Dashboards Executivos":
         meses_pt = {1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'}
         df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt)
 
-        # Preparação das Ações
-        df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
-        df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], format='%d/%m/%Y', errors='coerce')
-        df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
-        df_dash_acao["Rec_Plan_Total"] = pd.to_numeric(df_dash_acao["Rec_Plan_Total"], errors='coerce').fillna(0)
-        df_dash_acao["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0)
-
-        hoje = pd.Timestamp(date.today())
         def classificar_status(row):
             andamento = str(row.get("Andamento", "")).strip()
             doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
             dt_fim = row.get("Data_Fim_DT")
-            
             if andamento == "Concluída":
                 if not doc or doc.lower() == "nan" or doc == "none": return "Sem Documento de Execução"
                 return "Concluída"
@@ -590,6 +583,37 @@ if modo == "📈 Dashboards Executivos":
             return andamento
             
         df_dash_atv["Status_Atividade"] = df_dash_atv.apply(classificar_status, axis=1)
+
+        # Preparação das Ações
+        df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
+        df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], format='%d/%m/%Y', errors='coerce')
+        df_dash_acao["Data_Fim_DT"] = pd.to_datetime(df_dash_acao["Data de Término"], format='%d/%m/%Y', errors='coerce')
+        df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
+        df_dash_acao["Rec_Plan_Total"] = pd.to_numeric(df_dash_acao["Rec_Plan_Total"], errors='coerce').fillna(0)
+        df_dash_acao["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0)
+        df_dash_acao["Justificativa_Acao_PNAPA"] = df_dash_acao.get("Justificativa_Acao_PNAPA", "").fillna("")
+
+        def classificar_status_acao(row):
+            andamento = str(row.get("Andamento", "")).strip()
+            justif = str(row.get("Justificativa_Acao_PNAPA", "")).strip()
+            if justif.lower() in ["nan", "none", "null"]: justif = ""
+            dt_fim = row.get("Data_Fim_DT")
+            
+            if andamento in ["Planejada", "Planejado", "Planejadas"]:
+                if pd.isna(dt_fim) or dt_fim >= hoje:
+                    return "Planejada"
+                else:
+                    if justif == "": return "Não Executada (Sem Justificativa)"
+                    else: return "Não Executada (Justificada)"
+            elif andamento in ["Não Demandada", "Não demandada", "Não_demandada"]:
+                return "Não Demandada"
+            elif andamento == "Cancelada":
+                if justif == "": return "Cancelada (Sem Justificativa)"
+                else: return "Cancelada (Justificada)"
+                
+            return andamento
+
+        df_dash_acao["Status de Execução"] = df_dash_acao.apply(classificar_status_acao, axis=1)
 
         # =====================================================================
         # 3. BARRA SUPERIOR DE FILTROS FIXA (STICKY TOP BAR)
@@ -744,7 +768,8 @@ if modo == "📈 Dashboards Executivos":
 
         # --- APLICAÇÃO GERAL DOS FILTROS ---
         df_filt_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, None)
-        df_filt_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, None) 
+        # Ignora filtro de Andamento nas Ações para evitar que o visual desapareça!
+        df_filt_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, chave_ignorar="and") 
 
         # Filtros Cruzados Visuais
         c_mes = st.session_state.get("clique_mes")
@@ -784,25 +809,24 @@ if modo == "📈 Dashboards Executivos":
         with tab_exec:
             st.markdown("### Visão Geral do Portfólio")
             
-            # Cálculos das Métricas Globais (Plan = Ação, Exec = Atividade)
             total_atividades_filt = len(df_for_metrics)
             total_acoes_filt = len(df_filt_acao)
             
-            # Planejado vem exclusivamente das Ações (Macro)
+            # Planejado vem das Ações
             rec_plan_total = pd.to_numeric(df_filt_acao["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
             dias_plan_total = pd.to_numeric(df_filt_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
             
-            # Executado vem exclusivamente das Atividades (Micro)
+            # Executado vem das Atividades
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
             
-            # Primeira Linha de Métricas (Foco no Planejamento - Ações)
+            # Primeira Linha (Foco no Planejamento - Ações)
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric("🎯 Ações Planejadas", f"{total_acoes_filt}")
             col_m2.metric("💰 Orçamento Planejado (Ações)", f"R$ {rec_plan_total:,.2f}")
             col_m3.metric("📅 Dias Planejados (Ações)", f"{dias_plan_total:,.1f}")
             
-            # Segunda Linha de Métricas (Foco na Execução - Atividades)
+            # Segunda Linha (Foco na Execução - Atividades)
             col_m4, col_m5, col_m6 = st.columns(3)
             col_m4.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
             col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}")
@@ -811,7 +835,6 @@ if modo == "📈 Dashboards Executivos":
             st.markdown("---")
             st.markdown("### 🏆 Status de Execução Geral do PNAPA (Por UF e Nacional)")
             
-            # Botão de Rádio para alternar a perspectiva
             visao_consolidacao = st.radio(
                 "Selecione a perspectiva de cálculo da Execução:", 
                 [
@@ -855,7 +878,6 @@ if modo == "📈 Dashboards Executivos":
                 
                 df_uf_calc = pd.merge(meta_uf, res_uf, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left").fillna(0)
                 
-                # Motor Matemático
                 def calc_pct(row):
                     m = float(row[col_meta])
                     r = float(row[col_res])
@@ -864,7 +886,6 @@ if modo == "📈 Dashboards Executivos":
                     return 0.0
                     
                 df_uf_calc["Pct_Exec"] = df_uf_calc.apply(calc_pct, axis=1)
-                # Define se a ação pontua (1) ou não (0) com base no limiar selecionado
                 df_uf_calc["Executada"] = (df_uf_calc["Pct_Exec"] >= limiar_execucao).astype(int)
                 
                 # Agrupa por UF para Tabela 1
@@ -882,10 +903,8 @@ if modo == "📈 Dashboards Executivos":
                 
                 df_nac_calc = pd.merge(meta_nac, res_nac, on="Número da Ação PNAPA", how="left").fillna(0)
                 df_nac_calc["Pct_Exec"] = df_nac_calc.apply(calc_pct, axis=1)
-                # Define se a ação pontua nacionalmente com base no limiar
                 df_nac_calc["Executada"] = (df_nac_calc["Pct_Exec"] >= limiar_execucao).astype(int)
                 
-                # Linha Totalizadora Nacional
                 total_nac_plan = len(df_nac_calc)
                 total_nac_exec = int(df_nac_calc["Executada"].sum())
                 pct_nac_exec = (total_nac_exec / total_nac_plan * 100) if total_nac_plan > 0 else 0
@@ -897,18 +916,16 @@ if modo == "📈 Dashboards Executivos":
                     "Acoes_Executadas": total_nac_exec
                 }])
                 
-                # Formatação e Organização da Tabela 1
                 tab1_uf = pd.concat([tab1_uf, linha_nacional], ignore_index=True)
                 tab1_uf = tab1_uf[["UF / Nível", nome_col_pct, "Acoes_Planejadas", "Acoes_Executadas"]]
                 tab1_uf.columns = ["UF / Nível", nome_col_pct, "No. Ações Planejadas", nome_col_atingidas]
                 
-                # Regras de Cor Condicional
                 def cor_percentual(val):
                     if pd.isna(val) or isinstance(val, str): return ''
-                    if val < 50: return 'background-color: #fca5a5; color: black; font-weight: bold;' # Vermelho (0 a 49.9)
-                    elif val < 80: return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo (50 a 79.9)
-                    elif val < 90: return 'background-color: #86efac; color: black; font-weight: bold;' # Verde (80 a 89.9)
-                    else: return 'background-color: #93c5fd; color: black; font-weight: bold;'          # Azul (>= 90)
+                    if val < 50: return 'background-color: #fca5a5; color: black; font-weight: bold;' # Vermelho
+                    elif val < 80: return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo
+                    elif val < 90: return 'background-color: #86efac; color: black; font-weight: bold;' # Verde
+                    else: return 'background-color: #93c5fd; color: black; font-weight: bold;'          # Azul
 
                 try:
                     t1_styled = tab1_uf.style.applymap(cor_percentual, subset=[nome_col_pct]).format({nome_col_pct: "{:.1f}%"})
@@ -926,7 +943,6 @@ if modo == "📈 Dashboards Executivos":
                 tab2_acao["% Execução"] = tab2_acao["Pct_Exec"] * 100
                 tab2_acao = tab2_acao[["Ação PNAPA", "% Execução", col_meta, col_res]]
                 
-                # Define Nomes e Formatação com base na visão selecionada
                 if "Metas Físicas" in visao_consolidacao:
                     tab2_acao.columns = ["Ação PNAPA", "% Execução", "Meta (Física)", "Resultado (Físico)"]
                     format_dict = {"% Execução": "{:.1f}%", "Meta (Física)": "{:.1f}", "Resultado (Físico)": "{:.1f}"}
@@ -945,6 +961,34 @@ if modo == "📈 Dashboards Executivos":
                     t2_styled = tab2_acao.style.map(cor_percentual, subset=['% Execução']).format(format_dict)
                     
                 st.dataframe(t2_styled, use_container_width=True, hide_index=True)
+
+                # --- Tabela 3: Lógica Específica da UF Selecionada ---
+                if st.session_state.get("fd_uf", "Todos") != "Todos":
+                    st.markdown(f"<br>#### 🗺️ Situação das Ações na UF: {st.session_state['fd_uf']}", unsafe_allow_html=True)
+                    st.caption("Acompanhamento da situação contratual e justificativas das Ações no Estado.")
+                    
+                    tab3_acao = df_filt_acao.copy()
+                    if not tab3_acao.empty:
+                        tab3_acao["Ação PNAPA"] = tab3_acao["Número da Ação PNAPA"] + " - " + tab3_acao["Nome da Ação PNAPA"]
+                        tab3_acao.rename(columns={"Justificativa_Acao_PNAPA": "Justificativa"}, inplace=True)
+                        tab3_acao = tab3_acao[["Ação PNAPA", "Status de Execução", "Justificativa"]]
+                        
+                        def cor_status_acao(val):
+                            if pd.isna(val) or not isinstance(val, str): return ''
+                            if "Sem Justificativa" in val: 
+                                return 'background-color: #fca5a5; color: black; font-weight: bold;' # Vermelho
+                            elif "Justificada" in val or "Não Demandada" in val: 
+                                return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo
+                            return ''
+                            
+                        try:
+                            t3_styled = tab3_acao.style.applymap(cor_status_acao, subset=['Status de Execução'])
+                        except AttributeError:
+                            t3_styled = tab3_acao.style.map(cor_status_acao, subset=['Status de Execução'])
+                            
+                        st.dataframe(t3_styled, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Nenhuma Ação encontrada para este Estado.")
 
             else:
                 st.info("Nenhuma Ação encontrada para o filtro selecionado.")
