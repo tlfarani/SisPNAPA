@@ -1260,7 +1260,7 @@ elif modo == "📊 Visualizar Base":
                 df_exib_at["Data de Início"] = df_exib_at["Data_Inicio_Datetime"].dt.date
                 df_exib_at["Data de Término"] = df_exib_at["Data_Termino_Datetime"].dt.date
 
-                # 📋 COLUNAS RELEVANTES PARA ATIVIDADES
+                # 📋 COLUNAS RELEVANTES PARA ATIVIDADES (Incluindo Avaliação)
                 COLS_TABELA_ATIVIDADES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Codigo_Atividade", 
                     "Nome da Atividade", "Papel_Institucional", "Coordenador_Operacao", 
@@ -1270,7 +1270,8 @@ elif modo == "📊 Visualizar Base":
                     "Data de Término", "Dias_Gastos_Plan", "Dias_Gastos_Exec", 
                     "Origem do Recurso", "Rec_Plan_Total", "Rec_Exec_Total", 
                     "Número da PCDP", "Periculosidade/Insalubridade", "Tema da Atividade", 
-                    "Objetivo da Atividade", "Tipo de Atividade", "Observações"
+                    "Objetivo da Atividade", "Tipo de Atividade", 
+                    "Avaliacao_Qualidade", "Avaliacao_Feedback", "Observações"
                 ]
 
                 cols_at_validas = [c for c in COLS_TABELA_ATIVIDADES if c in df_exib_at.columns]
@@ -1287,6 +1288,32 @@ elif modo == "📊 Visualizar Base":
                 # 🚀 ORDENAÇÃO PADRÃO: DATA DE INÍCIO CRESCENTE (Cronológica Real)
                 df_tab_at = df_tab_at.sort_values(by=["Data de Início", "Id"], ascending=[True, True], na_position='last').reset_index(drop=True)
 
+                # =================================================================
+                # 🔒 BLINDAGEM DE PRIVACIDADE: Ocultar avaliações para não-autorizados
+                # =================================================================
+                if "Avaliacao_Qualidade" not in df_tab_at.columns: df_tab_at["Avaliacao_Qualidade"] = "Não Avaliada"
+                if "Avaliacao_Feedback" not in df_tab_at.columns: df_tab_at["Avaliacao_Feedback"] = ""
+
+                # Mapeia as atividades onde o usuário logado é o Coordenador de Campo
+                atividades_coordenadas = set(df_atual[
+                    (df_atual["Servidor"].astype(str).str.strip() == str(nome_usuario_logado)) & 
+                    (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
+                ]["Codigo_Atividade"].astype(str).str.strip())
+
+                def visibilidade_avaliacao(row):
+                    # 1. Administrador ou Editor Regional (Coordenador Estadual)
+                    if perfil_usuario in ["Administrador", "Editor Regional"]: return True
+                    # 2. Próprio Avaliado
+                    if str(row.get("Servidor", "")).strip() == str(nome_usuario_logado): return True
+                    # 3. Liderança Direta (Coordenador de Campo da Atividade)
+                    if str(row.get("Codigo_Atividade", "")).strip() in atividades_coordenadas: return True
+                    return False
+
+                mascara_visibilidade = df_tab_at.apply(visibilidade_avaliacao, axis=1)
+                df_tab_at.loc[~mascara_visibilidade, "Avaliacao_Qualidade"] = "🔒 Restrito"
+                df_tab_at.loc[~mascara_visibilidade, "Avaliacao_Feedback"] = "🔒 Restrito"
+                # =================================================================
+
                 if "selecoes_atividades" not in st.session_state: st.session_state["selecoes_atividades"] = {}
                 if "version_ed_at" not in st.session_state: st.session_state["version_ed_at"] = 0
 
@@ -1302,6 +1329,7 @@ elif modo == "📊 Visualizar Base":
                 else:
                     colunas_travadas_at = {col: st.column_config.Column(disabled=True) for col in df_tab_at.columns}
 
+                # Configuração Visual das Colunas
                 colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
                 colunas_travadas_at["Resultado_Indicador"] = st.column_config.NumberColumn("Resultado Indicador", format="%.1f", disabled=True)
                 colunas_travadas_at["Dias_Gastos_Plan"] = st.column_config.NumberColumn("Dias Plan.", format="%.1f", disabled=True)
@@ -1310,6 +1338,8 @@ elif modo == "📊 Visualizar Base":
                 colunas_travadas_at["Rec_Exec_Total"] = st.column_config.NumberColumn("Rec. Exec. Total", format="R$ %.2f", disabled=True)
                 colunas_travadas_at["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_at["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
+                colunas_travadas_at["Avaliacao_Qualidade"] = st.column_config.TextColumn("Nota Qualidade", disabled=True)
+                colunas_travadas_at["Avaliacao_Feedback"] = st.column_config.TextColumn("Feedback Liderança", disabled=True)
 
                 key_dinamica_at = f"editor_atividades_v{st.session_state['version_ed_at']}"
                 tabela_at = st.data_editor(df_tab_at, hide_index=True, use_container_width=True, column_config=colunas_travadas_at, key=key_dinamica_at)
