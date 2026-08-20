@@ -594,7 +594,7 @@ if modo == "📈 Dashboards Executivos":
         # 3. BARRA SUPERIOR DE FILTROS FIXA (STICKY TOP BAR)
         # =====================================================================
         todas_chaves_filtros = [
-            "fd_ano", "fd_uf", "fd_lot", "fd_srv", 
+            "fd_ano", "fd_uf", "fd_lot", "fd_srv", "fd_origem",
             "fd_pna", "fd_tema", "fd_imp", "fd_obj", 
             "fd_tipo", "fd_perigo", "fd_and"
         ]
@@ -629,6 +629,7 @@ if modo == "📈 Dashboards Executivos":
             "uf": ("UF_Acao_PNAPA", st.session_state["fd_uf"]),
             "lot": ("Lotação", st.session_state["fd_lot"]),
             "srv": ("Servidor", st.session_state["fd_srv"]),
+            "origem": ("Origem do Recurso", st.session_state["fd_origem"]),
             "pna": ("Número da Ação PNAPA", st.session_state["fd_pna"]),
             "tema": ("Tema da Atividade", st.session_state["fd_tema"]),
             "imp": ("Importância da Atividade", st.session_state["fd_imp"]),
@@ -641,7 +642,7 @@ if modo == "📈 Dashboards Executivos":
 
         with st.container(key="sticky_filter_container"):
             st.markdown('<span class="sticky-bar-marker"></span>', unsafe_allow_html=True)
-            c_filt1, c_filt2, c_filt3, c_filt4 = st.columns([1, 1, 1.2, 0.5])
+            c_filt1, c_filt2, c_filt3, c_filt4 = st.columns([1, 1.2, 1.2, 0.5])
             
             with c_filt1:
                 with st.popover("📅 Período Considerado", use_container_width=True):
@@ -668,7 +669,7 @@ if modo == "📈 Dashboards Executivos":
                     filtros_d["data"] = ("Data_Inicio_DT", f_dt)
 
             with c_filt2:
-                with st.popover("🗺️ UF / Lotação / Servidor", use_container_width=True):
+                with st.popover("🗺️ UF / Lotação / Servidor / Recurso", use_container_width=True):
                     df_p_uf = aplicar_filtros_dash(df_dash_atv, filtros_d, "uf")
                     ufs_disp = ["Todos"] + sorted(df_p_uf["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
                     idx_uf = ufs_disp.index(filtros_d["uf"][1]) if filtros_d["uf"][1] in ufs_disp else 0
@@ -686,6 +687,12 @@ if modo == "📈 Dashboards Executivos":
                     idx_srv = srvs_disp.index(filtros_d["srv"][1]) if filtros_d["srv"][1] in srvs_disp else 0
                     f_srv = st.selectbox("Servidor:", srvs_disp, index=idx_srv, key="fd_srv")
                     filtros_d["srv"] = ("Servidor", f_srv)
+
+                    df_p_origem = aplicar_filtros_dash(df_dash_atv, filtros_d, "origem")
+                    origens_disp = ["Todos"] + sorted([o for o in df_p_origem["Origem do Recurso"].dropna().astype(str).str.strip().unique() if o != ""])
+                    idx_origem = origens_disp.index(filtros_d["origem"][1]) if filtros_d["origem"][1] in origens_disp else 0
+                    f_origem = st.selectbox("Origem do Recurso:", origens_disp, index=idx_origem, key="fd_origem")
+                    filtros_d["origem"] = ("Origem do Recurso", f_origem)
 
             with c_filt3:
                 with st.popover("🏷️ Classificação Temática", use_container_width=True):
@@ -797,21 +804,23 @@ if modo == "📈 Dashboards Executivos":
             )
 
             if not df_filt_acao.empty:
-                # Motor Abstrato: Define as colunas com base na escolha do Rádio
+                # Motor Abstrato: Define as colunas e limiares com base na escolha do Rádio
                 if "Metas Físicas" in visao_consolidacao:
-                    st.caption("Consolidação baseada no atingimento de 80% da meta dos indicadores (considera apenas atividades concluídas).")
+                    st.caption("Consolidação baseada no atingimento de **80% ou mais** da meta dos indicadores (considera apenas atividades concluídas).")
                     atv_base = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
                     col_meta = "Meta_Indicador"
                     col_res = "Resultado_Indicador"
                     nome_col_pct = "% de Ações Executadas (Meta Física ≥ 80%)"
                     nome_col_atingidas = "Ações c/ Meta Atingida"
+                    limiar_execucao = 0.8
                 else:
-                    st.caption("Consolidação baseada na execução de 80% ou mais do orçamento planejado (considera os gastos de todas as atividades do período).")
-                    atv_base = df_filt_atv # Considera todas as atividades, pois gasta-se dinheiro antes de concluir
+                    st.caption("Consolidação baseada na execução de **50% ou mais** do orçamento planejado (considera os gastos de todas as atividades do período).")
+                    atv_base = df_filt_atv # Considera todas as atividades (gastos em andamento)
                     col_meta = "Rec_Plan_Total"
                     col_res = "Rec_Exec_Total"
-                    nome_col_pct = "% de Ações Executadas (Orçamento ≥ 80%)"
+                    nome_col_pct = "% de Ações Executadas (Orçamento ≥ 50%)"
                     nome_col_atingidas = "Ações c/ Orçamento Executado"
+                    limiar_execucao = 0.5
 
                 # --- CÁLCULO ESTADUAL (Agrupado por Ação + UF) ---
                 meta_uf = df_filt_acao.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_meta].sum().reset_index()
@@ -828,7 +837,8 @@ if modo == "📈 Dashboards Executivos":
                     return 0.0
                     
                 df_uf_calc["Pct_Exec"] = df_uf_calc.apply(calc_pct, axis=1)
-                df_uf_calc["Executada"] = (df_uf_calc["Pct_Exec"] >= 0.8).astype(int)
+                # Define se a ação pontua (1) ou não (0) com base no limiar selecionado
+                df_uf_calc["Executada"] = (df_uf_calc["Pct_Exec"] >= limiar_execucao).astype(int)
                 
                 # Agrupa por UF para Tabela 1
                 tab1_uf = df_uf_calc.groupby("UF_Acao_PNAPA").agg(
@@ -845,7 +855,8 @@ if modo == "📈 Dashboards Executivos":
                 
                 df_nac_calc = pd.merge(meta_nac, res_nac, on="Número da Ação PNAPA", how="left").fillna(0)
                 df_nac_calc["Pct_Exec"] = df_nac_calc.apply(calc_pct, axis=1)
-                df_nac_calc["Executada"] = (df_nac_calc["Pct_Exec"] >= 0.8).astype(int)
+                # Define se a ação pontua nacionalmente com base no limiar
+                df_nac_calc["Executada"] = (df_nac_calc["Pct_Exec"] >= limiar_execucao).astype(int)
                 
                 # Linha Totalizadora Nacional
                 total_nac_plan = len(df_nac_calc)
