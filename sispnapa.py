@@ -532,21 +532,33 @@ if modo == "📈 Dashboards Executivos":
         import pandas as pd
 
         # =====================================================================
-        # 1. ESTILIZAÇÃO CSS: BARRA DE FILTROS SUPERIOR FIXA (STICKY TOP BAR)
+        # 1. ESTILIZAÇÃO CSS: BARRA E CORREÇÃO DO VERDE ESCURO
         # =====================================================================
         st.markdown("""
             <style>
-            div[data-testid="stVerticalBlock"] > div:has(.sticky-bar-marker),
+            /* Barra Fixa mais limpa (sem efeito de caixa dupla) */
             div.st-key-sticky_filter_container {
                 position: sticky !important;
                 top: 2.875rem !important;
                 z-index: 999 !important;
-                background-color: #f8fafc !important;
-                padding: 10px 14px !important;
-                border-radius: 8px !important;
-                border: 1px solid #cbd5e1 !important;
-                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06) !important;
+                background-color: #f8fafc !important; /* Cor de fundo suave */
+                padding: 10px 0px 10px 0px !important;
+                border-bottom: 1px solid #cbd5e1 !important; /* Apenas linha inferior */
                 margin-bottom: 1rem !important;
+            }
+            
+            /* Força o fundo dos Selectboxes a ficar branco e anula o verde escuro */
+            div[data-baseweb="select"] > div, 
+            div[data-baseweb="select"] > div:hover {
+                background-color: #ffffff !important;
+                color: #0f172a !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 6px !important;
+            }
+            
+            /* Garante que o texto dentro do selectbox fique escuro e legível */
+            div[data-baseweb="select"] span {
+                color: #0f172a !important;
             }
             </style>
         """, unsafe_allow_html=True)
@@ -559,7 +571,6 @@ if modo == "📈 Dashboards Executivos":
         
         # --- AÇÕES (Macro) ---
         df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
-        # dayfirst=True permite que o Pandas entenda tanto 31/12/2025 quanto 2025-12-31 sem gerar erro (NaT)
         df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], dayfirst=True, errors='coerce')
         df_dash_acao["Data_Fim_DT"] = pd.to_datetime(df_dash_acao["Data de Término"], dayfirst=True, errors='coerce')
         df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
@@ -580,7 +591,6 @@ if modo == "📈 Dashboards Executivos":
                     else:
                         return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
                 else:
-                    # Trava de Segurança: Se não tem data, olha se o ano já passou
                     ano_str = str(row.get("Ano da Ação", "")).split('.')[0]
                     if ano_str.isdigit() and int(ano_str) < hoje.year:
                         return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
@@ -679,8 +689,8 @@ if modo == "📈 Dashboards Executivos":
             "data": ("Data_Inicio_DT", st.session_state.get("valor_slider_data", None))
         }
 
+        # Removido o marcador fantasma <span> que criava a caixa extra vazia
         with st.container(key="sticky_filter_container"):
-            st.markdown('<span class="sticky-bar-marker"></span>', unsafe_allow_html=True)
             c_filt1, c_filt2, c_filt3, c_filt4 = st.columns([1, 1.2, 1.2, 0.5])
             
             with c_filt1:
@@ -735,14 +745,12 @@ if modo == "📈 Dashboards Executivos":
 
             with c_filt3:
                 with st.popover("🏷️ Classificação Temática", use_container_width=True):
-                    # --- NOVO FILTRO: Status da Ação ---
                     df_p_status_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, "status_acao")
                     status_acao_disp = ["Todos"] + sorted([s for s in df_p_status_acao["Status de Execução"].dropna().astype(str).unique() if s != ""])
                     idx_status_acao = status_acao_disp.index(filtros_d["status_acao"][1]) if filtros_d["status_acao"][1] in status_acao_disp else 0
                     f_status_acao = st.selectbox("Status da Ação (Macro):", status_acao_disp, index=idx_status_acao, key="fd_status_acao")
                     filtros_d["status_acao"] = ("Status de Execução", f_status_acao)
 
-                    # --- Filtro: Andamento da Atividade ---
                     df_p_and = aplicar_filtros_dash(df_dash_atv, filtros_d, "and")
                     ands_disp = ["Todos"] + sorted([a for a in df_p_and["Andamento"].dropna().astype(str).str.strip().unique() if a != ""])
                     idx_and = ands_disp.index(filtros_d["and"][1]) if filtros_d["and"][1] in ands_disp else 0
@@ -790,7 +798,7 @@ if modo == "📈 Dashboards Executivos":
 
         # --- APLICAÇÃO GERAL DOS FILTROS ---
         df_filt_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, None)
-        df_filt_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, chave_ignorar="and") # Ignora o "and" para manter as ações!
+        df_filt_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, chave_ignorar="and") 
 
         # Filtros Cruzados Visuais
         c_mes = st.session_state.get("clique_mes")
@@ -839,13 +847,13 @@ if modo == "📈 Dashboards Executivos":
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
             
-            # Primeira Linha (Foco no Planejamento - Ações)
+            # Primeira Linha (Ações)
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric("🎯 Ações Planejadas", f"{total_acoes_filt}")
             col_m2.metric("💰 Orçamento Planejado (Ações)", f"R$ {rec_plan_total:,.2f}")
             col_m3.metric("📅 Dias Planejados (Ações)", f"{dias_plan_total:,.1f}")
             
-            # Segunda Linha (Foco na Execução - Atividades)
+            # Segunda Linha (Atividades)
             col_m4, col_m5, col_m6 = st.columns(3)
             col_m4.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
             col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}")
@@ -865,7 +873,6 @@ if modo == "📈 Dashboards Executivos":
             )
 
             if not df_filt_acao.empty:
-                # Motor Abstrato
                 if "Metas Físicas" in visao_consolidacao:
                     st.caption("Consolidação baseada no atingimento de **80% ou mais** da meta dos indicadores (considera apenas atividades concluídas).")
                     atv_base = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
@@ -891,7 +898,6 @@ if modo == "📈 Dashboards Executivos":
                     nome_col_atingidas = "Ações c/ Esforço Executado"
                     limiar_execucao = 0.5
 
-                # --- CÁLCULO ESTADUAL ---
                 meta_uf = df_filt_acao.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_meta].sum().reset_index()
                 res_uf = atv_base.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_res].sum().reset_index()
                 
@@ -915,7 +921,6 @@ if modo == "📈 Dashboards Executivos":
                 tab1_uf = tab1_uf[tab1_uf["UF / Nível"].astype(str).str.strip() != ""]
                 tab1_uf[nome_col_pct] = (tab1_uf["Acoes_Executadas"] / tab1_uf["Acoes_Planejadas"]) * 100
                 
-                # --- CÁLCULO NACIONAL ---
                 meta_nac = df_filt_acao.groupby("Número da Ação PNAPA")[col_meta].sum().reset_index()
                 res_nac = atv_base.groupby("Número da Ação PNAPA")[col_res].sum().reset_index()
                 
@@ -952,7 +957,6 @@ if modo == "📈 Dashboards Executivos":
                     
                 st.dataframe(t1_styled, use_container_width=True, hide_index=True)
                 
-                # --- Tabela 2: Por Ação Nacional ---
                 st.markdown("<br>#### 🎯 Status de Execução Geral do PNAPA (Por Ação Nacional)", unsafe_allow_html=True)
                 nomes_acoes = df_filt_acao[["Número da Ação PNAPA", "Nome da Ação PNAPA"]].drop_duplicates("Número da Ação PNAPA")
                 tab2_acao = pd.merge(df_nac_calc, nomes_acoes, on="Número da Ação PNAPA", how="left")
@@ -980,13 +984,11 @@ if modo == "📈 Dashboards Executivos":
                     
                 st.dataframe(t2_styled, use_container_width=True, hide_index=True)
 
-                # --- Tabela 3: Pendências Críticas de Ações (Sempre Visível) ---
                 st.markdown("<br>#### 🚨 Pendências de Justificativa nas Ações (Mural de Atenção)", unsafe_allow_html=True)
                 st.caption("Filtro automático das Ações não executadas/canceladas cujo prazo venceu sem inserção de justificativa.")
                 
                 tab3_acao = df_filt_acao.copy()
                 if not tab3_acao.empty:
-                    # Filtra apenas os alertas vermelhos!
                     tab3_acao = tab3_acao[tab3_acao["Status de Execução"].isin(["Não Executada - Sem Justificativa", "Cancelada - Sem Justificativa"])]
                     
                     if not tab3_acao.empty:
@@ -997,7 +999,7 @@ if modo == "📈 Dashboards Executivos":
                         
                         def cor_status_acao(val):
                             if pd.isna(val) or not isinstance(val, str): return ''
-                            return 'background-color: #fca5a5; color: black; font-weight: bold;' # Tudo que sobrar aqui será Vermelho
+                            return 'background-color: #fca5a5; color: black; font-weight: bold;'
                             
                         try:
                             t3_styled = tab3_acao.style.applymap(cor_status_acao, subset=['Status de Execução'])
