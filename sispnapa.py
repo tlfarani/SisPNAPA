@@ -382,6 +382,7 @@ for col_oficial in COLUNAS_PNAPA:
 # =================================================================
 st.markdown("""
     <style>
+        /* 1. Textos da Barra Lateral (Sidebar) */
         section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
         section[data-testid="stSidebar"] label p,
@@ -389,40 +390,68 @@ st.markdown("""
         section[data-testid="stSidebar"] div[data-testid="stRadio"] label p {
             color: #ffffff !important; font-weight: 700 !important;
         }
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div,
-        section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
-            background-color: #ffffff !important; border: 1px solid #cbd5e1 !important;
+        
+        /* 2. Força fundo branco nas Caixas de Seleção (Selectbox) SEM usar coringa (*) */
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="select"] > div > div {
+            background-color: #ffffff !important; 
+            border: 1px solid #cbd5e1 !important;
         }
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] *,
-        section[data-testid="stSidebar"] div[data-baseweb="select"] * {
-            color: #03170a !important; font-weight: bold !important;
+        
+        /* 3. Textos e Ícones do Selectbox */
+        div[data-baseweb="select"] div[data-testid="stMarkdownContainer"] p,
+        div[data-baseweb="select"] span {
+            color: #03170a !important;
         }
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg { fill: #03170a !important; }
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
-        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div {
-            background-color: #ffffff !important; border: 1px solid #cbd5e1 !important;
+        div[data-baseweb="select"] svg { 
+            fill: #03170a !important; 
         }
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] *,
-        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] * {
-            color: #03170a !important; background-color: transparent !important;
+        
+        /* 4. Dropdowns (Lista de opções ao clicar) */
+        div[data-baseweb="popover"] div[role="listbox"],
+        div[data-baseweb="popover"] ul {
+            background-color: #ffffff !important;
         }
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg,
-        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] svg { fill: #03170a !important; }
-        div[data-testid="stNumberInput"] input { background-color: #ffffff !important; color: #03170a !important; }
-        div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
-        div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
-        div[data-testid="stDateInput"] > div, div[data-testid="stDateInput"] div[role="button"], div[data-testid="stDateInput"] input {
-            background-color: #ffffff !important; color: #03170a !important; border: 1px solid #cbd5e1 !important;
+        div[data-baseweb="popover"] div[role="listbox"] li {
+            background-color: #ffffff !important;
+            color: #03170a !important;
         }
+        div[data-baseweb="popover"] div[role="listbox"] li:hover {
+            background-color: #f1f5f9 !important;
+        }
+
+        /* 5. Inputs de Número e Data */
+        div[data-testid="stNumberInput"] input, div[data-testid="stDateInput"] input { 
+            background-color: #ffffff !important; color: #03170a !important; 
+        }
+        div[data-testid="stNumberInput"] > div, div[data-testid="stDateInput"] > div { 
+            border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; 
+        }
+        div[data-testid="stNumberInput"] button { 
+            background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; 
+        }
+        div[data-testid="stDateInput"] div[role="button"] { background-color: #ffffff !important; }
         div[data-testid="stDateInput"] svg { fill: #03170a !important; }
-        button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
-        button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
-        div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
+        
+        /* 6. Textos e TextAreas */
         div[data-testid="stTextInput"] input, div[data-testid="stTextArea"] textarea {
             border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; color: #03170a !important;
         }
-        div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p { color: #03170a !important; font-weight: 500; }
+        
+        /* 7. Abas, Headers e Labels */
+        button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
+        button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
+        div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
+        label[data-testid="stWidgetLabel"] p { color: #03170a !important; font-weight: 500; }
         h2, h3, [data-testid="stHeader"] { color: #03170a !important; font-weight: 700 !important; }
+        
+        /* 8. Correção do Cabeçalho Escuro das Tabelas (Dataframes formatados) */
+        table th, table thead tr th {
+            background-color: #f8fafc !important;
+            color: #03170a !important;
+            font-weight: 700 !important;
+            border-bottom: 1px solid #cbd5e1 !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
