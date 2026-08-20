@@ -573,6 +573,7 @@ if modo == "📈 Dashboards Executivos":
         df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], format='%d/%m/%Y', errors='coerce')
         df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
         df_dash_acao["Rec_Plan_Total"] = pd.to_numeric(df_dash_acao["Rec_Plan_Total"], errors='coerce').fillna(0)
+        df_dash_acao["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0)
 
         hoje = pd.Timestamp(date.today())
         def classificar_status(row):
@@ -799,7 +800,11 @@ if modo == "📈 Dashboards Executivos":
             # Botão de Rádio para alternar a perspectiva
             visao_consolidacao = st.radio(
                 "Selecione a perspectiva de cálculo da Execução:", 
-                ["🎯 Metas Físicas (Atingimento de Indicadores)", "💰 Orçamento (Execução Financeira)"], 
+                [
+                    "🎯 Metas Físicas (Atingimento de Indicadores)", 
+                    "💰 Orçamento (Execução Financeira)",
+                    "⏳ Esforço Operacional (Dias Gastos)"
+                ], 
                 horizontal=True
             )
 
@@ -813,13 +818,21 @@ if modo == "📈 Dashboards Executivos":
                     nome_col_pct = "% de Ações Executadas (Meta Física ≥ 80%)"
                     nome_col_atingidas = "Ações c/ Meta Atingida"
                     limiar_execucao = 0.8
-                else:
+                elif "Orçamento" in visao_consolidacao:
                     st.caption("Consolidação baseada na execução de **50% ou mais** do orçamento planejado (considera os gastos de todas as atividades do período).")
-                    atv_base = df_filt_atv # Considera todas as atividades (gastos em andamento)
+                    atv_base = df_filt_atv 
                     col_meta = "Rec_Plan_Total"
                     col_res = "Rec_Exec_Total"
                     nome_col_pct = "% de Ações Executadas (Orçamento ≥ 50%)"
                     nome_col_atingidas = "Ações c/ Orçamento Executado"
+                    limiar_execucao = 0.5
+                else:
+                    st.caption("Consolidação baseada na execução de **50% ou mais** dos dias planejados (considera o esforço de todas as atividades do período).")
+                    atv_base = df_filt_atv 
+                    col_meta = "Dias_Gastos_Plan"
+                    col_res = "Dias_Gastos_Exec"
+                    nome_col_pct = "% de Ações Executadas (Esforço ≥ 50%)"
+                    nome_col_atingidas = "Ações c/ Esforço Executado"
                     limiar_execucao = 0.5
 
                 # --- CÁLCULO ESTADUAL (Agrupado por Ação + UF) ---
@@ -903,9 +916,12 @@ if modo == "📈 Dashboards Executivos":
                 if "Metas Físicas" in visao_consolidacao:
                     tab2_acao.columns = ["Ação PNAPA", "% Execução", "Meta (Física)", "Resultado (Físico)"]
                     format_dict = {"% Execução": "{:.1f}%", "Meta (Física)": "{:.1f}", "Resultado (Físico)": "{:.1f}"}
-                else:
+                elif "Orçamento" in visao_consolidacao:
                     tab2_acao.columns = ["Ação PNAPA", "% Execução", "Orçamento Planejado", "Orçamento Executado"]
                     format_dict = {"% Execução": "{:.1f}%", "Orçamento Planejado": "R$ {:,.2f}", "Orçamento Executado": "R$ {:,.2f}"}
+                else:
+                    tab2_acao.columns = ["Ação PNAPA", "% Execução", "Dias Planejados", "Dias Executados"]
+                    format_dict = {"% Execução": "{:.1f}%", "Dias Planejados": "{:.1f}", "Dias Executados": "{:.1f}"}
 
                 tab2_acao = tab2_acao.sort_values("% Execução", ascending=False).reset_index(drop=True)
                 
