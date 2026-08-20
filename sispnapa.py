@@ -562,6 +562,8 @@ if modo == "📈 Dashboards Executivos":
             </style>
         """, unsafe_allow_html=True)
 
+        hoje = pd.Timestamp(date.today())
+
         # =====================================================================
         # 2. PREPARAÇÃO DE DADOS E LÓGICA DE STATUS
         # =====================================================================
