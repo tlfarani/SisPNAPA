@@ -784,25 +784,29 @@ if modo == "📈 Dashboards Executivos":
         with tab_exec:
             st.markdown("### Visão Geral do Portfólio")
             
-            # Cálculos das Métricas Globais
+            # Cálculos das Métricas Globais (Plan = Ação, Exec = Atividade)
             total_atividades_filt = len(df_for_metrics)
             total_acoes_filt = len(df_filt_acao)
-            rec_plan_total = pd.to_numeric(df_filt_atv["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
+            
+            # Planejado vem exclusivamente das Ações (Macro)
+            rec_plan_total = pd.to_numeric(df_filt_acao["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
+            dias_plan_total = pd.to_numeric(df_filt_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
+            
+            # Executado vem exclusivamente das Atividades (Micro)
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
-            dias_plan_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
             dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
             
-            # Primeira Linha de Métricas (Foco no Planejamento/Totalizadores)
+            # Primeira Linha de Métricas (Foco no Planejamento)
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
-            col_m2.metric("💰 Orçamento Planejado", f"R$ {rec_plan_total:,.2f}")
-            col_m3.metric("📅 Dias Planejados", f"{dias_plan_total:,.1f}")
+            col_m2.metric("💰 Orçamento Planejado (Ações)", f"R$ {rec_plan_total:,.2f}")
+            col_m3.metric("📅 Dias Planejados (Ações)", f"{dias_plan_total:,.1f}")
             
             # Segunda Linha de Métricas (Foco na Execução)
             col_m4, col_m5, col_m6 = st.columns(3)
             col_m4.metric("🎯 Ações Planejadas", f"{total_acoes_filt}")
-            col_m5.metric("💳 Orçamento Executado", f"R$ {rec_exec_total:,.2f}")
-            col_m6.metric("⏳ Dias Executados", f"{dias_exec_total:,.1f}")
+            col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}")
+            col_m6.metric("⏳ Dias Executados (Ativ.)", f"{dias_exec_total:,.1f}")
             
             st.markdown("---")
             st.markdown("### 🏆 Status de Execução Geral do PNAPA (Por UF e Nacional)")
