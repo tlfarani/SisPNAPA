@@ -796,15 +796,15 @@ if modo == "📈 Dashboards Executivos":
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
             
-            # Primeira Linha de Métricas (Foco no Planejamento)
+            # Primeira Linha de Métricas (Foco no Planejamento - Ações)
             col_m1, col_m2, col_m3 = st.columns(3)
-            col_m1.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
+            col_m1.metric("🎯 Ações Planejadas", f"{total_acoes_filt}")
             col_m2.metric("💰 Orçamento Planejado (Ações)", f"R$ {rec_plan_total:,.2f}")
             col_m3.metric("📅 Dias Planejados (Ações)", f"{dias_plan_total:,.1f}")
             
-            # Segunda Linha de Métricas (Foco na Execução)
+            # Segunda Linha de Métricas (Foco na Execução - Atividades)
             col_m4, col_m5, col_m6 = st.columns(3)
-            col_m4.metric("🎯 Ações Planejadas", f"{total_acoes_filt}")
+            col_m4.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
             col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}")
             col_m6.metric("⏳ Dias Executados (Ativ.)", f"{dias_exec_total:,.1f}")
             
