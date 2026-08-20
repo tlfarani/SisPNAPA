@@ -1574,7 +1574,7 @@ elif modo == "📊 Visualizar Base":
                             if val_qualidade == "" or val_qualidade == "nan": val_qualidade = "Não Avaliada"
                             val_feedback = str(reg_at_alvo.get("Avaliacao_Feedback", "")).strip()
 
-                            lista_notas = ["Não Avaliada", "1 - Insatisfatório", "3 - Razoável", "5 - Excelente"]
+                            lista_notas = ["Não Avaliada", "0 - Insatisfatória", "1 - Satisfatória"]
                             idx_nota = lista_notas.index(val_qualidade) if val_qualidade in lista_notas else 0
 
                             ed_qual = st.selectbox("Nota de Qualidade / Entrega:", lista_notas, index=idx_nota, disabled=not pode_avaliar, key=f"t1_at_qual_{id_at_ref}")
@@ -1774,7 +1774,9 @@ elif modo == "📊 Visualizar Base":
                         with l_aba6:
                             st.caption("Atenção: A nota e o feedback dados aqui serão aplicados a todos os servidores marcados no lote.")
                             if st.checkbox("Avaliar a Equipe Selecionada em Massa?", key="chk_aval_lt"):
-                                edicoes_lote["Avaliacao_Qualidade"] = st.selectbox("Nota de Qualidade Geral:", ["Não Avaliada", "1 - Insatisfatório", "3 - Razoável", "5 - Excelente"], key="in_qual_lt")
+                                edicoes_lote["Avaliacao_Qualidade"] = st.selectbox("Nota de Qualidade Geral:",
+                                                                                   ["Não Avaliada","0 - Insatisfatória", "1 - Satisfatória"],
+                                                                                   key="in_qual_lt")
                                 edicoes_lote["Avaliacao_Feedback"] = st.text_area("Feedback da Liderança (Aplicado a todos):", key="in_feed_lt")
 
                         st.markdown("---")
