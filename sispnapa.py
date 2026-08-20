@@ -382,7 +382,6 @@ for col_oficial in COLUNAS_PNAPA:
 # =================================================================
 st.markdown("""
     <style>
-        /* Sidebar Texts */
         section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
         section[data-testid="stSidebar"] label p,
@@ -390,50 +389,39 @@ st.markdown("""
         section[data-testid="stSidebar"] div[data-testid="stRadio"] label p {
             color: #ffffff !important; font-weight: 700 !important;
         }
-        
-        /* 🚀 CORREÇÃO: Todos os Selectboxes do Sistema (Sidebar, App e Popovers) */
-        div[data-testid="stSelectbox"] > div[data-baseweb="select"] > div,
-        div[data-baseweb="select"] > div {
-            background-color: #ffffff !important; 
-            border: 1px solid #cbd5e1 !important;
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div,
+        section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
+            background-color: #ffffff !important; border: 1px solid #cbd5e1 !important;
         }
-        
-        /* Textos e Ícones dentro dos Selectboxes */
-        div[data-baseweb="select"] * {
-            color: #03170a !important;
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] *,
+        section[data-testid="stSidebar"] div[data-baseweb="select"] * {
+            color: #03170a !important; font-weight: bold !important;
         }
-        div[data-baseweb="select"] svg { 
-            fill: #03170a !important; 
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg { fill: #03170a !important; }
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div {
+            background-color: #ffffff !important; border: 1px solid #cbd5e1 !important;
         }
-        
-        /* Listas Suspensas (Dropdowns) */
-        ul[data-baseweb="menu"], div[data-baseweb="popover"] ul { background-color: #ffffff !important; }
-        ul[data-baseweb="menu"] li { color: #03170a !important; background-color: #ffffff !important; }
-        ul[data-baseweb="menu"] li:hover { background-color: #f1f5f9 !important; }
-
-        /* Inputs de Número e Data */
-        div[data-testid="stNumberInput"] input, div[data-testid="stDateInput"] input { 
-            background-color: #ffffff !important; color: #03170a !important; 
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] *,
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] * {
+            color: #03170a !important; background-color: transparent !important;
         }
-        div[data-testid="stNumberInput"] > div, div[data-testid="stDateInput"] > div { 
-            border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; 
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg,
+        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] svg { fill: #03170a !important; }
+        div[data-testid="stNumberInput"] input { background-color: #ffffff !important; color: #03170a !important; }
+        div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
+        div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
+        div[data-testid="stDateInput"] > div, div[data-testid="stDateInput"] div[role="button"], div[data-testid="stDateInput"] input {
+            background-color: #ffffff !important; color: #03170a !important; border: 1px solid #cbd5e1 !important;
         }
-        div[data-testid="stNumberInput"] button { 
-            background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; 
-        }
-        div[data-testid="stDateInput"] div[role="button"] { background-color: #ffffff !important; }
         div[data-testid="stDateInput"] svg { fill: #03170a !important; }
-        
-        /* Textos e TextAreas */
-        div[data-testid="stTextInput"] input, div[data-testid="stTextArea"] textarea {
-            border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; color: #03170a !important;
-        }
-        
-        /* Abas e Headers */
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
         div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
-        label[data-testid="stWidgetLabel"] p { color: #03170a !important; font-weight: 500; }
+        div[data-testid="stTextInput"] input, div[data-testid="stTextArea"] textarea {
+            border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; color: #03170a !important;
+        }
+        div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p { color: #03170a !important; font-weight: 500; }
         h2, h3, [data-testid="stHeader"] { color: #03170a !important; font-weight: 700 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -544,23 +532,53 @@ if modo == "📈 Dashboards Executivos":
         import pandas as pd
 
         # =====================================================================
-        # 1. ESTILIZAÇÃO CSS: BARRA DE FILTROS SUPERIOR FIXA (STICKY TOP BAR)
+        # 1. ESTILIZAÇÃO CSS: BARRA E CORREÇÃO DEFINITIVA DO VERDE ESCURO
         # =====================================================================
         st.markdown("""
             <style>
-            /* Barra Fixa mais limpa (sem efeito de caixa dupla) */
+            /* Barra Fixa mais limpa */
             div.st-key-sticky_filter_container {
                 position: sticky !important;
                 top: 2.875rem !important;
                 z-index: 999 !important;
-                background-color: #f8fafc !important; /* Cor de fundo suave */
+                background-color: #f8fafc !important; 
                 padding: 10px 0px 10px 0px !important;
-                border-bottom: 1px solid #cbd5e1 !important; /* Apenas linha inferior */
+                border-bottom: 1px solid #cbd5e1 !important;
                 margin-bottom: 1rem !important;
+            }
+            
+            /* FORÇA BRUTA: Fundo branco e borda suave para Selectboxes */
+            div[data-baseweb="select"] > div {
+                background-color: #ffffff !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 6px !important;
+            }
+            
+            /* FORÇA BRUTA: Força todo o texto dentro das caixas a ficar escuro */
+            div[data-baseweb="select"] > div * {
+                color: #0f172a !important;
+            }
+            
+            /* FORÇA BRUTA: Fundo e texto das listas suspensas (dropdowns) */
+            ul[data-baseweb="menu"], 
+            div[data-baseweb="popover"] ul {
+                background-color: #ffffff !important;
+            }
+            ul[data-baseweb="menu"] li {
+                color: #0f172a !important;
+                background-color: #ffffff !important;
+            }
+            ul[data-baseweb="menu"] li:hover {
+                background-color: #f1f5f9 !important;
+            }
+            
+            /* Ícone da setinha do dropdown escuro */
+            div[data-baseweb="select"] svg {
+                fill: #0f172a !important;
+                color: #0f172a !important;
             }
             </style>
         """, unsafe_allow_html=True)
-        
 
         hoje = pd.Timestamp(date.today())
 
