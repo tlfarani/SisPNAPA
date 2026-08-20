@@ -532,32 +532,49 @@ if modo == "📈 Dashboards Executivos":
         import pandas as pd
 
         # =====================================================================
-        # 1. ESTILIZAÇÃO CSS: BARRA E CORREÇÃO DO VERDE ESCURO
+        # 1. ESTILIZAÇÃO CSS: BARRA E CORREÇÃO DEFINITIVA DO VERDE ESCURO
         # =====================================================================
         st.markdown("""
             <style>
-            /* Barra Fixa mais limpa (sem efeito de caixa dupla) */
+            /* Barra Fixa mais limpa */
             div.st-key-sticky_filter_container {
                 position: sticky !important;
                 top: 2.875rem !important;
                 z-index: 999 !important;
-                background-color: #f8fafc !important; /* Cor de fundo suave */
+                background-color: #f8fafc !important; 
                 padding: 10px 0px 10px 0px !important;
-                border-bottom: 1px solid #cbd5e1 !important; /* Apenas linha inferior */
+                border-bottom: 1px solid #cbd5e1 !important;
                 margin-bottom: 1rem !important;
             }
             
-            /* Força o fundo dos Selectboxes a ficar branco e anula o verde escuro */
-            div[data-baseweb="select"] > div, 
-            div[data-baseweb="select"] > div:hover {
+            /* FORÇA BRUTA: Fundo branco e borda suave para Selectboxes */
+            div[data-baseweb="select"] > div {
                 background-color: #ffffff !important;
-                color: #0f172a !important;
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 6px !important;
             }
             
-            /* Garante que o texto dentro do selectbox fique escuro e legível */
-            div[data-baseweb="select"] span {
+            /* FORÇA BRUTA: Força todo o texto dentro das caixas a ficar escuro */
+            div[data-baseweb="select"] > div * {
+                color: #0f172a !important;
+            }
+            
+            /* FORÇA BRUTA: Fundo e texto das listas suspensas (dropdowns) */
+            ul[data-baseweb="menu"], 
+            div[data-baseweb="popover"] ul {
+                background-color: #ffffff !important;
+            }
+            ul[data-baseweb="menu"] li {
+                color: #0f172a !important;
+                background-color: #ffffff !important;
+            }
+            ul[data-baseweb="menu"] li:hover {
+                background-color: #f1f5f9 !important;
+            }
+            
+            /* Ícone da setinha do dropdown escuro */
+            div[data-baseweb="select"] svg {
+                fill: #0f172a !important;
                 color: #0f172a !important;
             }
             </style>
@@ -689,7 +706,6 @@ if modo == "📈 Dashboards Executivos":
             "data": ("Data_Inicio_DT", st.session_state.get("valor_slider_data", None))
         }
 
-        # Removido o marcador fantasma <span> que criava a caixa extra vazia
         with st.container(key="sticky_filter_container"):
             c_filt1, c_filt2, c_filt3, c_filt4 = st.columns([1, 1.2, 1.2, 0.5])
             
@@ -847,13 +863,11 @@ if modo == "📈 Dashboards Executivos":
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
             
-            # Primeira Linha (Ações)
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric("🎯 Ações Planejadas", f"{total_acoes_filt}")
             col_m2.metric("💰 Orçamento Planejado (Ações)", f"R$ {rec_plan_total:,.2f}")
             col_m3.metric("📅 Dias Planejados (Ações)", f"{dias_plan_total:,.1f}")
             
-            # Segunda Linha (Atividades)
             col_m4, col_m5, col_m6 = st.columns(3)
             col_m4.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
             col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}")
