@@ -554,37 +554,10 @@ if modo == "📈 Dashboards Executivos":
         hoje = pd.Timestamp(date.today())
 
         # =====================================================================
-        # 2. PREPARAÇÃO DE DADOS (ATV. E AÇÕES)
+        # 2. PREPARAÇÃO DE DADOS E LÓGICA DE STATUS
         # =====================================================================
-        # Preparação das Atividades
-        df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
-        df_dash_atv["Data_Inicio_DT"] = pd.to_datetime(df_dash_atv["Data de Início"], format='%d/%m/%Y', errors='coerce')
-        df_dash_atv["Data_Fim_DT"] = pd.to_datetime(df_dash_atv["Data de Término"], format='%d/%m/%Y', errors='coerce')
-        df_dash_atv["Mes_Inicio"] = df_dash_atv["Data_Inicio_DT"].dt.month
-        df_dash_atv["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Plan"], errors='coerce').fillna(0)
-        df_dash_atv["Dias_Gastos_Exec"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0)
-        df_dash_atv["Resultado_Indicador"] = pd.to_numeric(df_dash_atv["Resultado_Indicador"], errors='coerce').fillna(0)
-        df_dash_atv["Rec_Exec_Total"] = pd.to_numeric(df_dash_atv["Rec_Exec_Total"], errors='coerce').fillna(0)
-        df_dash_atv["Rec_Plan_Total"] = pd.to_numeric(df_dash_atv["Rec_Plan_Total"], errors='coerce').fillna(0)
         
-        meses_pt = {1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'}
-        df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt)
-
-        def classificar_status(row):
-            andamento = str(row.get("Andamento", "")).strip()
-            doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
-            dt_fim = row.get("Data_Fim_DT")
-            if andamento == "Concluída":
-                if not doc or doc.lower() == "nan" or doc == "none": return "Sem Documento de Execução"
-                return "Concluída"
-            elif andamento == "Prevista":
-                if pd.notna(dt_fim) and hoje > dt_fim: return "Atrasada"
-                return "Prevista"
-            return andamento
-            
-        df_dash_atv["Status_Atividade"] = df_dash_atv.apply(classificar_status, axis=1)
-
-        # Preparação das Ações
+        # --- AÇÕES ---
         df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
         df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], format='%d/%m/%Y', errors='coerce')
         df_dash_acao["Data_Fim_DT"] = pd.to_datetime(df_dash_acao["Data de Término"], format='%d/%m/%Y', errors='coerce')
@@ -615,13 +588,45 @@ if modo == "📈 Dashboards Executivos":
 
         df_dash_acao["Status de Execução"] = df_dash_acao.apply(classificar_status_acao, axis=1)
 
+        # --- ATIVIDADES ---
+        df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
+        df_dash_atv["Data_Inicio_DT"] = pd.to_datetime(df_dash_atv["Data de Início"], format='%d/%m/%Y', errors='coerce')
+        df_dash_atv["Data_Fim_DT"] = pd.to_datetime(df_dash_atv["Data de Término"], format='%d/%m/%Y', errors='coerce')
+        df_dash_atv["Mes_Inicio"] = df_dash_atv["Data_Inicio_DT"].dt.month
+        df_dash_atv["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Plan"], errors='coerce').fillna(0)
+        df_dash_atv["Dias_Gastos_Exec"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0)
+        df_dash_atv["Resultado_Indicador"] = pd.to_numeric(df_dash_atv["Resultado_Indicador"], errors='coerce').fillna(0)
+        df_dash_atv["Rec_Exec_Total"] = pd.to_numeric(df_dash_atv["Rec_Exec_Total"], errors='coerce').fillna(0)
+        df_dash_atv["Rec_Plan_Total"] = pd.to_numeric(df_dash_atv["Rec_Plan_Total"], errors='coerce').fillna(0)
+        
+        meses_pt = {1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'}
+        df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt)
+
+        def classificar_status_atv(row):
+            andamento = str(row.get("Andamento", "")).strip()
+            doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
+            dt_fim = row.get("Data_Fim_DT")
+            if andamento == "Concluída":
+                if not doc or doc.lower() == "nan" or doc == "none": return "Sem Documento de Execução"
+                return "Concluída"
+            elif andamento == "Prevista":
+                if pd.notna(dt_fim) and hoje > dt_fim: return "Atrasada"
+                return "Prevista"
+            return andamento
+            
+        df_dash_atv["Status_Atividade"] = df_dash_atv.apply(classificar_status_atv, axis=1)
+        
+        # Propagar Status da Ação para as Atividades (para o filtro global funcionar em tudo)
+        mapa_status_acao = dict(zip(df_dash_acao["Número da Ação PNAPA"], df_dash_acao["Status de Execução"]))
+        df_dash_atv["Status de Execução"] = df_dash_atv["Número da Ação PNAPA"].map(mapa_status_acao)
+
         # =====================================================================
         # 3. BARRA SUPERIOR DE FILTROS FIXA (STICKY TOP BAR)
         # =====================================================================
         todas_chaves_filtros = [
             "fd_ano", "fd_uf", "fd_lot", "fd_srv", "fd_origem",
             "fd_pna", "fd_tema", "fd_imp", "fd_obj", 
-            "fd_tipo", "fd_perigo", "fd_and"
+            "fd_tipo", "fd_perigo", "fd_and", "fd_status_acao"
         ]
 
         def aplicar_filtros_dash(df_orig, dict_filtros, chave_ignorar=None):
@@ -662,6 +667,7 @@ if modo == "📈 Dashboards Executivos":
             "tipo": ("Tipo de Atividade", st.session_state["fd_tipo"]),
             "perigo": ("Periculosidade/Insalubridade", st.session_state["fd_perigo"]),
             "and": ("Andamento", st.session_state["fd_and"]),
+            "status_acao": ("Status de Execução", st.session_state["fd_status_acao"]),
             "data": ("Data_Inicio_DT", st.session_state.get("valor_slider_data", None))
         }
 
@@ -721,6 +727,20 @@ if modo == "📈 Dashboards Executivos":
 
             with c_filt3:
                 with st.popover("🏷️ Classificação Temática", use_container_width=True):
+                    # Novo Filtro: Status da Ação
+                    df_p_status_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, "status_acao")
+                    status_acao_disp = ["Todos"] + sorted([s for s in df_p_status_acao["Status de Execução"].dropna().astype(str).unique() if s != ""])
+                    idx_status_acao = status_acao_disp.index(filtros_d["status_acao"][1]) if filtros_d["status_acao"][1] in status_acao_disp else 0
+                    f_status_acao = st.selectbox("Status da Ação:", status_acao_disp, index=idx_status_acao, key="fd_status_acao")
+                    filtros_d["status_acao"] = ("Status de Execução", f_status_acao)
+
+                    # Filtro Antigo: Andamento da Atividade
+                    df_p_and = aplicar_filtros_dash(df_dash_atv, filtros_d, "and")
+                    ands_disp = ["Todos"] + sorted([a for a in df_p_and["Andamento"].dropna().astype(str).str.strip().unique() if a != ""])
+                    idx_and = ands_disp.index(filtros_d["and"][1]) if filtros_d["and"][1] in ands_disp else 0
+                    f_and = st.selectbox("Andamento (Atividades):", ands_disp, index=idx_and, key="fd_and")
+                    filtros_d["and"] = ("Andamento", f_and)
+
                     df_p_pna = aplicar_filtros_dash(df_dash_atv, filtros_d, "pna")
                     pnas_disp = ["Todos"] + sorted(df_p_pna["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
                     idx_pna = pnas_disp.index(filtros_d["pna"][1]) if filtros_d["pna"][1] in pnas_disp else 0
@@ -757,19 +777,12 @@ if modo == "📈 Dashboards Executivos":
                     f_perigo = st.selectbox("Periculosidade/Insalubridade:", perigos_disp, index=idx_perigo, key="fd_perigo")
                     filtros_d["perigo"] = ("Periculosidade/Insalubridade", f_perigo)
 
-                    df_p_and = aplicar_filtros_dash(df_dash_atv, filtros_d, "and")
-                    ands_disp = ["Todos"] + sorted([a for a in df_p_and["Andamento"].dropna().astype(str).str.strip().unique() if a != ""])
-                    idx_and = ands_disp.index(filtros_d["and"][1]) if filtros_d["and"][1] in ands_disp else 0
-                    f_and = st.selectbox("Status / Andamento:", ands_disp, index=idx_and, key="fd_and")
-                    filtros_d["and"] = ("Andamento", f_and)
-
             with c_filt4:
                 st.button("🧹 Limpar", use_container_width=True, on_click=limpar_filtros_dashboard)
 
         # --- APLICAÇÃO GERAL DOS FILTROS ---
         df_filt_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, None)
-        # Ignora filtro de Andamento nas Ações para evitar que o visual desapareça!
-        df_filt_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, chave_ignorar="and") 
+        df_filt_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, None) 
 
         # Filtros Cruzados Visuais
         c_mes = st.session_state.get("clique_mes")
@@ -812,11 +825,9 @@ if modo == "📈 Dashboards Executivos":
             total_atividades_filt = len(df_for_metrics)
             total_acoes_filt = len(df_filt_acao)
             
-            # Planejado vem das Ações
             rec_plan_total = pd.to_numeric(df_filt_acao["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
             dias_plan_total = pd.to_numeric(df_filt_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
             
-            # Executado vem das Atividades
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
             
@@ -962,33 +973,33 @@ if modo == "📈 Dashboards Executivos":
                     
                 st.dataframe(t2_styled, use_container_width=True, hide_index=True)
 
-                # --- Tabela 3: Lógica Específica da UF Selecionada ---
-                if st.session_state.get("fd_uf", "Todos") != "Todos":
-                    st.markdown(f"<br>#### 🗺️ Situação das Ações na UF: {st.session_state['fd_uf']}", unsafe_allow_html=True)
-                    st.caption("Acompanhamento da situação contratual e justificativas das Ações no Estado.")
+                # --- Tabela 3: Pendências de Ações por UF (Sempre Visível) ---
+                st.markdown("<br>#### 🚨 Acompanhamento de Pendências e Status das Ações (Por UF)", unsafe_allow_html=True)
+                st.caption("Visão detalhada da situação contratual e justificativas de todas as Ações nos Estados.")
+                
+                tab3_acao = df_filt_acao.copy()
+                if not tab3_acao.empty:
+                    tab3_acao["Ação PNAPA"] = tab3_acao["Número da Ação PNAPA"] + " - " + tab3_acao["Nome da Ação PNAPA"]
+                    tab3_acao.rename(columns={"UF_Acao_PNAPA": "UF", "Justificativa_Acao_PNAPA": "Justificativa"}, inplace=True)
+                    tab3_acao = tab3_acao[["UF", "Ação PNAPA", "Status de Execução", "Justificativa"]]
+                    tab3_acao = tab3_acao.sort_values(by=["UF", "Ação PNAPA"])
                     
-                    tab3_acao = df_filt_acao.copy()
-                    if not tab3_acao.empty:
-                        tab3_acao["Ação PNAPA"] = tab3_acao["Número da Ação PNAPA"] + " - " + tab3_acao["Nome da Ação PNAPA"]
-                        tab3_acao.rename(columns={"Justificativa_Acao_PNAPA": "Justificativa"}, inplace=True)
-                        tab3_acao = tab3_acao[["Ação PNAPA", "Status de Execução", "Justificativa"]]
+                    def cor_status_acao(val):
+                        if pd.isna(val) or not isinstance(val, str): return ''
+                        if "Sem Justificativa" in val: 
+                            return 'background-color: #fca5a5; color: black; font-weight: bold;' # Vermelho
+                        elif "Justificada" in val or "Não Demandada" in val: 
+                            return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo
+                        return ''
                         
-                        def cor_status_acao(val):
-                            if pd.isna(val) or not isinstance(val, str): return ''
-                            if "Sem Justificativa" in val: 
-                                return 'background-color: #fca5a5; color: black; font-weight: bold;' # Vermelho
-                            elif "Justificada" in val or "Não Demandada" in val: 
-                                return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo
-                            return ''
-                            
-                        try:
-                            t3_styled = tab3_acao.style.applymap(cor_status_acao, subset=['Status de Execução'])
-                        except AttributeError:
-                            t3_styled = tab3_acao.style.map(cor_status_acao, subset=['Status de Execução'])
-                            
-                        st.dataframe(t3_styled, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("Nenhuma Ação encontrada para este Estado.")
+                    try:
+                        t3_styled = tab3_acao.style.applymap(cor_status_acao, subset=['Status de Execução'])
+                    except AttributeError:
+                        t3_styled = tab3_acao.style.map(cor_status_acao, subset=['Status de Execução'])
+                        
+                    st.dataframe(t3_styled, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Nenhuma Ação encontrada para o filtro selecionado.")
 
             else:
                 st.info("Nenhuma Ação encontrada para o filtro selecionado.")
