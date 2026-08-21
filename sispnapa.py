@@ -845,28 +845,7 @@ if modo == "📈 Dashboards Executivos":
         with tab_exec:
             st.markdown("### Visão Geral do Portfólio")
             
-            total_atividades_filt = len(df_for_metrics)
-            total_acoes_filt = len(df_filt_acao)
-            
-            rec_plan_total = pd.to_numeric(df_filt_acao["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
-            dias_plan_total = pd.to_numeric(df_filt_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
-            
-            rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
-            dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
-            
-            col_m1, col_m2, col_m3 = st.columns(3)
-            col_m1.metric("🎯 Ações Planejadas", f"{total_acoes_filt}")
-            col_m2.metric("💰 Orçamento Planejado (Ações)", f"R$ {rec_plan_total:,.2f}")
-            col_m3.metric("📅 Dias Planejados (Ações)", f"{dias_plan_total:,.1f}")
-            
-            col_m4, col_m5, col_m6 = st.columns(3)
-            col_m4.metric("📌 Atividades Filtradas", f"{total_atividades_filt}")
-            col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}")
-            col_m6.metric("⏳ Dias Executados (Ativ.)", f"{dias_exec_total:,.1f}")
-            
-            st.markdown("---")
-            st.markdown("### 🏆 Status de Execução Geral do PNAPA (Por UF e Nacional)")
-            
+            # Seletor de perspectiva de cálculo (posicionado no topo para orientar todo o painel)
             visao_consolidacao = st.radio(
                 "Selecione a perspectiva de cálculo da Execução:", 
                 [
@@ -877,32 +856,38 @@ if modo == "📈 Dashboards Executivos":
                 horizontal=True
             )
 
-            if not df_filt_acao.empty:
-                if "Metas Físicas" in visao_consolidacao:
-                    st.caption("Consolidação baseada no atingimento de **80% ou mais** da meta dos indicadores (considera apenas atividades concluídas).")
-                    atv_base = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
-                    col_meta = "Meta_Indicador"
-                    col_res = "Resultado_Indicador"
-                    nome_col_pct = "% de Ações Executadas (Meta Física ≥ 80%)"
-                    nome_col_atingidas = "Ações c/ Meta Atingida"
-                    limiar_execucao = 0.8
-                elif "Orçamento" in visao_consolidacao:
-                    st.caption("Consolidação baseada na execução de **50% ou mais** do orçamento planejado (considera os gastos de todas as atividades do período).")
-                    atv_base = df_filt_atv 
-                    col_meta = "Rec_Plan_Total"
-                    col_res = "Rec_Exec_Total"
-                    nome_col_pct = "% de Ações Executadas (Orçamento ≥ 50%)"
-                    nome_col_atingidas = "Ações c/ Orçamento Executado"
-                    limiar_execucao = 0.5
-                else:
-                    st.caption("Consolidação baseada na execução de **50% ou mais** dos dias planejados (considera o esforço de todas as atividades do período).")
-                    atv_base = df_filt_atv 
-                    col_meta = "Dias_Gastos_Plan"
-                    col_res = "Dias_Gastos_Exec"
-                    nome_col_pct = "% de Ações Executadas (Esforço ≥ 50%)"
-                    nome_col_atingidas = "Ações c/ Esforço Executado"
-                    limiar_execucao = 0.5
+            # 1. Definição de Parâmetros e Limiares da Perspectiva Selecionada
+            if "Metas Físicas" in visao_consolidacao:
+                st.caption("Consolidação baseada no atingimento de **80% ou mais** da meta dos indicadores (considera apenas atividades concluídas).")
+                atv_base = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
+                col_meta = "Meta_Indicador"
+                col_res = "Resultado_Indicador"
+                nome_col_pct = "% de Ações Executadas (Meta Física ≥ 80%)"
+                nome_col_atingidas = "Ações c/ Meta Atingida"
+                card_atingidas_label = "🏆 Ações c/ Meta Atingida (Nac.)"
+                limiar_execucao = 0.8
+            elif "Orçamento" in visao_consolidacao:
+                st.caption("Consolidação baseada na execução de **50% ou mais** do orçamento planejado (considera os gastos de todas as atividades do período).")
+                atv_base = df_filt_atv 
+                col_meta = "Rec_Plan_Total"
+                col_res = "Rec_Exec_Total"
+                nome_col_pct = "% de Ações Executadas (Orçamento ≥ 50%)"
+                nome_col_atingidas = "Ações c/ Orçamento Executado"
+                card_atingidas_label = "💳 Ações Executadas (Nac. ≥ 50%)"
+                limiar_execucao = 0.5
+            else:
+                st.caption("Consolidação baseada na execução de **50% ou mais** dos dias planejados (considera o esforço de todas as atividades do período).")
+                atv_base = df_filt_atv 
+                col_meta = "Dias_Gastos_Plan"
+                col_res = "Dias_Gastos_Exec"
+                nome_col_pct = "% de Ações Executadas (Esforço ≥ 50%)"
+                nome_col_atingidas = "Ações c/ Esforço Executado"
+                card_atingidas_label = "⏳ Ações Executadas (Nac. ≥ 50%)"
+                limiar_execucao = 0.5
 
+            # 2. Processamento e Cálculo das Ações Únicas Nacionais e Estaduais
+            if not df_filt_acao.empty:
+                # --- CÁLCULO ESTADUAL ---
                 meta_uf = df_filt_acao.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_meta].sum().reset_index()
                 res_uf = atv_base.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_res].sum().reset_index()
                 
@@ -926,6 +911,7 @@ if modo == "📈 Dashboards Executivos":
                 tab1_uf = tab1_uf[tab1_uf["UF / Nível"].astype(str).str.strip() != ""]
                 tab1_uf[nome_col_pct] = (tab1_uf["Acoes_Executadas"] / tab1_uf["Acoes_Planejadas"]) * 100
                 
+                # --- CÁLCULO NACIONAL (Ações Únicas Globais) ---
                 meta_nac = df_filt_acao.groupby("Número da Ação PNAPA")[col_meta].sum().reset_index()
                 res_nac = atv_base.groupby("Número da Ação PNAPA")[col_res].sum().reset_index()
                 
@@ -936,7 +922,37 @@ if modo == "📈 Dashboards Executivos":
                 total_nac_plan = len(df_nac_calc)
                 total_nac_exec = int(df_nac_calc["Executada"].sum())
                 pct_nac_exec = (total_nac_exec / total_nac_plan * 100) if total_nac_plan > 0 else 0
-                
+            else:
+                total_nac_plan = 0
+                total_nac_exec = 0
+                pct_nac_exec = 0
+                df_nac_calc = pd.DataFrame()
+                tab1_uf = pd.DataFrame()
+
+            # 3. Totais Financeiros e de Dias
+            rec_plan_total = pd.to_numeric(df_filt_acao["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
+            dias_plan_total = pd.to_numeric(df_filt_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
+            
+            rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
+            dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
+            
+            # --- CARTÕES DE MÉTRICAS CONSOLIDADAS ---
+            # Linha 1 (Planejamento)
+            col_m1, col_m2, col_m3 = st.columns(3)
+            col_m1.metric("🎯 Ações Planejadas (Nacional)", f"{total_nac_plan}")
+            col_m2.metric("💰 Orçamento Planejado (Ações)", f"R$ {rec_plan_total:,.2f}")
+            col_m3.metric("📅 Dias Planejados (Ações)", f"{dias_plan_total:,.1f}")
+            
+            # Linha 2 (Execução)
+            col_m4, col_m5, col_m6 = st.columns(3)
+            col_m4.metric(card_atingidas_label, f"{total_nac_exec}", f"{pct_nac_exec:.1f}% do total")
+            col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}")
+            col_m6.metric("⏳ Dias Executados (Ativ.)", f"{dias_exec_total:,.1f}")
+            
+            st.markdown("---")
+            st.markdown("### 🏆 Status de Execução Geral do PNAPA (Por UF e Nacional)")
+
+            if not df_filt_acao.empty:
                 linha_nacional = pd.DataFrame([{
                     "UF / Nível": "🇧🇷 NACIONAL (Consolidado Global)",
                     nome_col_pct: pct_nac_exec,
@@ -962,6 +978,7 @@ if modo == "📈 Dashboards Executivos":
                     
                 st.dataframe(t1_styled, use_container_width=True, hide_index=True)
                 
+                # --- Tabela 2: Por Ação Nacional ---
                 st.markdown("<br>#### 🎯 Status de Execução Geral do PNAPA (Por Ação Nacional)", unsafe_allow_html=True)
                 nomes_acoes = df_filt_acao[["Número da Ação PNAPA", "Nome da Ação PNAPA"]].drop_duplicates("Número da Ação PNAPA")
                 tab2_acao = pd.merge(df_nac_calc, nomes_acoes, on="Número da Ação PNAPA", how="left")
@@ -989,6 +1006,7 @@ if modo == "📈 Dashboards Executivos":
                     
                 st.dataframe(t2_styled, use_container_width=True, hide_index=True)
 
+                # --- Tabela 3: Pendências Críticas de Ações ---
                 st.markdown("<br>#### 🚨 Pendências de Justificativa nas Ações (Mural de Atenção)", unsafe_allow_html=True)
                 st.caption("Filtro automático das Ações não executadas/canceladas cujo prazo venceu sem inserção de justificativa.")
                 
