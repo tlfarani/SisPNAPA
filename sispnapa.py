@@ -1291,7 +1291,7 @@ elif modo == "📊 Visualizar Base":
             if df_base_acoes.empty:
                 st.info("Nenhuma Ação Estadual cadastrada na base.")
             else:
-                # 1. 🚀 CÁLCULO E PROPAGAÇÃO DO STATUS DE EXECUÇÃO
+                # 1. 🚀 CÁLCULO E PROPAGAÇÃO DO RESULTADO, % E STATUS DE EXECUÇÃO
                 df_atv_temp = df_trabalho[df_trabalho["Nível"].astype(str).str.strip() == "Atividade"].copy()
                 atv_concluidas_temp = df_atv_temp[df_atv_temp["Andamento"].astype(str).str.strip() == "Concluída"]
                 
@@ -1303,7 +1303,22 @@ elif modo == "📊 Visualizar Base":
                 df_base_acoes = pd.merge(df_base_acoes, agg_atv_pna, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left")
                 df_base_acoes["Resultado_Agregado"] = df_base_acoes["Resultado_Agregado"].fillna(0)
                 df_base_acoes["Dias_Exec_Agregado"] = df_base_acoes["Dias_Exec_Agregado"].fillna(0)
+                df_base_acoes["Resultado_Indicador"] = df_base_acoes["Resultado_Agregado"]
 
+                # Cálculo do Percentual de Execução
+                def calc_pct_exec_acao_t1(row):
+                    meta = float(pd.to_numeric(row.get("Meta_Indicador", 0), errors='coerce') or 0.0)
+                    res = float(pd.to_numeric(row.get("Resultado_Agregado", 0), errors='coerce') or 0.0)
+                    dias_exec = float(pd.to_numeric(row.get("Dias_Exec_Agregado", 0), errors='coerce') or 0.0)
+                    if meta > 0:
+                        return (res / meta) * 100.0
+                    elif meta == 0 and (dias_exec > 0 or res > 0):
+                        return 100.0
+                    return 0.0
+
+                df_base_acoes["% de Execução da Ação"] = df_base_acoes.apply(calc_pct_exec_acao_t1, axis=1)
+
+                # Classificação de Status com Emblemas Visuais de Cor
                 def calc_status_acao_t1(row):
                     andamento = str(row.get("Andamento", "")).strip()
                     justif = str(row.get("Justificativa_Acao_PNAPA", "")).strip()
@@ -1315,31 +1330,31 @@ elif modo == "📊 Visualizar Base":
                     dias_exec = float(row.get("Dias_Exec_Agregado", 0.0) or 0.0)
                     
                     if andamento in ["Não Demandada", "Não demandada", "Não_demandada"]:
-                        return "Não Demandada"
+                        return "🟡 Não Demandada"
                     if andamento == "Cancelada":
-                        return "Cancelada - Sem Justificativa" if justif == "" else "Cancelada (Justificada)"
+                        return "🔴 Cancelada - Sem Justificativa" if justif == "" else "🟡 Cancelada (Justificada)"
                         
                     atingiu = False
                     if meta > 0:
                         if (res / meta) >= 0.8:
                             atingiu = True
-                    elif meta == 0 and dias_exec > 0:
+                    elif meta == 0 and (dias_exec > 0 or res > 0):
                         atingiu = True
                         
                     if atingiu:
-                        return "Executada"
+                        return "🟢 Executada"
                         
                     if andamento in ["Planejada", "Planejado", "Planejadas", "Não Executada", ""]:
                         if pd.notna(dt_fim):
                             if dt_fim >= hoje:
-                                return "Planejada"
+                                return "⚪ Planejada"
                             else:
-                                return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
+                                return "🔴 Não Executada - Sem Justificativa" if justif == "" else "🟡 Não Executada - Justificada"
                         else:
                             ano_str = str(row.get("Ano da Ação", "")).split('.')[0]
                             if ano_str.isdigit() and int(ano_str) < hoje.year:
-                                return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
-                            return "Planejada"
+                                return "🔴 Não Executada - Sem Justificativa" if justif == "" else "🟡 Não Executada - Justificada"
+                            return "⚪ Planejada"
                     return andamento
 
                 df_base_acoes["Status de Execução"] = df_base_acoes.apply(calc_status_acao_t1, axis=1)
@@ -1367,7 +1382,7 @@ elif modo == "📊 Visualizar Base":
                     "data": ("Data_Inicio_Datetime", st.session_state.get("f_slider_dts_ac", None))
                 }
 
-                # 3. 🚀 BARRA DE FILTROS SUPERIOR COM POPOVERS (ESTILO DASHBOARD)
+                # 3. 🚀 BARRA DE FILTROS SUPERIOR COM POPOVERS
                 c_fac1, c_fac2, c_fac3, c_fac4 = st.columns([1, 1.2, 1.2, 0.5])
                 
                 with c_fac1:
@@ -1419,7 +1434,6 @@ elif modo == "📊 Visualizar Base":
 
                 with c_fac3:
                     with st.popover("🏷️ Classificação & Status", use_container_width=True):
-                        # Novo filtro de Status de Execução
                         df_p_st = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "status")
                         status_disp_ac = ["Todos"] + sorted([s for s in df_p_st["Status de Execução"].dropna().astype(str).unique() if s != ""])
                         idx_st_ac = status_disp_ac.index(filtros_ac["status"][1]) if filtros_ac["status"][1] in status_disp_ac else 0
@@ -1456,20 +1470,21 @@ elif modo == "📊 Visualizar Base":
                 df_exib_ac["Data de Início"] = df_exib_ac["Data_Inicio_Datetime"].dt.date
                 df_exib_ac["Data de Término"] = df_exib_ac["Data_Termino_Datetime"].dt.date
 
-                # 4. 📋 COLUNAS RELEVANTES PARA AÇÕES (Incluindo Status de Execução)
+                # 4. 📋 REORDENAÇÃO EXATA DAS COLUNAS (A PARTIR DO STATUS DE EXECUÇÃO)
                 COLS_TABELA_ACOES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Nome da Ação PNAPA", 
-                    "Status de Execução", "Papel_Institucional", "Servidor", "UF_Acao_PNAPA", "Meta_Indicador", 
-                    "Indicador", "Importância da Atividade", "Tema da Atividade", 
-                    "Objetivo da Atividade", "Tipo de Atividade", "Andamento", 
-                    "Data de Início", "Data de Término", "Dias_Gastos_Plan", 
-                    "Origem do Recurso", "Rec_Plan_Total", "Observações", "Justificativa_Acao_PNAPA"
+                    "Status de Execução", "Indicador", "Meta_Indicador", "Resultado_Indicador", 
+                    "% de Execução da Ação", "Papel_Institucional", "Servidor", "UF_Acao_PNAPA", 
+                    "Importância da Atividade", "Tema da Atividade", "Objetivo da Atividade", 
+                    "Tipo de Atividade", "Andamento", "Data de Início", "Data de Término", 
+                    "Dias_Gastos_Plan", "Origem do Recurso", "Rec_Plan_Total", 
+                    "Observações", "Justificativa_Acao_PNAPA"
                 ]
 
                 cols_ac_validas = [c for c in COLS_TABELA_ACOES if c in df_exib_ac.columns]
                 df_tab_ac = df_exib_ac[cols_ac_validas].copy()
                 
-                cols_numericas_ac = ["Id", "Meta_Indicador", "Dias_Gastos_Plan", "Rec_Plan_Total"]
+                cols_numericas_ac = ["Id", "Meta_Indicador", "Resultado_Indicador", "% de Execução da Ação", "Dias_Gastos_Plan", "Rec_Plan_Total"]
                 for c_num in cols_numericas_ac:
                     if c_num in df_tab_ac.columns:
                         df_tab_ac[c_num] = pd.to_numeric(df_tab_ac[c_num], errors='coerce')
@@ -1495,7 +1510,11 @@ elif modo == "📊 Visualizar Base":
 
                 colunas_travadas_ac["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
                 colunas_travadas_ac["Status de Execução"] = st.column_config.TextColumn("Status de Execução", disabled=True)
-                colunas_travadas_ac["Meta_Indicador"] = st.column_config.NumberColumn("Meta da UF", format="%.1f", disabled=True)
+                colunas_travadas_ac["Indicador"] = st.column_config.TextColumn("Nome do Indicador", disabled=True)
+                colunas_travadas_ac["Meta_Indicador"] = st.column_config.NumberColumn("Meta do Indicador", format="%.1f", disabled=True)
+                colunas_travadas_ac["Resultado_Indicador"] = st.column_config.NumberColumn("Resultado do Indicador", format="%.1f", disabled=True)
+                colunas_travadas_ac["% de Execução da Ação"] = st.column_config.NumberColumn("% de Execução da Ação", format="%.1f%%", disabled=True)
+                colunas_travadas_ac["Papel_Institucional"] = st.column_config.TextColumn("Papel Institucional", disabled=True)
                 colunas_travadas_ac["Dias_Gastos_Plan"] = st.column_config.NumberColumn("Dias Plan.", format="%.1f", disabled=True)
                 colunas_travadas_ac["Rec_Plan_Total"] = st.column_config.NumberColumn("Rec. Plan. Total", format="R$ %.2f", disabled=True)
                 colunas_travadas_ac["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
