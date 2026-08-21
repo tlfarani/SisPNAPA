@@ -1237,14 +1237,10 @@ if modo == "📈 Dashboards Executivos":
                         
                         df_gantt_agg["Rotulo_Atividade"] = df_gantt_agg["Codigo_Atividade"].replace("", "S/C") + " - " + df_gantt_agg["Nome da Atividade"]
                         
-                        # 🚀 Datas formatadas especificamente para o tooltip ao passar o mouse
                         df_gantt_agg["Início"] = df_gantt_agg["Data_Inicio"].dt.strftime('%d/%m/%Y')
                         df_gantt_agg["Término"] = df_gantt_agg["Data_Fim"].dt.strftime('%d/%m/%Y')
                         
-                        # Ajusta a data final para preencher o dia completo no visual do Gantt
                         df_gantt_agg["Data_Fim_Plot"] = df_gantt_agg["Data_Fim"] + pd.Timedelta(hours=23, minutes=59, seconds=59)
-
-                        # Ordena de cima para baixo pela data de início
                         df_gantt_agg = df_gantt_agg.sort_values(by="Data_Inicio", ascending=True).reset_index(drop=True)
 
                         fig_gantt = px.timeline(
@@ -1267,7 +1263,6 @@ if modo == "📈 Dashboards Executivos":
                         )
                         fig_gantt.update_yaxes(autorange="reversed", title_text="", showticklabels=True)
                         
-                        # Ajusta os limites do eixo X para enquadrar perfeitamente o período selecionado
                         fig_gantt.update_xaxes(
                             title_text="", 
                             rangeslider_visible=False,
@@ -1277,11 +1272,17 @@ if modo == "📈 Dashboards Executivos":
                         
                         altura_dinamica = max(280, min(800, len(df_gantt_agg) * 36 + 100))
                         
+                        # 🚀 hoverlabel com align="left" para alinhar todo o texto à esquerda
                         fig_gantt.update_layout(
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, title_text=""),
                             margin=dict(t=10, b=0, l=0, r=0),
                             height=altura_dinamica,
-                            plot_bgcolor="white"
+                            plot_bgcolor="white",
+                            hoverlabel=dict(
+                                align="left",
+                                bgcolor="white",
+                                font_size=12
+                            )
                         )
                         st.plotly_chart(fig_gantt, use_container_width=True)
                     else:
