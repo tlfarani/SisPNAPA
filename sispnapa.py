@@ -1175,7 +1175,7 @@ if modo == "📈 Dashboards Executivos":
                     
                     df_gantt_agg["Rotulo_Atividade"] = df_gantt_agg["Codigo_Atividade"].replace("", "S/C") + " - " + df_gantt_agg["Nome da Atividade"]
                     
-                    # 🚀 Extensão de fim do dia para que atividades de 1 único dia fiquem visíveis no Gantt
+                    # Extensão de fim do dia para que atividades de 1 único dia fiquem visíveis no Gantt
                     df_gantt_agg["Data_Fim_Plot"] = df_gantt_agg["Data_Fim"] + pd.Timedelta(hours=23, minutes=59, seconds=59)
 
                     fig_gantt = px.timeline(
@@ -1211,17 +1211,23 @@ if modo == "📈 Dashboards Executivos":
                 df_tab_cal = df_filt_atv_oper[[c for c in cols_tab_cal if c in df_filt_atv_oper.columns]].copy()
                 df_tab_cal["Status"] = df_tab_cal["Status_Operacional"].apply(badge_status)
                 
-                # 🚀 Formatação bonita das datas para não mostrar serial numérico (ex: 46023)
-                df_tab_cal["Data de Início"] = df_tab_cal["Data_Inicio_DT"].dt.strftime('%d/%m/%Y').fillna("-")
-                df_tab_cal["Data de Término"] = df_tab_cal["Data_Fim_DT"].dt.strftime('%d/%m/%Y').fillna("-")
+                # 🚀 Mantém como data real (date object) para a ordenação ser 100% cronológica
+                df_tab_cal["Data de Início"] = df_tab_cal["Data_Inicio_DT"].dt.date
+                df_tab_cal["Data de Término"] = df_tab_cal["Data_Fim_DT"].dt.date
                 
                 df_tab_cal = df_tab_cal.drop(columns=["Status_Operacional", "Data_Inicio_DT", "Data_Fim_DT"])
                 
-                # Reorganiza a ordem das colunas
+                # Ordenação cronológica real padrão
                 ordem_cols = ["Id", "Codigo_Atividade", "Nome da Atividade", "Servidor", "UF_Acao_PNAPA", "Data de Início", "Data de Término", "Doc_Probatorio_Exec", "Status"]
-                df_tab_cal = df_tab_cal[[c for c in ordem_cols if c in df_tab_cal.columns]].sort_values(by="Id", ascending=True).reset_index(drop=True)
+                df_tab_cal = df_tab_cal[[c for c in ordem_cols if c in df_tab_cal.columns]].sort_values(by=["Data de Início", "Id"], ascending=[True, True]).reset_index(drop=True)
                 
-                st.dataframe(df_tab_cal, use_container_width=True, hide_index=True)
+                # 🚀 Configuração que exibe em DD/MM/YYYY sem transformar em texto
+                config_cols_cal = {
+                    "Data de Início": st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY"),
+                    "Data de Término": st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY"),
+                }
+                
+                st.dataframe(df_tab_cal, use_container_width=True, hide_index=True, column_config=config_cols_cal)
 
             # =================================================================
             # SUB-ABA 2: FINANCEIRO
