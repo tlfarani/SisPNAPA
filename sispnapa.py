@@ -1077,78 +1077,228 @@ if modo == "📈 Dashboards Executivos":
         # ABA 2: OPERAÇÕES & CALENDÁRIO
         # ---------------------------------------------------------------------
         with tab_oper:
-            st.markdown("### Acompanhamento Operacional Interativo")
-            col_o1, col_o2 = st.columns([1, 1.5])
+            st.markdown("### 🗓️ Gestão Operacional & Execução de Atividades")
             
-            with col_o1:
-                st.markdown("##### 📅 Esforço Mensal (Dias)")
-                df_mensal = df_filt_atv.groupby("Mes_Inicio")[["Dias_Gastos_Plan", "Dias_Gastos_Exec"]].sum().reset_index()
-                df_mensal["Mes_Nome"] = df_mensal["Mes_Inicio"].map(meses_pt)
-                df_mensal = df_mensal.sort_values("Mes_Inicio")
+            # --- 1. CLASSIFICAÇÃO DE STATUS DAS ATIVIDADES ---
+            def classificar_status_operacional(row):
+                andamento = str(row.get("Andamento", "")).strip()
+                doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
+                if doc.lower() in ["nan", "none", "null"]: doc = ""
+                dt_fim = row.get("Data_Fim_DT")
                 
-                fig_bar = go.Figure()
-                fig_bar.add_trace(go.Bar(x=df_mensal["Mes_Nome"], y=df_mensal["Dias_Gastos_Plan"], name='Dias Previstos', marker_color='#94b396', text=df_mensal["Dias_Gastos_Plan"], textposition='outside'))
-                fig_bar.add_trace(go.Bar(x=df_mensal["Mes_Nome"], y=df_mensal["Dias_Gastos_Exec"], name='Dias Executados', marker_color='#557056', text=df_mensal["Dias_Gastos_Exec"], textposition='outside'))
-                fig_bar.update_layout(barmode='group', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=10, b=0, l=0, r=0), height=300)
-                
-                try:
-                    evento_bar = st.plotly_chart(fig_bar, use_container_width=True, on_select="rerun")
-                    if evento_bar and evento_bar.selection and evento_bar.selection.points:
-                        mes_selecionado = evento_bar.selection.points[0]["x"]
-                        if st.session_state.get("clique_mes") != mes_selecionado:
-                            st.session_state["clique_mes"] = mes_selecionado
-                            st.rerun()
-                except:
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                if andamento == "Concluída":
+                    if not doc:
+                        return "Sem Documento de Conclusão"
+                    return "Concluída"
+                else: # Prevista, Não Iniciada, etc.
+                    if pd.notna(dt_fim) and hoje > dt_fim:
+                        return "Atrasada"
+                    return "Prevista"
 
-                st.markdown("##### 🍩 Planejadas x Executadas (Acumulado)")
-                tot_plan = df_for_metrics["Dias_Gastos_Plan"].sum()
-                tot_exec = df_for_metrics["Dias_Gastos_Exec"].sum()
-                falta_executar = tot_plan - tot_exec if tot_plan > tot_exec else 0
-                
-                fig_donut = go.Figure(data=[go.Pie(
-                    values=[tot_exec, falta_executar, max(tot_plan, tot_exec)], 
-                    marker_colors=['#557056', '#e2e8f0', 'rgba(0,0,0,0)'], 
-                    hole=0.7, direction='clockwise', sort=False, rotation=90, textinfo='none', hoverinfo='none'
-                )])
-                fig_donut.add_annotation(text=f"<b>{int(tot_exec)}</b>", x=0.5, y=0.4, font_size=40, showarrow=False)
-                fig_donut.add_annotation(text=f"0", x=0.1, y=0.5, font_size=14, showarrow=False)
-                fig_donut.add_annotation(text=f"{int(tot_plan)}", x=0.9, y=0.5, font_size=14, showarrow=False)
-                fig_donut.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=250, showlegend=False, plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_donut, use_container_width=True)
+            df_filt_atv_oper = df_filt_atv.copy()
+            df_filt_atv_oper["Status_Operacional"] = df_filt_atv_oper.apply(classificar_status_operacional, axis=1)
 
-            with col_o2:
-                st.markdown("##### 🗓️ Calendário de Atividades (Gantt)")
-                df_gantt = df_for_gantt.dropna(subset=["Data_Inicio_DT", "Data_Fim_DT"]).copy()
-                if not df_gantt.empty:
-                    cor_mapa_gantt = {
-                        "Concluída": "#22c55e", 
-                        "Sem Documento de Execução": "#facc15", 
-                        "Atrasada": "#ef4444", 
-                        "Prevista": "#60a5fa"
-                    }
-                    fig_gantt = px.timeline(df_gantt, x_start="Data_Inicio_DT", x_end="Data_Fim_DT", y="Nome da Atividade", color="Status_Atividade", color_discrete_map=cor_mapa_gantt, hover_name="Servidor")
+            # --- 2. CÁLCULO DAS MÉTRICAS GLOBAIS DO TOPO ---
+            # Identificador de atividade única (Codigo_Atividade ou Nome da Atividade)
+            id_atv_series = df_filt_atv_oper["Codigo_Atividade"].replace("", pd.NA).fillna(df_filt_atv_oper["Nome da Atividade"])
+            total_atv_unicas_plan = int(id_atv_series.nunique())
+            
+            atv_exec_df = df_filt_atv_oper[df_filt_atv_oper["Status_Operacional"].isin(["Concluída", "Sem Documento de Conclusão"])]
+            id_atv_exec_series = atv_exec_df["Codigo_Atividade"].replace("", pd.NA).fillna(atv_exec_df["Nome da Atividade"])
+            total_atv_unicas_exec = int(id_atv_exec_series.nunique())
+            pct_atv_unicas_exec = (total_atv_unicas_exec / total_atv_unicas_plan * 100) if total_atv_unicas_plan > 0 else 0.0
+
+            rec_plan_atv = pd.to_numeric(df_filt_atv_oper["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
+            rec_exec_atv = pd.to_numeric(df_filt_atv_oper["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
+            pct_rec_atv = (rec_exec_atv / rec_plan_atv * 100) if rec_plan_atv > 0 else 0.0
+
+            dias_plan_atv = pd.to_numeric(df_filt_atv_oper["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
+            dias_exec_atv = pd.to_numeric(df_filt_atv_oper["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
+            pct_dias_atv = (dias_exec_atv / dias_plan_atv * 100) if dias_plan_atv > 0 else 0.0
+
+            # Linha 1 (Planejamento)
+            col_op1, col_op2, col_op3 = st.columns(3)
+            col_op1.metric("📌 Atividades Únicas Planejadas", f"{total_atv_unicas_plan}")
+            col_op2.metric("💰 Orçamento Planejado (Ativ.)", f"R$ {rec_plan_atv:,.2f}")
+            col_op3.metric("📅 Dias Planejados (Ativ.)", f"{dias_plan_atv:,.1f}")
+
+            # Linha 2 (Execução)
+            col_op4, col_op5, col_op6 = st.columns(3)
+            col_op4.metric("✅ Atividades Únicas Executadas", f"{total_atv_unicas_exec}", f"{pct_atv_unicas_exec:.1f}% do planejado")
+            col_op5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_atv:,.2f}", f"{pct_rec_atv:.1f}% do planejado")
+            col_op6.metric("⏳ Dias Executados (Ativ.)", f"{dias_exec_atv:,.1f}", f"{pct_dias_atv:.1f}% do planejado")
+
+            st.markdown("---")
+
+            # --- 3. SUB-ABAS OPERACIONAIS ---
+            subtab_cal, subtab_fin, subtab_esf = st.tabs([
+                "🗓️ 1. Calendário & Cronograma", 
+                "💰 2. Execução Financeira", 
+                "⏳ 3. Esforço & Dedicação"
+            ])
+
+            # Mapa padrão de cores operacionais
+            cor_mapa_gantt = {
+                "Concluída": "#22c55e",                  # Verde
+                "Sem Documento de Conclusão": "#facc15", # Amarelo
+                "Atrasada": "#ef4444",                   # Vermelho
+                "Prevista": "#60a5fa"                    # Azul
+            }
+
+            # =================================================================
+            # SUB-ABA 1: CALENDÁRIO (GANTT & CRONOGRAMA)
+            # =================================================================
+            with subtab_cal:
+                st.markdown("#### 🗓️ Cronograma e Linha do Tempo das Atividades")
+                
+                df_gantt_base = df_filt_atv_oper.dropna(subset=["Data_Inicio_DT", "Data_Fim_DT"]).copy()
+                
+                if not df_gantt_base.empty:
+                    # Agrupa por atividade única para exibição limpa no gráfico
+                    df_gantt_agg = df_gantt_base.groupby(["Codigo_Atividade", "Nome da Atividade", "Status_Operacional"]).agg(
+                        Data_Inicio=('Data_Inicio_DT', 'min'),
+                        Data_Fim=('Data_Fim_DT', 'max'),
+                        Equipe=('Servidor', lambda x: ", ".join(sorted(x.dropna().unique()))),
+                        UF_Acao=('UF_Acao_PNAPA', 'first'),
+                        SEI=('Doc_Probatorio_Exec', 'first')
+                    ).reset_index()
+                    
+                    df_gantt_agg["Rotulo_Atividade"] = df_gantt_agg["Codigo_Atividade"].replace("", "S/C") + " - " + df_gantt_agg["Nome da Atividade"]
+                    
+                    fig_gantt = px.timeline(
+                        df_gantt_agg, 
+                        x_start="Data_Inicio", 
+                        x_end="Data_Fim", 
+                        y="Rotulo_Atividade", 
+                        color="Status_Operacional",
+                        color_discrete_map=cor_mapa_gantt,
+                        hover_data={"Equipe": True, "UF_Acao": True, "SEI": True, "Rotulo_Atividade": False}
+                    )
                     fig_gantt.update_yaxes(autorange="reversed", title_text="", showticklabels=True)
-                    fig_gantt.update_xaxes(title_text="")
-                    fig_gantt.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=10, b=0, l=0, r=0), height=600)
-                    try:
-                        evento_gantt = st.plotly_chart(fig_gantt, use_container_width=True, on_select="rerun")
-                        if evento_gantt and evento_gantt.selection and evento_gantt.selection.points:
-                            idx_gantt = evento_gantt.selection.points[0]["pointIndex"]
-                            nome_atv_sel = df_gantt.iloc[idx_gantt]["Nome da Atividade"]
-                            if st.session_state.get("clique_atv") != nome_atv_sel:
-                                st.session_state["clique_atv"] = nome_atv_sel
-                                st.rerun()
-                    except:
-                        st.plotly_chart(fig_gantt, use_container_width=True)
+                    fig_gantt.update_xaxes(title_text="", rangeslider_visible=False)
+                    fig_gantt.update_layout(
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, title_text=""),
+                        margin=dict(t=10, b=0, l=0, r=0),
+                        height=max(350, min(800, len(df_gantt_agg) * 28 + 100)),
+                        plot_bgcolor="white"
+                    )
+                    st.plotly_chart(fig_gantt, use_container_width=True)
                 else:
-                    st.info("Não há atividades com datas válidas para o período.")
+                    st.info("Não há atividades com datas válidas de início e término no período filtrado.")
 
-            st.markdown("##### 📋 Tabela Detalhada (Atividades Filtradas)")
-            cols_tabela = ["Id", "Data de Início", "Data de Término", "Servidor", "Número da PCDP", "Número da Ação PNAPA", "Nome da Atividade"]
-            df_tabela = df_for_metrics[[c for c in cols_tabela if c in df_for_metrics.columns]].copy()
-            df_tabela = df_tabela.sort_values("Data de Início").reset_index(drop=True)
-            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+                st.markdown("<br>##### 📋 Detalhamento das Atividades Filtradas", unsafe_allow_html=True)
+                
+                # Badges de status para a tabela
+                def badge_status(val):
+                    if val == "Concluída": return "🟢 Concluída"
+                    if val == "Sem Documento de Conclusão": return "🟡 Sem Doc. Conclusão"
+                    if val == "Atrasada": return "🔴 Atrasada"
+                    return "🔵 Prevista"
+
+                cols_tab_cal = ["Id", "Codigo_Atividade", "Nome da Atividade", "Status_Operacional", "Servidor", "UF_Acao_PNAPA", "Data de Início", "Data de Término", "Doc_Probatorio_Exec"]
+                df_tab_cal = df_filt_atv_oper[[c for c in cols_tab_cal if c in df_filt_atv_oper.columns]].copy()
+                df_tab_cal["Status"] = df_tab_cal["Status_Operacional"].apply(badge_status)
+                df_tab_cal = df_tab_cal.drop(columns=["Status_Operacional"])
+                df_tab_cal = df_tab_cal.sort_values(by="Data de Início", ascending=True).reset_index(drop=True)
+                
+                st.dataframe(df_tab_cal, use_container_width=True, hide_index=True)
+
+            # =================================================================
+            # SUB-ABA 2: FINANCEIRO
+            # =================================================================
+            with subtab_fin:
+                st.markdown("#### 💰 Acompanhamento Financeiro das Atividades")
+                
+                col_f1, col_f2 = st.columns([1.5, 1])
+                
+                with col_f1:
+                    st.markdown("##### 📅 Execução Orçamentária Mensal (R$)")
+                    df_fin_mensal = df_filt_atv_oper.groupby("Mes_Inicio")[["Rec_Plan_Total", "Rec_Exec_Total"]].sum().reset_index()
+                    df_fin_mensal["Mes_Nome"] = df_fin_mensal["Mes_Inicio"].map(meses_pt)
+                    df_fin_mensal = df_fin_mensal.sort_values("Mes_Inicio")
+                    
+                    fig_fin = go.Figure()
+                    fig_fin.add_trace(go.Bar(x=df_fin_mensal["Mes_Nome"], y=df_fin_mensal["Rec_Plan_Total"], name='Planejado', marker_color='#94b396', text=df_fin_mensal["Rec_Plan_Total"].apply(lambda v: f"R$ {v:,.0f}"), textposition='outside'))
+                    fig_fin.add_trace(go.Bar(x=df_fin_mensal["Mes_Nome"], y=df_fin_mensal["Rec_Exec_Total"], name='Executado', marker_color='#4f7942', text=df_fin_mensal["Rec_Exec_Total"].apply(lambda v: f"R$ {v:,.0f}"), textposition='outside'))
+                    fig_fin.update_layout(barmode='group', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=20, b=0, l=0, r=0), height=320)
+                    st.plotly_chart(fig_fin, use_container_width=True)
+
+                with col_f2:
+                    st.markdown("##### 🍩 Execução Global (R$)")
+                    falta_exec_fin = rec_plan_atv - rec_exec_atv if rec_plan_atv > rec_exec_atv else 0
+                    
+                    fig_donut_fin = go.Figure(data=[go.Pie(
+                        values=[rec_exec_atv, falta_exec_fin, max(rec_plan_atv, rec_exec_atv)], 
+                        marker_colors=['#4f7942', '#e2e8f0', 'rgba(0,0,0,0)'], 
+                        hole=0.7, direction='clockwise', sort=False, rotation=90, textinfo='none', hoverinfo='none'
+                    )])
+                    fig_donut_fin.add_annotation(text=f"<b>R$ {rec_exec_atv:,.0f}</b>", x=0.5, y=0.4, font_size=22, showarrow=False)
+                    fig_donut_fin.add_annotation(text=f"Meta: R$ {rec_plan_atv:,.0f}", x=0.5, y=0.25, font_size=12, showarrow=False)
+                    fig_donut_fin.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=280, showlegend=False, plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_donut_fin, use_container_width=True)
+
+                st.markdown("<br>##### 📊 Orçamento por Categoria de Despesa", unsafe_allow_html=True)
+                cols_custos = [
+                    ("Diárias", "Rec_Plan_Diarias", "Rec_Exec_Diarias"),
+                    ("Passagens", "Rec_Plan_Passagens", "Rec_Exec_Passagens"),
+                    ("Outras Despesas", "Rec_Plan_Outras_Despesas", "Rec_Exec_Outras_Despesas")
+                ]
+                resumo_custos = []
+                for label_c, col_p, col_e in cols_custos:
+                    v_p = pd.to_numeric(df_filt_atv_oper[col_p], errors='coerce').fillna(0).sum()
+                    v_e = pd.to_numeric(df_filt_atv_oper[col_e], errors='coerce').fillna(0).sum()
+                    pct_c = (v_e / v_p * 100) if v_p > 0 else 0.0
+                    resumo_custos.append({
+                        "Categoria de Despesa": label_c,
+                        "Orçamento Planejado": f"R$ {v_p:,.2f}",
+                        "Orçamento Executado": f"R$ {v_e:,.2f}",
+                        "% Executado": f"{pct_c:.1f}%"
+                    })
+                st.dataframe(pd.DataFrame(resumo_custos), use_container_width=True, hide_index=True)
+
+            # =================================================================
+            # SUB-ABA 3: ESFORÇO (DIAS GASTOS)
+            # =================================================================
+            with subtab_esf:
+                st.markdown("#### ⏳ Acompanhamento do Esforço Operacional (Dias)")
+                
+                col_e1, col_e2 = st.columns([1.5, 1])
+                
+                with col_e1:
+                    st.markdown("##### 📅 Esforço Mensal (Dias Gastos)")
+                    df_esf_mensal = df_filt_atv_oper.groupby("Mes_Inicio")[["Dias_Gastos_Plan", "Dias_Gastos_Exec"]].sum().reset_index()
+                    df_esf_mensal["Mes_Nome"] = df_esf_mensal["Mes_Inicio"].map(meses_pt)
+                    df_esf_mensal = df_esf_mensal.sort_values("Mes_Inicio")
+                    
+                    fig_esf = go.Figure()
+                    fig_esf.add_trace(go.Bar(x=df_esf_mensal["Mes_Nome"], y=df_esf_mensal["Dias_Gastos_Plan"], name='Previstos', marker_color='#a3c1ad', text=df_esf_mensal["Dias_Gastos_Plan"], textposition='outside'))
+                    fig_esf.add_trace(go.Bar(x=df_esf_mensal["Mes_Nome"], y=df_esf_mensal["Dias_Gastos_Exec"], name='Executados', marker_color='#557056', text=df_esf_mensal["Dias_Gastos_Exec"], textposition='outside'))
+                    fig_esf.update_layout(barmode='group', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=20, b=0, l=0, r=0), height=320)
+                    st.plotly_chart(fig_esf, use_container_width=True)
+
+                with col_e2:
+                    st.markdown("##### 🍩 Esforço Acumulado (Dias)")
+                    falta_exec_esf = dias_plan_atv - dias_exec_atv if dias_plan_atv > dias_exec_atv else 0
+                    
+                    fig_donut_esf = go.Figure(data=[go.Pie(
+                        values=[dias_exec_atv, falta_exec_esf, max(dias_plan_atv, dias_exec_atv)], 
+                        marker_colors=['#557056', '#e2e8f0', 'rgba(0,0,0,0)'], 
+                        hole=0.7, direction='clockwise', sort=False, rotation=90, textinfo='none', hoverinfo='none'
+                    )])
+                    fig_donut_esf.add_annotation(text=f"<b>{dias_exec_atv:,.1f}</b>", x=0.5, y=0.4, font_size=26, showarrow=False)
+                    fig_donut_esf.add_annotation(text=f"Prev: {dias_plan_atv:,.1f} dias", x=0.5, y=0.25, font_size=12, showarrow=False)
+                    fig_donut_esf.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=280, showlegend=False, plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_donut_esf, use_container_width=True)
+
+                st.markdown("<br>##### 👥 Esforço por Servidor", unsafe_allow_html=True)
+                df_esf_srv = df_filt_atv_oper.groupby("Servidor").agg(
+                    Atividades=('Id', 'count'),
+                    Dias_Previstos=('Dias_Gastos_Plan', 'sum'),
+                    Dias_Executados=('Dias_Gastos_Exec', 'sum')
+                ).reset_index()
+                df_esf_srv["% Cumprido"] = (df_esf_srv["Dias_Executados"] / df_esf_srv["Dias_Previstos"] * 100).fillna(0).round(1).astype(str) + "%"
+                df_esf_srv = df_esf_srv.sort_values(by="Dias_Executados", ascending=False).reset_index(drop=True)
+                st.dataframe(df_esf_srv, use_container_width=True, hide_index=True)
 
         # ---------------------------------------------------------------------
         # ABA 3: GOVERNANÇA E CARGA
