@@ -425,7 +425,6 @@ st.markdown("""
         }
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg { fill: #03170a !important; }
         
-        /* 🚀 A CORREÇÃO: Adicionamos o stPopoverBody para as regras alcançarem as caixas do popover */
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
         div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div,
         div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] > div,
@@ -445,7 +444,6 @@ st.markdown("""
             fill: #03170a !important; 
         }
         
-        /* Forçando as listas de opções suspensas do Popover a ficarem brancas com texto escuro */
         div[data-baseweb="popover"] ul { background-color: #ffffff !important; }
         div[data-baseweb="popover"] ul li { color: #03170a !important; background-color: transparent !important; }
         div[data-baseweb="popover"] ul li:hover { background-color: #f1f5f9 !important; }
@@ -454,10 +452,18 @@ st.markdown("""
         div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
         div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
         
-        div[data-testid="stDateInput"] > div, div[data-testid="stDateInput"] div[role="button"], div[data-testid="stDateInput"] input {
-            background-color: #ffffff !important; color: #03170a !important; border: 1px solid #cbd5e1 !important;
+        /* 🚀 FORÇA BRUTA: Correção definitiva do fundo das Caixas de Data */
+        div[data-testid="stDateInput"] > div,
+        div[data-testid="stDateInput"] div[data-baseweb="input"],
+        div[data-testid="stDateInput"] div[data-baseweb="base-input"],
+        div[data-testid="stDateInput"] div[role="button"],
+        div[data-testid="stDateInput"] input {
+            background-color: #ffffff !important;
+            color: #03170a !important;
+            border: 1px solid #cbd5e1 !important;
         }
         div[data-testid="stDateInput"] svg { fill: #03170a !important; }
+        
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
         div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
@@ -1559,7 +1565,7 @@ elif modo == "📊 Visualizar Base":
             if df_base_acoes.empty:
                 st.info("Nenhuma Ação Estadual cadastrada na base.")
             else:
-                # 1. 🚀 CÁLCULO E PROPAGAÇÃO DO RESULTADO, % E STATUS DE EXECUÇÃO
+                # 1. CÁLCULO E PROPAGAÇÃO DO RESULTADO, % E STATUS DE EXECUÇÃO
                 df_atv_temp = df_trabalho[df_trabalho["Nível"].astype(str).str.strip() == "Atividade"].copy()
                 atv_concluidas_temp = df_atv_temp[df_atv_temp["Andamento"].astype(str).str.strip() == "Concluída"]
                 
@@ -1573,7 +1579,6 @@ elif modo == "📊 Visualizar Base":
                 df_base_acoes["Dias_Exec_Agregado"] = df_base_acoes["Dias_Exec_Agregado"].fillna(0)
                 df_base_acoes["Resultado_Indicador"] = df_base_acoes["Resultado_Agregado"]
 
-                # Cálculo do Percentual de Execução
                 def calc_pct_exec_acao_t1(row):
                     meta = float(pd.to_numeric(row.get("Meta_Indicador", 0), errors='coerce') or 0.0)
                     res = float(pd.to_numeric(row.get("Resultado_Agregado", 0), errors='coerce') or 0.0)
@@ -1586,7 +1591,6 @@ elif modo == "📊 Visualizar Base":
 
                 df_base_acoes["% de Execução da Ação"] = df_base_acoes.apply(calc_pct_exec_acao_t1, axis=1)
 
-                # Classificação de Status com Emblemas Visuais de Cor
                 def calc_status_acao_t1(row):
                     andamento = str(row.get("Andamento", "")).strip()
                     justif = str(row.get("Justificativa_Acao_PNAPA", "")).strip()
@@ -1627,7 +1631,7 @@ elif modo == "📊 Visualizar Base":
 
                 df_base_acoes["Status de Execução"] = df_base_acoes.apply(calc_status_acao_t1, axis=1)
 
-                # 2. 🚀 INICIALIZAÇÃO SEGURA DOS FILTROS POPOVER
+                # 2. INICIALIZAÇÃO SEGURA DOS FILTROS POPOVER
                 for k in ["f_ano_ac", "f_pna_ac", "f_uf_ac", "f_papel_ac", "f_focal_ac", "f_status_ac", "f_and_ac", "f_tema_ac"]:
                     if k not in st.session_state:
                         st.session_state[k] = "Todas" if k in ["f_pna_ac", "f_uf_ac"] else "Todos"
@@ -1650,7 +1654,7 @@ elif modo == "📊 Visualizar Base":
                     "data": ("Data_Inicio_Datetime", st.session_state.get("f_slider_dts_ac", None))
                 }
 
-                # 3. 🚀 BARRA DE FILTROS SUPERIOR COM POPOVERS
+                # 3. BARRA DE FILTROS SUPERIOR COM POPOVERS
                 c_fac1, c_fac2, c_fac3, c_fac4 = st.columns([1, 1.2, 1.2, 0.5])
                 
                 with c_fac1:
@@ -1738,7 +1742,7 @@ elif modo == "📊 Visualizar Base":
                 df_exib_ac["Data de Início"] = df_exib_ac["Data_Inicio_Datetime"].dt.date
                 df_exib_ac["Data de Término"] = df_exib_ac["Data_Termino_Datetime"].dt.date
 
-                # 4. 📋 REORDENAÇÃO EXATA DAS COLUNAS (A PARTIR DO STATUS DE EXECUÇÃO)
+                # 4. COLUNAS REORDENADAS
                 COLS_TABELA_ACOES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Nome da Ação PNAPA", 
                     "Status de Execução", "Indicador", "Meta_Indicador", "Resultado_Indicador", 
@@ -1752,18 +1756,18 @@ elif modo == "📊 Visualizar Base":
                 cols_ac_validas = [c for c in COLS_TABELA_ACOES if c in df_exib_ac.columns]
                 df_tab_ac = df_exib_ac[cols_ac_validas].copy()
                 
-                cols_numericas_ac = ["Id", "Meta_Indicador", "Resultado_Indicador", "% de Execução da Ação", "Dias_Gastos_Plan", "Rec_Plan_Total"]
-                for c_num in cols_numericas_ac:
-                    if c_num in df_tab_ac.columns:
-                        df_tab_ac[c_num] = pd.to_numeric(df_tab_ac[c_num], errors='coerce')
+                # 🚀 FORMATAÇÃO DIRETA NO PADRÃO BR (Elimina None e ponto decimal)
+                df_tab_ac["Meta_Indicador"] = df_tab_ac["Meta_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
+                df_tab_ac["Resultado_Indicador"] = df_tab_ac["Resultado_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
+                df_tab_ac["% de Execução da Ação"] = df_tab_ac["% de Execução da Ação"].apply(lambda v: f"{formatar_numero_br(v, 1)}%")
+                df_tab_ac["Dias_Gastos_Plan"] = df_tab_ac["Dias_Gastos_Plan"].apply(lambda v: formatar_numero_br(v, 1))
+                df_tab_ac["Rec_Plan_Total"] = df_tab_ac["Rec_Plan_Total"].apply(formatar_moeda_br)
                 
-                # Ordenação cronológica real
                 df_tab_ac = df_tab_ac.sort_values(by=["Data de Início", "Id"], ascending=[True, True], na_position='last').reset_index(drop=True)
 
                 if "selecoes_acoes" not in st.session_state: st.session_state["selecoes_acoes"] = {}
                 if "version_ed_ac" not in st.session_state: st.session_state["version_ed_ac"] = 0
 
-                # Desmarcar todos de Ações
                 if [k for k, v in st.session_state["selecoes_acoes"].items() if v]:
                     if st.button("✕ Desmarcar Todas as Ações", type="secondary", key="btn_desm_ac"):
                         st.session_state["selecoes_acoes"] = {}
@@ -1777,21 +1781,12 @@ elif modo == "📊 Visualizar Base":
                     colunas_travadas_ac = {col: st.column_config.Column(disabled=True) for col in df_tab_ac.columns}
 
                 colunas_travadas_ac["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
-                colunas_travadas_ac["Status de Execução"] = st.column_config.TextColumn("Status de Execução", disabled=True)
-                colunas_travadas_ac["Indicador"] = st.column_config.TextColumn("Nome do Indicador", disabled=True)
-                colunas_travadas_ac["Meta_Indicador"] = st.column_config.NumberColumn("Meta do Indicador", format="%.1f", disabled=True)
-                colunas_travadas_ac["Resultado_Indicador"] = st.column_config.NumberColumn("Resultado do Indicador", format="%.1f", disabled=True)
-                colunas_travadas_ac["% de Execução da Ação"] = st.column_config.NumberColumn("% de Execução da Ação", format="%.1f%%", disabled=True)
-                colunas_travadas_ac["Papel_Institucional"] = st.column_config.TextColumn("Papel Institucional", disabled=True)
-                colunas_travadas_ac["Dias_Gastos_Plan"] = st.column_config.NumberColumn("Dias Plan.", format="%.1f", disabled=True)
-                colunas_travadas_ac["Rec_Plan_Total"] = st.column_config.NumberColumn("Rec. Plan. Total", format="R$ %.2f", disabled=True)
                 colunas_travadas_ac["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_ac["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
 
                 key_dinamica_ac = f"editor_acoes_v{st.session_state['version_ed_ac']}"
                 tabela_ac = st.data_editor(df_tab_ac, hide_index=True, use_container_width=True, column_config=colunas_travadas_ac, key=key_dinamica_ac)
 
-                # Captura seleções
                 if pode_editar and st.session_state[key_dinamica_ac] and "edited_rows" in st.session_state[key_dinamica_ac]:
                     for idx_l, alt in st.session_state[key_dinamica_ac]["edited_rows"].items():
                         if "Selecionar" in alt:
@@ -1873,7 +1868,14 @@ elif modo == "📊 Visualizar Base":
                             st.text_input("Indicador Oficial", value=val_indicador_ac, disabled=True, key=f"t1_ac_ind_{id_ac_ref}")
                             meta_val_ac = obter_float_limpo(reg_ac_alvo.get("Meta_Indicador", 1.0))
                             ed_meta_ac = st.number_input(f"Meta da Ação para a UF ({uf_alvo_ac}):", min_value=0.0, value=meta_val_ac, step=1.0, key=f"t1_ac_meta_{id_ac_ref}")
-                            uf_acao_val = st.text_input("UF da Ação", value=uf_alvo_ac, disabled=True, key=f"t1_ac_uf_{id_ac_ref}")
+                            
+                            # 🚀 UF DA AÇÃO EDITÁVEL PARA O ADMINISTRADOR
+                            if perfil_usuario == "Administrador":
+                                idx_uf_ac_sel = LISTA_UFS_COMPLETA.index(uf_alvo_ac) if uf_alvo_ac in LISTA_UFS_COMPLETA else 0
+                                uf_acao_val = st.selectbox("UF da Ação PNAPA:", LISTA_UFS_COMPLETA, index=idx_uf_ac_sel, key=f"t1_ac_uf_sel_{id_ac_ref}")
+                            else:
+                                uf_acao_val = st.text_input("UF da Ação", value=uf_alvo_ac, disabled=True, key=f"t1_ac_uf_{id_ac_ref}")
+                                
                             st.text_input("Importância", value=importancia_ac, disabled=True, key=f"t1_ac_imp_{id_ac_ref}")
                             ed_tema_ac = st.selectbox("Tema da Atividade:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_ac_alvo["Tema da Atividade"]) if reg_ac_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_ac_tema_{id_ac_ref}")
                             ed_obj_ac = st.selectbox("Objetivo:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(reg_ac_alvo["Objetivo da Atividade"]) if reg_ac_alvo.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key=f"t1_ac_obj_{id_ac_ref}")
@@ -1891,7 +1893,10 @@ elif modo == "📊 Visualizar Base":
                             ed_rp_d_ac = st.number_input("Rec_Plan_Diarias:", min_value=0.0, value=obter_float_limpo(reg_ac_alvo.get("Rec_Plan_Diarias")), step=50.0, format="%.2f", key=f"t1_ac_rpd_{id_ac_ref}")
                             ed_rp_p_ac = st.number_input("Rec_Plan_Passagens:", min_value=0.0, value=obter_float_limpo(reg_ac_alvo.get("Rec_Plan_Passagens")), step=50.0, format="%.2f", key=f"t1_ac_rpp_{id_ac_ref}")
                             ed_rp_o_ac = st.number_input("Rec_Plan_Outras_Despesas:", min_value=0.0, value=obter_float_limpo(reg_ac_alvo.get("Rec_Plan_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_ac_rpo_{id_ac_ref}")
-                            st.text_input("Rec_Plan_Total:", value=f"{(ed_rp_d_ac + ed_rp_p_ac + ed_rp_o_ac):,.2f}", disabled=True, key=f"t1_ac_rptot_{id_ac_ref}")
+                            
+                            # 🚀 RECALCULO REATIVO SEM TRAVA DE KEY
+                            tot_pl_ac_calc = ed_rp_d_ac + ed_rp_p_ac + ed_rp_o_ac
+                            st.text_input("Rec_Plan_Total (Soma Automática):", value=formatar_moeda_br(tot_pl_ac_calc), disabled=True)
 
                         with aba5_ac:
                             ed_obs_ac = st.text_area("Observações:", value=str(reg_ac_alvo.get("Observações", "")), key=f"t1_ac_obs_{id_ac_ref}")
@@ -2029,13 +2034,9 @@ elif modo == "📊 Visualizar Base":
 
                 # --- LINHA 3: SLIDER DE DATAS RESPONSIVO DE ATIVIDADES ---
                 dts_validas_at = df_base_atvs["Data_Inicio_Datetime"].dropna()
-                if not dts_validas_at.empty:
-                    min_dt_at = dts_validas_at.min().date()
-                    max_dt_at = dts_validas_at.max().date()
-                else:
-                    min_dt_at, max_dt_at = date(2025, 1, 1), date(2026, 12, 31)
-                if min_dt_at >= max_dt_at:
-                    max_dt_at = min_dt_at + pd.Timedelta(days=1)
+                min_dt_at = dts_validas_at.min().date() if not dts_validas_at.empty else date(2025, 1, 1)
+                max_dt_at = dts_validas_at.max().date() if not dts_validas_at.empty else date(2026, 12, 31)
+                if min_dt_at >= max_dt_at: max_dt_at = min_dt_at + pd.Timedelta(days=1)
 
                 f_slider_dts_at = st.slider(
                     "⏳ Período (Data de Início da Atividade):",
@@ -2053,7 +2054,7 @@ elif modo == "📊 Visualizar Base":
                 df_exib_at["Data de Início"] = df_exib_at["Data_Inicio_Datetime"].dt.date
                 df_exib_at["Data de Término"] = df_exib_at["Data_Termino_Datetime"].dt.date
 
-                # 📋 COLUNAS RELEVANTES PARA ATIVIDADES (Incluindo Avaliação)
+                # 📋 COLUNAS RELEVANTES PARA ATIVIDADES
                 COLS_TABELA_ATIVIDADES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Codigo_Atividade", 
                     "Nome da Atividade", "Papel_Institucional", "Coordenador_Operacao", 
@@ -2070,42 +2071,33 @@ elif modo == "📊 Visualizar Base":
                 cols_at_validas = [c for c in COLS_TABELA_ATIVIDADES if c in df_exib_at.columns]
                 df_tab_at = df_exib_at[cols_at_validas].copy()
                 
-                cols_numericas_at = [
-                    "Id", "Resultado_Indicador", "Dias_Gastos_Plan", "Dias_Gastos_Exec", 
-                    "Rec_Plan_Total", "Rec_Exec_Total"
-                ]
-                for c_num in cols_numericas_at:
-                    if c_num in df_tab_at.columns:
-                        df_tab_at[c_num] = pd.to_numeric(df_tab_at[c_num], errors='coerce')
+                # 🚀 FORMATAÇÃO DIRETA NO PADRÃO BR (Elimina None e ponto decimal)
+                df_tab_at["Resultado_Indicador"] = df_tab_at["Resultado_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
+                df_tab_at["Dias_Gastos_Plan"] = df_tab_at["Dias_Gastos_Plan"].apply(lambda v: formatar_numero_br(v, 1))
+                df_tab_at["Dias_Gastos_Exec"] = df_tab_at["Dias_Gastos_Exec"].apply(lambda v: formatar_numero_br(v, 1))
+                df_tab_at["Rec_Plan_Total"] = df_tab_at["Rec_Plan_Total"].apply(formatar_moeda_br)
+                df_tab_at["Rec_Exec_Total"] = df_tab_at["Rec_Exec_Total"].apply(formatar_moeda_br)
                 
-                # 🚀 ORDENAÇÃO PADRÃO: DATA DE INÍCIO CRESCENTE (Cronológica Real)
                 df_tab_at = df_tab_at.sort_values(by=["Data de Início", "Id"], ascending=[True, True], na_position='last').reset_index(drop=True)
 
-                # =================================================================
-                # 🔒 BLINDAGEM DE PRIVACIDADE: Ocultar avaliações para não-autorizados
-                # =================================================================
+                # 🔒 PRIVACIDADE: Ocultar avaliações para não-autorizados
                 if "Avaliacao_Qualidade" not in df_tab_at.columns: df_tab_at["Avaliacao_Qualidade"] = "Não Avaliada"
                 if "Avaliacao_Feedback" not in df_tab_at.columns: df_tab_at["Avaliacao_Feedback"] = ""
 
-                # Mapeia as atividades onde o usuário logado é o Coordenador de Campo
                 atividades_coordenadas = set(df_atual[
                     (df_atual["Servidor"].astype(str).str.strip() == str(nome_usuario_logado)) & 
                     (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
                 ]["Codigo_Atividade"].astype(str).str.strip())
 
                 def visibilidade_avaliacao(row):
-                    # 1. Administrador ou Editor Regional (Coordenador Estadual)
                     if perfil_usuario in ["Administrador", "Editor Regional"]: return True
-                    # 2. Próprio Avaliado
                     if str(row.get("Servidor", "")).strip() == str(nome_usuario_logado): return True
-                    # 3. Liderança Direta (Coordenador de Campo da Atividade)
                     if str(row.get("Codigo_Atividade", "")).strip() in atividades_coordenadas: return True
                     return False
 
                 mascara_visibilidade = df_tab_at.apply(visibilidade_avaliacao, axis=1)
                 df_tab_at.loc[~mascara_visibilidade, "Avaliacao_Qualidade"] = "🔒 Restrito"
                 df_tab_at.loc[~mascara_visibilidade, "Avaliacao_Feedback"] = "🔒 Restrito"
-                # =================================================================
 
                 if "selecoes_atividades" not in st.session_state: st.session_state["selecoes_atividades"] = {}
                 if "version_ed_at" not in st.session_state: st.session_state["version_ed_at"] = 0
@@ -2122,17 +2114,9 @@ elif modo == "📊 Visualizar Base":
                 else:
                     colunas_travadas_at = {col: st.column_config.Column(disabled=True) for col in df_tab_at.columns}
 
-                # Configuração Visual das Colunas
                 colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
-                colunas_travadas_at["Resultado_Indicador"] = st.column_config.NumberColumn("Resultado Indicador", format="%.1f", disabled=True)
-                colunas_travadas_at["Dias_Gastos_Plan"] = st.column_config.NumberColumn("Dias Plan.", format="%.1f", disabled=True)
-                colunas_travadas_at["Dias_Gastos_Exec"] = st.column_config.NumberColumn("Dias Exec.", format="%.1f", disabled=True)
-                colunas_travadas_at["Rec_Plan_Total"] = st.column_config.NumberColumn("Rec. Plan. Total", format="R$ %.2f", disabled=True)
-                colunas_travadas_at["Rec_Exec_Total"] = st.column_config.NumberColumn("Rec. Exec. Total", format="R$ %.2f", disabled=True)
                 colunas_travadas_at["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_at["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
-                colunas_travadas_at["Avaliacao_Qualidade"] = st.column_config.TextColumn("Nota Qualidade", disabled=True)
-                colunas_travadas_at["Avaliacao_Feedback"] = st.column_config.TextColumn("Feedback Liderança", disabled=True)
 
                 key_dinamica_at = f"editor_atividades_v{st.session_state['version_ed_at']}"
                 tabela_at = st.data_editor(df_tab_at, hide_index=True, use_container_width=True, column_config=colunas_travadas_at, key=key_dinamica_at)
@@ -2144,8 +2128,8 @@ elif modo == "📊 Visualizar Base":
                             id_r_at = str(alvo_at["Id"])
                             uf_l_at = str(alvo_at.get("UF_Acao_PNAPA", "")).strip()
                             if perfil_usuario == "Editor Regional" and uf_l_at != uf_usuario and alt["Selecionar"] is True:
-                                st.error(f"⛔ Acesso Negado: Como Editor Regional ({uf_usuario}), você não tem permissão para editar registros da UF: {uf_l_at}.")
-                                st.session_state["selecoes_atividades"][id_r_at] = False
+                                st.error(f"⛔ Acesso Negado: Como Editor Regional ({uf_usuario}), você não tem permissão para editar registros da UF: {uf_l_ac}.")
+                                st.session_state["selecoes_atividades"][id_r_ac] = False
                             else:
                                 st.session_state["selecoes_atividades"][id_r_at] = alt["Selecionar"]
                             st.rerun()
@@ -2176,9 +2160,7 @@ elif modo == "📊 Visualizar Base":
                             time.sleep(1.5)
                             st.rerun()
 
-                    # =================================================================
-                    # EDIÇÃO INDIVIDUAL DE ATIVIDADE (1 LINHA)
-                    # =================================================================
+                    # EDIÇÃO INDIVIDUAL DE ATIVIDADE
                     if qtd_at_sel == 1:
                         reg_at_alvo = df_at_sel.iloc[0]
                         id_at_ref = str(reg_at_alvo["Id"])
@@ -2296,7 +2278,14 @@ elif modo == "📊 Visualizar Base":
                             st.text_input("Indicador Oficial", value=val_indicador_at, disabled=True, key=f"t1_at_ind_{id_at_ref}")
                             ed_res_ind_at = st.text_input("Resultado do Indicador (Aferição Real):", value=str(reg_at_alvo.get("Resultado_Indicador", "")), key=f"t1_at_resind_{id_at_ref}")
                             ed_doc_at = st.text_input("Doc_Probatorio_Exec (SEI):", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
-                            st.text_input("UF da Ação PNAPA", value=uf_acao_at, disabled=True, key=f"t1_at_uf_{id_at_ref}")
+                            
+                            # 🚀 UF DA AÇÃO EDITÁVEL PARA ADMINISTRADOR
+                            if perfil_usuario == "Administrador":
+                                idx_uf_at_sel = LISTA_UFS_COMPLETA.index(uf_acao_at) if uf_acao_at in LISTA_UFS_COMPLETA else 0
+                                ed_uf_acao_val = st.selectbox("UF da Ação PNAPA:", LISTA_UFS_COMPLETA, index=idx_uf_at_sel, key=f"t1_at_uf_sel_{id_at_ref}")
+                            else:
+                                ed_uf_acao_val = st.text_input("UF da Ação PNAPA", value=uf_acao_at, disabled=True, key=f"t1_at_uf_dis_{id_at_ref}")
+
                             st.text_input("Importância da Atividade (Herdada)", value=importancia_at, disabled=True, key=f"t1_at_imp_{id_at_ref}")
                             ed_tema_at = st.selectbox("Tema da Atividade:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_at_alvo["Tema da Atividade"]) if reg_at_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_at_tema_{id_at_ref}")
                             ed_obj_at = st.selectbox("Objetivo da Atividade:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(reg_at_alvo["Objetivo da Atividade"]) if reg_at_alvo.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key=f"t1_at_obj_{id_at_ref}")
@@ -2304,7 +2293,7 @@ elif modo == "📊 Visualizar Base":
                             ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo["Periculosidade/Insalubridade"]) if reg_at_alvo.get("Periculosidade/Insalubridade") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
 
                         with aba3_at:
-                            df_srv_at = df_servidores[df_servidores["UF_Servidor"] == uf_acao_at]
+                            df_srv_at = df_servidores[df_servidores["UF_Servidor"] == ed_uf_acao_val]
                             lista_nomes_servidores = sorted(df_srv_at["Servidor"].dropna().unique().tolist()) if not df_srv_at.empty else [email_logado]
                             
                             c_at_rh1, c_at_rh2 = st.columns(2)
@@ -2323,11 +2312,11 @@ elif modo == "📊 Visualizar Base":
 
                             if not df_srv_at.empty and ed_servidor_at in df_srv_at["Servidor"].values:
                                 dados_s_linha = df_srv_at[df_srv_at["Servidor"] == ed_servidor_at].iloc[0]
-                                ed_uf_srv_at = str(dados_s_linha.get("UF_Servidor", uf_acao_at))
+                                ed_uf_srv_at = str(dados_s_linha.get("UF_Servidor", ed_uf_acao_val))
                                 ed_lot_at = str(dados_s_linha.get("Lotacao", "Sede Superintendência"))
                                 ed_eq_at = str(dados_s_linha.get("Equipe_Emergencias", "Não"))
                             else:
-                                ed_uf_srv_at, ed_lot_at, ed_eq_at = uf_acao_at, "Sede Superintendência", "Não"
+                                ed_uf_srv_at, ed_lot_at, ed_eq_at = ed_uf_acao_val, "Sede Superintendência", "Não"
 
                             st.text_input("UF do Servidor (Automático)", value=ed_uf_srv_at, disabled=True, key=f"t1_at_ufsrv_{id_at_ref}")
                             st.text_input("Lotação (Automático)", value=ed_lot_at, disabled=True, key=f"t1_at_lot_{id_at_ref}")
@@ -2368,13 +2357,20 @@ elif modo == "📊 Visualizar Base":
                                 ed_rp_d_at = st.number_input("Rec_Plan_Diarias:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Diarias")), step=50.0, format="%.2f", key=f"t1_at_rpd_{id_at_ref}")
                                 ed_rp_p_at = st.number_input("Rec_Plan_Passagens:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Passagens")), step=50.0, format="%.2f", key=f"t1_at_rpp_{id_at_ref}")
                                 ed_rp_o_at = st.number_input("Rec_Plan_Outras_Despesas:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_at_rpo_{id_at_ref}")
-                                st.text_input("Rec_Plan_Total (Soma):", value=f"{(ed_rp_d_at + ed_rp_p_at + ed_rp_o_ac if 'ed_rp_o_ac' in locals() else ed_rp_d_at + ed_rp_p_at + ed_rp_o_at):,.2f}", disabled=True, key=f"t1_at_totpl_{id_at_ref}")
+                                
+                                # 🚀 RECALCULO REATIVO SEM TRAVA DE KEY
+                                tot_pl_calc = ed_rp_d_at + ed_rp_p_at + ed_rp_o_at
+                                st.text_input("Rec_Plan_Total (Soma):", value=formatar_moeda_br(tot_pl_calc), disabled=True)
+                                
                             with c_at_ex:
                                 st.caption("Executado")
                                 ed_re_d_at = st.number_input("Rec_Exec_Diarias:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Diarias")), step=50.0, format="%.2f", key=f"t1_at_red_{id_at_ref}")
                                 ed_re_p_at = st.number_input("Rec_Exec_Passagens:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Passagens")), step=50.0, format="%.2f", key=f"t1_at_rep_{id_at_ref}")
                                 ed_re_o_at = st.number_input("Rec_Exec_Outras_Despesas:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_at_reo_{id_at_ref}")
-                                st.text_input("Rec_Exec_Total (Soma):", value=f"{(ed_re_d_at + ed_re_p_at + ed_re_o_at):,.2f}", disabled=True, key=f"t1_at_totex_{id_at_ref}")
+                                
+                                # 🚀 RECALCULO REATIVO SEM TRAVA DE KEY
+                                tot_ex_calc = ed_re_d_at + ed_re_p_at + ed_re_o_at
+                                st.text_input("Rec_Exec_Total (Soma):", value=formatar_moeda_br(tot_ex_calc), disabled=True)
 
                         with aba5_at:
                             ed_obs_at = st.text_area("Observações:", value=str(reg_at_alvo.get("Observações", "")), key=f"t1_at_obs_{id_at_ref}")
@@ -2383,7 +2379,6 @@ elif modo == "📊 Visualizar Base":
                             st.markdown("##### ⭐ Avaliação de Desempenho do Servidor")
                             st.caption("Apenas o Coordenador da Atividade, Ponto Focal da UF ou Administrador podem avaliar.")
                             
-                            # Lógica de Autorização (Trava de Segurança)
                             is_coord = not df_atual[
                                 (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(ed_cod_atv).strip().upper()) & 
                                 (df_atual["Servidor"].astype(str).str.strip() == str(nome_usuario_logado)) & 
@@ -2425,7 +2420,7 @@ elif modo == "📊 Visualizar Base":
                             if not bloqueio_coord:
                                 payload_at = payload_gerador(
                                     val_ano_at, val_num_acao_at, val_nome_acao_at, val_indicador_at, "Atividade",
-                                    ed_nome_atv, ed_andamento_at, ed_res_ind_at, ed_doc_at, uf_acao_at,
+                                    ed_nome_atv, ed_andamento_at, ed_res_ind_at, ed_doc_at, ed_uf_acao_val,
                                     importancia_at, ed_tema_at, ed_obj_at, ed_tipo_at, ed_perigo_at, ed_servidor_at,
                                     ed_uf_srv_at, ed_lot_at, ed_eq_at, ed_pcdp_at, "Brasil", ed_uf_oc_at,
                                     ed_est_loc_at, ed_mun_at, ed_dt_i_at, ed_dt_f_at, ed_dias_pl_at, ed_dias_ex_at,
@@ -2439,9 +2434,7 @@ elif modo == "📊 Visualizar Base":
                                 st.session_state["version_ed_at"] += 1
                                 st.rerun()
 
-                    # =================================================================
-                    # EDIÇÃO EM LOTE DE ATIVIDADES (CHECKBOX + RESUMO REATIVO)
-                    # =================================================================
+                    # EDIÇÃO EM LOTE DE ATIVIDADES
                     else:
                         st.info(f"👥 **Edição em Lote:** {qtd_at_sel} atividades selecionadas. Marque os campos nas abas abaixo para habilitar a edição seletiva em massa.")
                         
@@ -2597,9 +2590,11 @@ elif modo == "📊 Visualizar Base":
                         with l_aba6:
                             st.caption("Atenção: A nota e o feedback dados aqui serão aplicados a todos os servidores marcados no lote.")
                             if st.checkbox("Avaliar a Equipe Selecionada em Massa?", key="chk_aval_lt"):
-                                edicoes_lote["Avaliacao_Qualidade"] = st.selectbox("Nota de Qualidade Geral:",
-                                                                                   ["Não Avaliada","0 - Insatisfatória", "1 - Satisfatória"],
-                                                                                   key="in_qual_lt")
+                                edicoes_lote["Avaliacao_Qualidade"] = st.selectbox(
+                                    "Nota de Qualidade Geral:",
+                                    ["Não Avaliada", "0 - Insatisfatória", "1 - Satisfatória"],
+                                    key="in_qual_lt"
+                                )
                                 edicoes_lote["Avaliacao_Feedback"] = st.text_area("Feedback da Liderança (Aplicado a todos):", key="in_feed_lt")
 
                         st.markdown("---")
@@ -2663,7 +2658,6 @@ elif modo == "📊 Visualizar Base":
                                         v_dti = edicoes_lote.get("Data de Início", converter_para_data_segura(row.get("Data de Início")))
                                         v_dtf = edicoes_lote.get("Data de Término", converter_para_data_segura(row.get("Data de Término")))
                                         
-                                        # Conversão segura de todos os numéricos da linha
                                         v_dpl = obter_float_limpo(edicoes_lote.get("Dias_Gastos_Plan", row.get("Dias_Gastos_Plan", 0.0)))
                                         v_dex = obter_float_limpo(edicoes_lote.get("Dias_Gastos_Exec", row.get("Dias_Gastos_Exec", 0.0)))
                                         v_origem = edicoes_lote.get("Origem do Recurso", str(row.get("Origem do Recurso", "SP")))
