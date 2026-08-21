@@ -1324,33 +1324,36 @@ if modo == "📈 Dashboards Executivos":
             with subtab_fin:
                 st.markdown("#### 💰 Acompanhamento Financeiro das Atividades")
                 
-                col_f1, col_f2 = st.columns([1.5, 1])
+                st.markdown("##### 📅 Execução Orçamentária Mensal (R$)")
+                df_fin_mensal = df_filt_atv_oper.groupby("Mes_Inicio")[["Rec_Plan_Total", "Rec_Exec_Total"]].sum().reset_index()
+                df_fin_mensal["Mes_Nome"] = df_fin_mensal["Mes_Inicio"].map(meses_pt)
+                df_fin_mensal = df_fin_mensal.sort_values("Mes_Inicio")
                 
-                with col_f1:
-                    st.markdown("##### 📅 Execução Orçamentária Mensal (R$)")
-                    df_fin_mensal = df_filt_atv_oper.groupby("Mes_Inicio")[["Rec_Plan_Total", "Rec_Exec_Total"]].sum().reset_index()
-                    df_fin_mensal["Mes_Nome"] = df_fin_mensal["Mes_Inicio"].map(meses_pt)
-                    df_fin_mensal = df_fin_mensal.sort_values("Mes_Inicio")
-                    
-                    fig_fin = go.Figure()
-                    fig_fin.add_trace(go.Bar(x=df_fin_mensal["Mes_Nome"], y=df_fin_mensal["Rec_Plan_Total"], name='Planejado', marker_color='#94b396', text=df_fin_mensal["Rec_Plan_Total"].apply(lambda v: f"R$ {v:,.0f}"), textposition='outside'))
-                    fig_fin.add_trace(go.Bar(x=df_fin_mensal["Mes_Nome"], y=df_fin_mensal["Rec_Exec_Total"], name='Executado', marker_color='#4f7942', text=df_fin_mensal["Rec_Exec_Total"].apply(lambda v: f"R$ {v:,.0f}"), textposition='outside'))
-                    fig_fin.update_layout(barmode='group', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=20, b=0, l=0, r=0), height=320)
-                    st.plotly_chart(fig_fin, use_container_width=True)
-
-                with col_f2:
-                    st.markdown("##### 🍩 Execução Global (R$)")
-                    falta_exec_fin = rec_plan_atv - rec_exec_atv if rec_plan_atv > rec_exec_atv else 0
-                    
-                    fig_donut_fin = go.Figure(data=[go.Pie(
-                        values=[rec_exec_atv, falta_exec_fin, max(rec_plan_atv, rec_exec_atv)], 
-                        marker_colors=['#4f7942', '#e2e8f0', 'rgba(0,0,0,0)'], 
-                        hole=0.7, direction='clockwise', sort=False, rotation=90, textinfo='none', hoverinfo='none'
-                    )])
-                    fig_donut_fin.add_annotation(text=f"<b>R$ {rec_exec_atv:,.0f}</b>", x=0.5, y=0.4, font_size=22, showarrow=False)
-                    fig_donut_fin.add_annotation(text=f"Meta: R$ {rec_plan_atv:,.0f}", x=0.5, y=0.25, font_size=12, showarrow=False)
-                    fig_donut_fin.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=280, showlegend=False, plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_donut_fin, use_container_width=True)
+                fig_fin = go.Figure()
+                fig_fin.add_trace(go.Bar(
+                    x=df_fin_mensal["Mes_Nome"], 
+                    y=df_fin_mensal["Rec_Plan_Total"], 
+                    name='Planejado', 
+                    marker_color='#94b396', 
+                    text=df_fin_mensal["Rec_Plan_Total"].apply(lambda v: f"R$ {v:,.0f}"), 
+                    textposition='outside'
+                ))
+                fig_fin.add_trace(go.Bar(
+                    x=df_fin_mensal["Mes_Nome"], 
+                    y=df_fin_mensal["Rec_Exec_Total"], 
+                    name='Executado', 
+                    marker_color='#4f7942', 
+                    text=df_fin_mensal["Rec_Exec_Total"].apply(lambda v: f"R$ {v:,.0f}"), 
+                    textposition='outside'
+                ))
+                fig_fin.update_layout(
+                    barmode='group', 
+                    plot_bgcolor='rgba(0,0,0,0)', 
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), 
+                    margin=dict(t=30, b=0, l=0, r=0), 
+                    height=360
+                )
+                st.plotly_chart(fig_fin, use_container_width=True)
 
                 st.markdown("<br>##### 📊 Orçamento por Categoria de Despesa", unsafe_allow_html=True)
                 cols_custos = [
@@ -1377,33 +1380,36 @@ if modo == "📈 Dashboards Executivos":
             with subtab_esf:
                 st.markdown("#### ⏳ Acompanhamento do Esforço Operacional (Dias)")
                 
-                col_e1, col_e2 = st.columns([1.5, 1])
+                st.markdown("##### 📅 Esforço Mensal (Dias Gastos)")
+                df_esf_mensal = df_filt_atv_oper.groupby("Mes_Inicio")[["Dias_Gastos_Plan", "Dias_Gastos_Exec"]].sum().reset_index()
+                df_esf_mensal["Mes_Nome"] = df_esf_mensal["Mes_Inicio"].map(meses_pt)
+                df_esf_mensal = df_esf_mensal.sort_values("Mes_Inicio")
                 
-                with col_e1:
-                    st.markdown("##### 📅 Esforço Mensal (Dias Gastos)")
-                    df_esf_mensal = df_filt_atv_oper.groupby("Mes_Inicio")[["Dias_Gastos_Plan", "Dias_Gastos_Exec"]].sum().reset_index()
-                    df_esf_mensal["Mes_Nome"] = df_esf_mensal["Mes_Inicio"].map(meses_pt)
-                    df_esf_mensal = df_esf_mensal.sort_values("Mes_Inicio")
-                    
-                    fig_esf = go.Figure()
-                    fig_esf.add_trace(go.Bar(x=df_esf_mensal["Mes_Nome"], y=df_esf_mensal["Dias_Gastos_Plan"], name='Previstos', marker_color='#a3c1ad', text=df_esf_mensal["Dias_Gastos_Plan"], textposition='outside'))
-                    fig_esf.add_trace(go.Bar(x=df_esf_mensal["Mes_Nome"], y=df_esf_mensal["Dias_Gastos_Exec"], name='Executados', marker_color='#557056', text=df_esf_mensal["Dias_Gastos_Exec"], textposition='outside'))
-                    fig_esf.update_layout(barmode='group', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(t=20, b=0, l=0, r=0), height=320)
-                    st.plotly_chart(fig_esf, use_container_width=True)
-
-                with col_e2:
-                    st.markdown("##### 🍩 Esforço Acumulado (Dias)")
-                    falta_exec_esf = dias_plan_atv - dias_exec_atv if dias_plan_atv > dias_exec_atv else 0
-                    
-                    fig_donut_esf = go.Figure(data=[go.Pie(
-                        values=[dias_exec_atv, falta_exec_esf, max(dias_plan_atv, dias_exec_atv)], 
-                        marker_colors=['#557056', '#e2e8f0', 'rgba(0,0,0,0)'], 
-                        hole=0.7, direction='clockwise', sort=False, rotation=90, textinfo='none', hoverinfo='none'
-                    )])
-                    fig_donut_esf.add_annotation(text=f"<b>{dias_exec_atv:,.1f}</b>", x=0.5, y=0.4, font_size=26, showarrow=False)
-                    fig_donut_esf.add_annotation(text=f"Prev: {dias_plan_atv:,.1f} dias", x=0.5, y=0.25, font_size=12, showarrow=False)
-                    fig_donut_esf.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=280, showlegend=False, plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_donut_esf, use_container_width=True)
+                fig_esf = go.Figure()
+                fig_esf.add_trace(go.Bar(
+                    x=df_esf_mensal["Mes_Nome"], 
+                    y=df_esf_mensal["Dias_Gastos_Plan"], 
+                    name='Previstos', 
+                    marker_color='#a3c1ad', 
+                    text=df_esf_mensal["Dias_Gastos_Plan"], 
+                    textposition='outside'
+                ))
+                fig_esf.add_trace(go.Bar(
+                    x=df_esf_mensal["Mes_Nome"], 
+                    y=df_esf_mensal["Dias_Gastos_Exec"], 
+                    name='Executados', 
+                    marker_color='#557056', 
+                    text=df_esf_mensal["Dias_Gastos_Exec"], 
+                    textposition='outside'
+                ))
+                fig_esf.update_layout(
+                    barmode='group', 
+                    plot_bgcolor='rgba(0,0,0,0)', 
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), 
+                    margin=dict(t=30, b=0, l=0, r=0), 
+                    height=360
+                )
+                st.plotly_chart(fig_esf, use_container_width=True)
 
                 st.markdown("<br>##### 👥 Esforço por Servidor", unsafe_allow_html=True)
                 df_esf_srv = df_filt_atv_oper.groupby("Servidor").agg(
