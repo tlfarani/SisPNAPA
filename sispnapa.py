@@ -1221,6 +1221,8 @@ elif modo == "📊 Visualizar Base":
     if df_atual.empty:
         st.info("A base de dados do SharePoint está vazia.")
     else:
+        hoje = pd.Timestamp(date.today())
+
         def limpar_e_converter_data(valor):
             if pd.isna(valor): return pd.NaT
             val_str = str(valor).strip()
@@ -1289,98 +1291,164 @@ elif modo == "📊 Visualizar Base":
             if df_base_acoes.empty:
                 st.info("Nenhuma Ação Estadual cadastrada na base.")
             else:
-                # --- DICIONÁRIO DE ESTADO ATUAL DOS FILTROS DE AÇÕES ---
+                # 1. 🚀 CÁLCULO E PROPAGAÇÃO DO STATUS DE EXECUÇÃO
+                df_atv_temp = df_trabalho[df_trabalho["Nível"].astype(str).str.strip() == "Atividade"].copy()
+                atv_concluidas_temp = df_atv_temp[df_atv_temp["Andamento"].astype(str).str.strip() == "Concluída"]
+                
+                agg_atv_pna = atv_concluidas_temp.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"]).agg(
+                    Resultado_Agregado=('Resultado_Indicador', lambda x: pd.to_numeric(x, errors='coerce').fillna(0).sum()),
+                    Dias_Exec_Agregado=('Dias_Gastos_Exec', lambda x: pd.to_numeric(x, errors='coerce').fillna(0).sum())
+                ).reset_index()
+
+                df_base_acoes = pd.merge(df_base_acoes, agg_atv_pna, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left")
+                df_base_acoes["Resultado_Agregado"] = df_base_acoes["Resultado_Agregado"].fillna(0)
+                df_base_acoes["Dias_Exec_Agregado"] = df_base_acoes["Dias_Exec_Agregado"].fillna(0)
+
+                def calc_status_acao_t1(row):
+                    andamento = str(row.get("Andamento", "")).strip()
+                    justif = str(row.get("Justificativa_Acao_PNAPA", "")).strip()
+                    if justif.lower() in ["nan", "none", "null"]: justif = ""
+                    dt_fim = row.get("Data_Termino_Datetime")
+                    
+                    meta = float(pd.to_numeric(row.get("Meta_Indicador", 0), errors='coerce') or 0.0)
+                    res = float(row.get("Resultado_Agregado", 0.0) or 0.0)
+                    dias_exec = float(row.get("Dias_Exec_Agregado", 0.0) or 0.0)
+                    
+                    if andamento in ["Não Demandada", "Não demandada", "Não_demandada"]:
+                        return "Não Demandada"
+                    if andamento == "Cancelada":
+                        return "Cancelada - Sem Justificativa" if justif == "" else "Cancelada (Justificada)"
+                        
+                    atingiu = False
+                    if meta > 0:
+                        if (res / meta) >= 0.8:
+                            atingiu = True
+                    elif meta == 0 and dias_exec > 0:
+                        atingiu = True
+                        
+                    if atingiu:
+                        return "Executada"
+                        
+                    if andamento in ["Planejada", "Planejado", "Planejadas", "Não Executada", ""]:
+                        if pd.notna(dt_fim):
+                            if dt_fim >= hoje:
+                                return "Planejada"
+                            else:
+                                return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
+                        else:
+                            ano_str = str(row.get("Ano da Ação", "")).split('.')[0]
+                            if ano_str.isdigit() and int(ano_str) < hoje.year:
+                                return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
+                            return "Planejada"
+                    return andamento
+
+                df_base_acoes["Status de Execução"] = df_base_acoes.apply(calc_status_acao_t1, axis=1)
+
+                # 2. 🚀 INICIALIZAÇÃO SEGURA DOS FILTROS POPOVER
+                for k in ["f_ano_ac", "f_pna_ac", "f_uf_ac", "f_papel_ac", "f_focal_ac", "f_status_ac", "f_and_ac", "f_tema_ac"]:
+                    if k not in st.session_state:
+                        st.session_state[k] = "Todas" if k in ["f_pna_ac", "f_uf_ac"] else "Todos"
+
+                def limpar_filtros_acoes_t1():
+                    for k in ["f_ano_ac", "f_pna_ac", "f_uf_ac", "f_papel_ac", "f_focal_ac", "f_status_ac", "f_and_ac", "f_tema_ac"]:
+                        st.session_state[k] = "Todas" if k in ["f_pna_ac", "f_uf_ac"] else "Todos"
+                    if "f_slider_dts_ac" in st.session_state:
+                        del st.session_state["f_slider_dts_ac"]
+
                 filtros_ac = {
-                    "ano": ("Ano da Ação", st.session_state.get("f_ano_ac", "Todos")),
-                    "pna": ("Número da Ação PNAPA", st.session_state.get("f_pna_ac", "Todas")),
-                    "uf": ("UF_Acao_PNAPA", st.session_state.get("f_uf_ac", "Todas")),
-                    "papel": ("Papel_Institucional", st.session_state.get("f_papel_ac", "Todos")),
-                    "focal": ("Servidor", st.session_state.get("f_focal_ac", "Todos")),
-                    "and": ("Andamento", st.session_state.get("f_and_ac", "Todos")),
-                    "tema": ("Tema da Atividade", st.session_state.get("f_tema_ac", "Todos")),
+                    "ano": ("Ano da Ação", st.session_state["f_ano_ac"]),
+                    "pna": ("Número da Ação PNAPA", st.session_state["f_pna_ac"]),
+                    "uf": ("UF_Acao_PNAPA", st.session_state["f_uf_ac"]),
+                    "papel": ("Papel_Institucional", st.session_state["f_papel_ac"]),
+                    "focal": ("Servidor", st.session_state["f_focal_ac"]),
+                    "status": ("Status de Execução", st.session_state["f_status_ac"]),
+                    "and": ("Andamento", st.session_state["f_and_ac"]),
+                    "tema": ("Tema da Atividade", st.session_state["f_tema_ac"]),
                     "data": ("Data_Inicio_Datetime", st.session_state.get("f_slider_dts_ac", None))
                 }
 
-                # --- LINHA 1 DE FILTROS RESPONSIVOS ---
-                col_ac1, col_ac2, col_ac3, col_ac4 = st.columns(4)
-                with col_ac1:
-                    df_p_ano = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "ano")
-                    anos_ac = sorted([str(a).split('.')[0] for a in df_p_ano["Ano da Ação"].dropna().unique() if str(a).strip() != ""], reverse=True)
-                    opcs_ano_ac = ["Todos"] + anos_ac
-                    idx_ano_ac = opcs_ano_ac.index(filtros_ac["ano"][1]) if filtros_ac["ano"][1] in opcs_ano_ac else 0
-                    f_ano_ac = st.selectbox("📅 Ano:", opcs_ano_ac, index=idx_ano_ac, key="f_ano_ac")
-                    filtros_ac["ano"] = ("Ano da Ação", f_ano_ac)
+                # 3. 🚀 BARRA DE FILTROS SUPERIOR COM POPOVERS (ESTILO DASHBOARD)
+                c_fac1, c_fac2, c_fac3, c_fac4 = st.columns([1, 1.2, 1.2, 0.5])
+                
+                with c_fac1:
+                    with st.popover("📅 Período Considerado", use_container_width=True):
+                        df_p_ano = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "ano")
+                        anos_ac = sorted([str(a).split('.')[0] for a in df_p_ano["Ano da Ação"].dropna().unique() if str(a).strip() != ""], reverse=True)
+                        opcs_ano_ac = ["Todos"] + anos_ac
+                        idx_ano_ac = opcs_ano_ac.index(filtros_ac["ano"][1]) if filtros_ac["ano"][1] in opcs_ano_ac else 0
+                        f_ano_ac = st.selectbox("Ano:", opcs_ano_ac, index=idx_ano_ac, key="f_ano_ac")
+                        filtros_ac["ano"] = ("Ano da Ação", f_ano_ac)
 
-                with col_ac2:
-                    df_p_pna = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "pna")
-                    acoes_ac = sorted(df_p_pna["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
-                    opcs_pna_ac = ["Todas"] + acoes_ac
-                    idx_pna_ac = opcs_pna_ac.index(filtros_ac["pna"][1]) if filtros_ac["pna"][1] in opcs_pna_ac else 0
-                    f_pna_ac = st.selectbox("🗂️ Ação PNAPA:", opcs_pna_ac, index=idx_pna_ac, key="f_pna_ac")
-                    filtros_ac["pna"] = ("Número da Ação PNAPA", f_pna_ac)
+                        df_p_data = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "data")
+                        dts_validas_ac = df_p_data["Data_Inicio_Datetime"].dropna()
+                        min_dt_ac = dts_validas_ac.min().date() if not dts_validas_ac.empty else date(2025, 1, 1)
+                        max_dt_ac = dts_validas_ac.max().date() if not dts_validas_ac.empty else date(2026, 12, 31)
+                        if min_dt_ac >= max_dt_ac: max_dt_ac = min_dt_ac + pd.Timedelta(days=1)
+                        
+                        val_atual_sl = st.session_state.get("f_slider_dts_ac", (min_dt_ac, max_dt_ac))
+                        v_start = max(min_dt_ac, min(val_atual_sl[0], max_dt_ac))
+                        v_end = max(min_dt_ac, min(val_atual_sl[1], max_dt_ac))
+                        if v_start > v_end: v_start = min_dt_ac
 
-                with col_ac3:
-                    df_p_uf = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "uf")
-                    ufs_ac = sorted([str(u).strip() for u in df_p_uf["UF_Acao_PNAPA"].dropna().unique() if str(u).strip() != ""])
-                    opcs_uf_ac = ["Todas"] + ufs_ac
-                    idx_uf_ac = opcs_uf_ac.index(filtros_ac["uf"][1]) if filtros_ac["uf"][1] in opcs_uf_ac else 0
-                    f_uf_ac = st.selectbox("📍 UF da Ação:", opcs_uf_ac, index=idx_uf_ac, key="f_uf_ac")
-                    filtros_ac["uf"] = ("UF_Acao_PNAPA", f_uf_ac)
+                        f_slider_dts_ac = st.slider("Data de Início:", min_value=min_dt_ac, max_value=max_dt_ac, value=(v_start, v_end), format="DD/MM/YYYY")
+                        st.session_state["f_slider_dts_ac"] = f_slider_dts_ac
+                        filtros_ac["data"] = ("Data_Inicio_Datetime", f_slider_dts_ac)
 
-                with col_ac4:
-                    df_p_papel = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "papel")
-                    papeis_disp = [p for p in ["Coordenação", "Apoio"] if p in df_p_papel["Papel_Institucional"].astype(str).str.strip().unique()]
-                    opcs_papel_ac = ["Todos"] + (papeis_disp if papeis_disp else ["Coordenação", "Apoio"])
-                    idx_papel_ac = opcs_papel_ac.index(filtros_ac["papel"][1]) if filtros_ac["papel"][1] in opcs_papel_ac else 0
-                    f_papel_ac = st.selectbox("🏛️ Papel da UF:", opcs_papel_ac, index=idx_papel_ac, key="f_papel_ac")
-                    filtros_ac["papel"] = ("Papel_Institucional", f_papel_ac)
+                with c_fac2:
+                    with st.popover("🗺️ UF / Governança", use_container_width=True):
+                        df_p_uf = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "uf")
+                        ufs_ac = sorted([str(u).strip() for u in df_p_uf["UF_Acao_PNAPA"].dropna().unique() if str(u).strip() != ""])
+                        opcs_uf_ac = ["Todas"] + ufs_ac
+                        idx_uf_ac = opcs_uf_ac.index(filtros_ac["uf"][1]) if filtros_ac["uf"][1] in opcs_uf_ac else 0
+                        f_uf_ac = st.selectbox("UF da Ação:", opcs_uf_ac, index=idx_uf_ac, key="f_uf_ac")
+                        filtros_ac["uf"] = ("UF_Acao_PNAPA", f_uf_ac)
 
-                # --- LINHA 2 DE FILTROS RESPONSIVOS + SLIDER ---
-                col_ac5, col_ac6, col_ac7, col_ac8 = st.columns([1, 1, 1, 2])
-                with col_ac5:
-                    df_p_focal = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "focal")
-                    focais_ac = sorted([str(s).strip() for s in df_p_focal["Servidor"].dropna().unique() if str(s).strip() != ""])
-                    opcs_focal_ac = ["Todos"] + focais_ac
-                    idx_focal_ac = opcs_focal_ac.index(filtros_ac["focal"][1]) if filtros_ac["focal"][1] in opcs_focal_ac else 0
-                    f_focal_ac = st.selectbox("👑 Ponto Focal:", opcs_focal_ac, index=idx_focal_ac, key="f_focal_ac")
-                    filtros_ac["focal"] = ("Servidor", f_focal_ac)
+                        df_p_papel = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "papel")
+                        papeis_disp = [p for p in ["Coordenação", "Apoio"] if p in df_p_papel["Papel_Institucional"].astype(str).str.strip().unique()]
+                        opcs_papel_ac = ["Todos"] + (papeis_disp if papeis_disp else ["Coordenação", "Apoio"])
+                        idx_papel_ac = opcs_papel_ac.index(filtros_ac["papel"][1]) if filtros_ac["papel"][1] in opcs_papel_ac else 0
+                        f_papel_ac = st.selectbox("Papel da UF:", opcs_papel_ac, index=idx_papel_ac, key="f_papel_ac")
+                        filtros_ac["papel"] = ("Papel_Institucional", f_papel_ac)
 
-                with col_ac6:
-                    df_p_and = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "and")
-                    ands_ac = sorted([str(a).strip() for a in df_p_and["Andamento"].dropna().unique() if str(a).strip() != ""])
-                    opcs_and_ac = ["Todos"] + ands_ac
-                    idx_and_ac = opcs_and_ac.index(filtros_ac["and"][1]) if filtros_ac["and"][1] in opcs_and_ac else 0
-                    f_and_ac = st.selectbox("🔄 Andamento:", opcs_and_ac, index=idx_and_ac, key="f_and_ac")
-                    filtros_ac["and"] = ("Andamento", f_and_ac)
+                        df_p_focal = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "focal")
+                        focais_ac = sorted([str(s).strip() for s in df_p_focal["Servidor"].dropna().unique() if str(s).strip() != ""])
+                        opcs_focal_ac = ["Todos"] + focais_ac
+                        idx_focal_ac = opcs_focal_ac.index(filtros_ac["focal"][1]) if filtros_ac["focal"][1] in opcs_focal_ac else 0
+                        f_focal_ac = st.selectbox("Ponto Focal:", opcs_focal_ac, index=idx_focal_ac, key="f_focal_ac")
+                        filtros_ac["focal"] = ("Servidor", f_focal_ac)
 
-                with col_ac7:
-                    df_p_tema = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "tema")
-                    temas_ac = sorted([str(t).strip() for t in df_p_tema["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
-                    opcs_tema_ac = ["Todos"] + temas_ac
-                    idx_tema_ac = opcs_tema_ac.index(filtros_ac["tema"][1]) if filtros_ac["tema"][1] in opcs_tema_ac else 0
-                    f_tema_ac = st.selectbox("🏷️ Tema:", opcs_tema_ac, index=idx_tema_ac, key="f_tema_ac")
-                    filtros_ac["tema"] = ("Tema da Atividade", f_tema_ac)
+                with c_fac3:
+                    with st.popover("🏷️ Classificação & Status", use_container_width=True):
+                        # Novo filtro de Status de Execução
+                        df_p_st = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "status")
+                        status_disp_ac = ["Todos"] + sorted([s for s in df_p_st["Status de Execução"].dropna().astype(str).unique() if s != ""])
+                        idx_st_ac = status_disp_ac.index(filtros_ac["status"][1]) if filtros_ac["status"][1] in status_disp_ac else 0
+                        f_status_ac = st.selectbox("Status de Execução:", status_disp_ac, index=idx_st_ac, key="f_status_ac")
+                        filtros_ac["status"] = ("Status de Execução", f_status_ac)
 
-                with col_ac8:
-                    # Cálculo dos limites do slider de datas para Ações
-                    dts_validas_ac = df_base_acoes["Data_Inicio_Datetime"].dropna()
-                    if not dts_validas_ac.empty:
-                        min_dt_ac = dts_validas_ac.min().date()
-                        max_dt_ac = dts_validas_ac.max().date()
-                    else:
-                        min_dt_ac, max_dt_ac = date(2025, 1, 1), date(2026, 12, 31)
-                    if min_dt_ac >= max_dt_ac:
-                        max_dt_ac = min_dt_ac + pd.Timedelta(days=1)
+                        df_p_pna = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "pna")
+                        acoes_ac = sorted(df_p_pna["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
+                        opcs_pna_ac = ["Todas"] + acoes_ac
+                        idx_pna_ac = opcs_pna_ac.index(filtros_ac["pna"][1]) if filtros_ac["pna"][1] in opcs_pna_ac else 0
+                        f_pna_ac = st.selectbox("Ação PNAPA:", opcs_pna_ac, index=idx_pna_ac, key="f_pna_ac")
+                        filtros_ac["pna"] = ("Número da Ação PNAPA", f_pna_ac)
 
-                    f_slider_dts_ac = st.slider(
-                        "⏳ Período (Data de Início):",
-                        min_value=min_dt_ac,
-                        max_value=max_dt_ac,
-                        value=(min_dt_ac, max_dt_ac),
-                        format="DD/MM/YYYY",
-                        key="f_slider_dts_ac"
-                    )
-                    filtros_ac["data"] = ("Data_Inicio_Datetime", f_slider_dts_ac)
+                        df_p_tema = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "tema")
+                        temas_ac = sorted([str(t).strip() for t in df_p_tema["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
+                        opcs_tema_ac = ["Todos"] + temas_ac
+                        idx_tema_ac = opcs_tema_ac.index(filtros_ac["tema"][1]) if filtros_ac["tema"][1] in opcs_tema_ac else 0
+                        f_tema_ac = st.selectbox("Tema:", opcs_tema_ac, index=idx_tema_ac, key="f_tema_ac")
+                        filtros_ac["tema"] = ("Tema da Atividade", f_tema_ac)
+
+                        df_p_and = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "and")
+                        ands_ac = sorted([str(a).strip() for a in df_p_and["Andamento"].dropna().unique() if str(a).strip() != ""])
+                        opcs_and_ac = ["Todos"] + ands_ac
+                        idx_and_ac = opcs_and_ac.index(filtros_ac["and"][1]) if filtros_ac["and"][1] in opcs_and_ac else 0
+                        f_and_ac = st.selectbox("Andamento (Cadastro):", opcs_and_ac, index=idx_and_ac, key="f_and_ac")
+                        filtros_ac["and"] = ("Andamento", f_and_ac)
+
+                with c_fac4:
+                    st.button("🧹 Limpar", use_container_width=True, on_click=limpar_filtros_acoes_t1)
 
                 # Aplicação final de todos os filtros
                 df_exib_ac = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, None)
@@ -1388,10 +1456,10 @@ elif modo == "📊 Visualizar Base":
                 df_exib_ac["Data de Início"] = df_exib_ac["Data_Inicio_Datetime"].dt.date
                 df_exib_ac["Data de Término"] = df_exib_ac["Data_Termino_Datetime"].dt.date
 
-                # 📋 COLUNAS RELEVANTES PARA AÇÕES
+                # 4. 📋 COLUNAS RELEVANTES PARA AÇÕES (Incluindo Status de Execução)
                 COLS_TABELA_ACOES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Nome da Ação PNAPA", 
-                    "Papel_Institucional", "Servidor", "UF_Acao_PNAPA", "Meta_Indicador", 
+                    "Status de Execução", "Papel_Institucional", "Servidor", "UF_Acao_PNAPA", "Meta_Indicador", 
                     "Indicador", "Importância da Atividade", "Tema da Atividade", 
                     "Objetivo da Atividade", "Tipo de Atividade", "Andamento", 
                     "Data de Início", "Data de Término", "Dias_Gastos_Plan", 
@@ -1406,7 +1474,7 @@ elif modo == "📊 Visualizar Base":
                     if c_num in df_tab_ac.columns:
                         df_tab_ac[c_num] = pd.to_numeric(df_tab_ac[c_num], errors='coerce')
                 
-                # 🚀 ORDENAÇÃO PADRÃO: DATA DE INÍCIO CRESCENTE (Cronológica Real)
+                # Ordenação cronológica real
                 df_tab_ac = df_tab_ac.sort_values(by=["Data de Início", "Id"], ascending=[True, True], na_position='last').reset_index(drop=True)
 
                 if "selecoes_acoes" not in st.session_state: st.session_state["selecoes_acoes"] = {}
@@ -1426,6 +1494,7 @@ elif modo == "📊 Visualizar Base":
                     colunas_travadas_ac = {col: st.column_config.Column(disabled=True) for col in df_tab_ac.columns}
 
                 colunas_travadas_ac["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+                colunas_travadas_ac["Status de Execução"] = st.column_config.TextColumn("Status de Execução", disabled=True)
                 colunas_travadas_ac["Meta_Indicador"] = st.column_config.NumberColumn("Meta da UF", format="%.1f", disabled=True)
                 colunas_travadas_ac["Dias_Gastos_Plan"] = st.column_config.NumberColumn("Dias Plan.", format="%.1f", disabled=True)
                 colunas_travadas_ac["Rec_Plan_Total"] = st.column_config.NumberColumn("Rec. Plan. Total", format="R$ %.2f", disabled=True)
