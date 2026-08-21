@@ -234,6 +234,10 @@ def executar_api_equipes(dados_json):
 
 def disparar_email_360(codigo_atv, nome_atv, lista_servidores_equipe, df_serv_aux):
     """Envia o comando de e-mail ao PA se a equipe for >= 3 membros."""
+    
+    # 🚀 PAUSA DO ALFA: Aborta o disparo de e-mails até o módulo ser oficialmente lançado
+    return
+    
     equipe_unica = list(set(lista_servidores_equipe))
     
     if len(equipe_unica) >= 3:
@@ -588,8 +592,8 @@ if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
         "🗂️ Gerenciar Ações PNAPA"
     ])
 
-# 🚀 Módulo 360º e Sugestões abertos para todos (Visualização, Editor e Admin)
-opcoes_menu.append("⭐ Meus Feedbacks (360º)")
+# 🚀 Módulo 360º PAUSADO para o Alfa (Basta tirar o '#' para ele voltar a aparecer)
+#opcoes_menu.append("⭐ Meus Feedbacks (360º)")
 opcoes_menu.append("💡 Sugestões & Melhorias")
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
@@ -602,26 +606,6 @@ if st.sidebar.button("🔄 Atualizar Base (Refresh)", use_container_width=True):
         del st.session_state.df
     st.rerun()
 
-# --- 🧪 INÍCIO DO BLOCO DE TESTE ---
-st.sidebar.markdown("---")
-if st.sidebar.button("🧪 FORÇAR TESTE DE E-MAIL", type="primary", use_container_width=True):
-    payload_teste = {
-        "destinatarios": email_logado,
-        "codigo": "TESTE-ALFA",
-        "nome": "Simulação de Missão 360"
-    }
-    try:
-        r = requests.post(URL_FLOW_EMAIL_360, json=payload_teste, timeout=15)
-        st.sidebar.write(f"**Código HTTP:** {r.status_code}")
-        st.sidebar.write(f"**Resposta PA:** {r.text}")
-        
-        if r.status_code in [200, 202]:
-            st.sidebar.success("✅ Sinal enviado com sucesso! Verifique seu Outlook.")
-        else:
-            st.sidebar.error("❌ O Power Automate recusou a conexão.")
-    except Exception as e:
-        st.sidebar.error(f"❌ Erro do Python: {e}")
-# --- FIM DO BLOCO DE TESTE ---
 
 # =================================================================
 # V. NÚCLEO OPERACIONAL DAS TELAS
