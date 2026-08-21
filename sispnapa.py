@@ -3027,6 +3027,7 @@ elif modo == "👥 Gerenciar Equipes":
     
     # 🚀 NOVA LISTA RESTRITA DE FUNÇÕES
     LISTA_FUNCOES_SERVIDOR = [
+        "",
         "Responsável Nupaem", 
         "Responsável Nupaem Substituto(a)", 
         "Coordenador(a) Geral Ceneac", 
@@ -3172,7 +3173,7 @@ elif modo == "👥 Gerenciar Equipes":
             with col_eq_ed1:
                 idx_emerg = 0 if val_atual_emerg == "Sim" else 1
                 n_eq_emerg = st.selectbox(
-                    "Equipe de Emergências?", 
+                    "Faz parte de Equipe de Emergências?", 
                     ["Sim", "Não"], 
                     index=idx_emerg, 
                     key=f"srv_ed_emerg_{id_srv_edit}"
@@ -3180,7 +3181,7 @@ elif modo == "👥 Gerenciar Equipes":
             with col_eq_ed2:
                 idx_fisc = 0 if val_atual_fiscal == "Sim" else 1
                 n_eq_fiscal = st.selectbox(
-                    "Fiscal de Campo?", 
+                    "É Fiscal?", 
                     ["Sim", "Não"], 
                     index=idx_fisc, 
                     key=f"srv_ed_fiscal_{id_srv_edit}"
@@ -3188,7 +3189,7 @@ elif modo == "👥 Gerenciar Equipes":
             with col_eq_ed3:
                 idx_aeac = 0 if val_atual_aeac == "Sim" else 1
                 n_eq_aeac = st.selectbox(
-                    "Possui AEAC?", 
+                    "É Agente de Emergências Ambientais e Climáticas?", 
                     ["Sim", "Não"], 
                     index=idx_aeac, 
                     key=f"srv_ed_aeac_{id_srv_edit}"
