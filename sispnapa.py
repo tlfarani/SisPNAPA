@@ -234,30 +234,31 @@ def executar_api_equipes(dados_json):
 
 def disparar_email_360(codigo_atv, nome_atv, lista_servidores_equipe, df_serv_aux):
     """Envia o comando de e-mail ao PA se a equipe for >= 3 membros."""
-    equipe_unica = list(set(lista_servidores_equipe)) # Remove duplicidades
+    equipe_unica = list(set(lista_servidores_equipe))
     
     if len(equipe_unica) >= 3:
-        # Tenta buscar os emails dos servidores da equipe
         emails = df_serv_aux[df_serv_aux["Servidor"].isin(equipe_unica)]["E_mail"].dropna().tolist()
         
-        if emails:
+        # 🚀 DEDUPLICA OS E-MAILS (Evita que o Outlook bloqueie o envio por destinatários repetidos)
+        emails_unicos = list(set([str(e).strip() for e in emails if str(e).strip()]))
+        
+        if emails_unicos:
             payload_email = {
-                "destinatarios": ";".join(emails),
-                "codigo": codigo_atv,
-                "nome": nome_atv
+                "destinatarios": ";".join(emails_unicos),
+                "codigo": str(codigo_atv),
+                "nome": str(nome_atv)
             }
             try:
-                resposta = requests.post(URL_FLOW_EMAIL_360, json=payload_email, timeout=10)
-                
-                # NOVO: Verifica se o Power Automate aceitou ou rejeitou
-                if resposta.status_code not in [200, 202]:
-                    st.error(f"Erro ao disparar o fluxo de E-mail 360: Código {resposta.status_code} - {resposta.text}")
+                r = requests.post(URL_FLOW_EMAIL_360, json=payload_email, timeout=10)
+                if r.status_code in [200, 202]:
+                    # 🚀 ALERTA VISUAL PARA O SEU TESTE
+                    st.toast(f"📧 E-mail 360º enviado com sucesso para {len(emails_unicos)} endereço(s)!", icon="✅")
                 else:
-                    st.toast("📧 Gatilho de E-mail 360º disparado com sucesso!", icon="✅")
-            except Exception as e:
-                st.error(f"Falha de conexão ao tentar enviar e-mail: {e}")
+                    st.toast(f"❌ Falha no E-mail (Status {r.status_code})", icon="⚠️")
+            except:
+                st.toast("❌ Erro de conexão ao enviar E-mail 360º", icon="⚠️")
         else:
-            st.warning("⚠️ Equipe >= 3 formada, mas nenhum e-mail foi encontrado no cadastro de servidores.")
+            st.toast("⚠️ Missão c/ 3 membros, mas nenhum e-mail cadastrado na base.", icon="⚠️")
 
 @st.cache_data(ttl=15, show_spinner=False)
 def carregar_sugestoes():
@@ -3610,9 +3611,8 @@ elif modo == "⭐ Meus Feedbacks (360º)":
     
     import json
     
-    # 🚀 DATA DE CORTE: Define a partir de quando as missões geram backlog (Hoje)
-    from datetime import date
-    DATA_LANCAMENTO_360 = pd.Timestamp(date.today())
+    # 🚀 DATA DE CORTE RETROATIVA (01 de Agosto) para garantir que seus testes apareçam
+    DATA_CORTE_360 = pd.Timestamp(date(2026, 8, 1))
     
     def limpar_e_converter_data(valor):
         if pd.isna(valor): return pd.NaT
@@ -3623,37 +3623,38 @@ elif modo == "⭐ Meus Feedbacks (360º)":
             except: pass
         return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
 
-    # 1. Filtra atividades e converte a data de término
     df_atvs = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
     df_atvs["Data_Termino_DT"] = df_atvs["Data de Término"].apply(limpar_e_converter_data)
     
-    # 2. Mantém apenas Concluídas com Data de Término >= Hoje
     df_concluidas = df_atvs[
         (df_atvs["Andamento"].astype(str).str.strip() == "Concluída") &
-        (df_atvs["Data_Termino_DT"] >= DATA_LANCAMENTO_360)
+        (df_atvs["Data_Termino_DT"].notna()) &
+        (df_atvs["Data_Termino_DT"] >= DATA_CORTE_360)
     ].copy()
     
-    # Descobre quais atividades têm 3 ou mais membros
     contagem_membros = df_concluidas.groupby("Codigo_Atividade")["Servidor"].nunique().reset_index()
     codigos_elegiveis = contagem_membros[contagem_membros["Servidor"] >= 3]["Codigo_Atividade"].tolist()
     
     df_elegiveis = df_concluidas[df_concluidas["Codigo_Atividade"].isin(codigos_elegiveis)]
     
-    # Descobre em quais dessas o usuário logado participou
-    minhas_missoes_elegiveis = df_elegiveis[df_elegiveis["Servidor"] == nome_usuario_logado]["Codigo_Atividade"].unique().tolist()
+    # 🚀 CORREÇÃO DE IDENTIDADE: Mapeia TODOS os nomes que estão com o seu e-mail
+    meus_nomes_cadastrados = df_servidores[df_servidores["E_mail"] == email_logado]["Servidor"].unique().tolist()
+    if not meus_nomes_cadastrados:
+        meus_nomes_cadastrados = [nome_usuario_logado]
+        
+    minhas_missoes_elegiveis = df_elegiveis[df_elegiveis["Servidor"].isin(meus_nomes_cadastrados)]["Codigo_Atividade"].unique().tolist()
     
     tab_pendentes, tab_recebidos = st.tabs(["⏳ Avaliações Pendentes (Avaliar Colegas)", "📊 Meu Desempenho (Feedbacks Recebidos)"])
     
     with tab_pendentes:
         st.markdown("#### 🎯 Colegas aguardando sua avaliação")
         
-        # Filtra os colegas que participaram das MESMAS missões que eu
+        # Filtra os colegas da missão, ignorando você (A trava está desabilitada para o teste)
         df_colegas = df_elegiveis[
             (df_elegiveis["Codigo_Atividade"].isin(minhas_missoes_elegiveis)) 
-        #    & (df_elegiveis["Servidor"] != nome_usuario_logado) # 🚀 REMOVA O PRIMEIRO '&' E APAGUE ESTA LINHA PARA TESTAR AVALIAR A SI MESMO
+            # & (~df_elegiveis["Servidor"].isin(meus_nomes_cadastrados))  <-- COMENTADO PARA O SEU TESTE
         ].copy()
         
-        # Função para verificar se eu já avaliei esse colega nessa missão
         def ja_avaliei(json_str):
             try:
                 avals = json.loads(str(json_str))
@@ -3663,13 +3664,12 @@ elif modo == "⭐ Meus Feedbacks (360º)":
                 
         df_colegas["Ja_Avaliei"] = df_colegas["Avaliacao_Feedback"].apply(ja_avaliei)
         df_pendentes = df_colegas[~df_colegas["Ja_Avaliei"]]
-                        
+        
         if df_pendentes.empty:
             st.success("🎉 Excelente! Você não tem nenhuma avaliação pendente. Todos os seus colegas de missão já foram avaliados.")
         else:
             st.info(f"Você tem **{len(df_pendentes)}** avaliação(ões) pendente(s).")
             
-            # Monta a lista de opções para o Selectbox
             opcoes_pendentes = []
             mapa_linhas_pendentes = {}
             for _, row in df_pendentes.iterrows():
@@ -3686,7 +3686,6 @@ elif modo == "⭐ Meus Feedbacks (360º)":
             feedback_360 = st.text_area("Deixe um comentário construtivo (O colega verá o texto, mas não saberá quem escreveu):")
             
             if st.button("💾 Enviar Avaliação", type="primary"):
-                # Recupera o JSON antigo (se houver) e adiciona a nova avaliação
                 json_antigo = str(linha_alvo["Avaliacao_Feedback"]).strip()
                 try:
                     lista_avals = json.loads(json_antigo)
@@ -3702,13 +3701,11 @@ elif modo == "⭐ Meus Feedbacks (360º)":
                 lista_avals.append(nova_aval)
                 json_novo = json.dumps(lista_avals, ensure_ascii=False)
                 
-                # Monta o payload para atualizar a linha do colega
                 p_item = {col: linha_alvo[col] for col in df_atual.columns if col in linha_alvo}
                 p_item["Acao"] = "Editar"
                 p_item["Id"] = str(linha_alvo["Id"])
                 p_item["Avaliacao_Feedback"] = json_novo
                 
-                # Sanitiza NaN
                 payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
                 
                 with st.spinner("Enviando avaliação..."):
@@ -3723,8 +3720,7 @@ elif modo == "⭐ Meus Feedbacks (360º)":
     with tab_recebidos:
         st.markdown("#### 📊 Meu Computo Geral e Feedbacks")
         
-        # Filtra apenas as linhas do usuário logado
-        minhas_linhas = df_elegiveis[df_elegiveis["Servidor"] == nome_usuario_logado]
+        minhas_linhas = df_elegiveis[df_elegiveis["Servidor"].isin(meus_nomes_cadastrados)]
         
         todas_avals_recebidas = []
         for _, row in minhas_linhas.iterrows():
