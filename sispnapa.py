@@ -2708,16 +2708,17 @@ elif modo == "📊 Visualizar Base":
                                         
                                         v_obs = edicoes_lote.get("Observações", str(row.get("Observações", "")))
                                         
+                                        # 🚀 CORREÇÃO: Usando v_uf_acao em vez de ed_uf_acao_val
                                         payload_linha = payload_gerador(
                                             v_ano, v_num_acao, v_nome_acao, v_indicador, "Atividade",
-                                            v_nome_atv, v_and, v_res_ind, v_doc, ed_uf_acao_val,
+                                            v_nome_atv, v_and, v_res_ind, v_doc, v_uf_acao,
                                             v_imp, v_tema, v_obj, v_tipo, v_perigo, v_srv,
                                             v_uf_srv, v_lot, v_eq, v_pcdp, v_pais, v_uf_oc,
                                             v_est_oc, v_mun_oc, v_dti, v_dtf, v_dpl, v_dex,
                                             v_origem, v_rpd, v_rpp, v_rpo, v_red,
                                             v_rep, v_reo, v_obs, "", str(row["Id"]), "📝 Editar Linha Existente", df_atual,
                                             papel_institucional=v_papel, coordenador_operacao=v_func, meta_indicador="",
-                                            codigo_atividade=v_cod_atv
+                                            codigo_atividade=v_cod_atv, aval_qualidade=edicoes_lote.get("Avaliacao_Qualidade", ""), aval_feedback=edicoes_lote.get("Avaliacao_Feedback", "")
                                         )
                                         payloads_lote.append(payload_linha)
                                     
