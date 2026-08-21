@@ -2736,6 +2736,15 @@ elif modo == "➕ Inserir Nova Linha":
     idx_nivel_padrao = 0 if registro_selecionado is None or str(registro_selecionado.get("Nível", "")) == "Ação" else 1
     nivel_selecionado = st.selectbox("O que deseja cadastrar?", ["Ação", "Atividade"], index=idx_nivel_padrao, key="main_txt_nivel")
     
+    # 🚀 NOVO: SELEÇÃO DA UF NO TOPO PARA ADMINISTRADORES
+    st.markdown("#### 📍 Definição da Localidade (UF da Ação)")
+    if perfil_usuario == "Administrador":
+        idx_uf_padrao = LISTA_UFS_COMPLETA.index(uf_usuario) if uf_usuario in LISTA_UFS_COMPLETA else 0
+        uf_filtro_pna = st.selectbox("Selecione a UF da Ação/Atividade:", LISTA_UFS_COMPLETA, index=idx_uf_padrao, key="form_uf_geral")
+    else:
+        uf_filtro_pna = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
+        st.text_input("UF da Ação/Atividade (Sua UF):", value=uf_filtro_pna, disabled=True)
+
     st.markdown("#### 🔗 Vinculação Automática com o Catálogo de Ações PNAPA")
     if not df_pnapas.empty:
         anos_aux_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
@@ -2771,8 +2780,7 @@ elif modo == "➕ Inserir Nova Linha":
             uf_dono_nac = str(dados_aux_linha.get("UF_Dono", "Ceneac")).strip()
             meta_nac_info = dados_aux_linha.get("Meta_Nacional", "")
 
-            # 💡 IDENTIFICAÇÃO DO PONTO FOCAL DA UF (COM FUNÇÃO BLINDADA)
-            uf_filtro_pna = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
+            # 💡 IDENTIFICAÇÃO DO PONTO FOCAL DA UF UTILIZANDO A UF_FILTRO_PNA (DINÂMICA)
             ponto_focal_estado, papel_estado_acao = obter_ponto_focal_acao(df_atual, val_num_acao, uf_filtro_pna)
 
             st.info(f"👑 **Liderança Nacional:** `{dono_nacional} ({uf_dono_nac})` | **Meta Global:** `{meta_nac_info}`  \n📍 **Governança em {uf_filtro_pna}:** Papel: `{papel_estado_acao}` | Ponto Focal Estadual: `{ponto_focal_estado if ponto_focal_estado else 'Não Definido'}`")
@@ -2830,8 +2838,8 @@ elif modo == "➕ Inserir Nova Linha":
 
         with aba2:
             st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True)
-            meta_indicador = st.number_input(f"Meta da Ação para a UF ({uf_usuario}):", min_value=0.0, value=1.0, step=1.0, key="pna_meta_uf_input")
-            uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
+            meta_indicador = st.number_input(f"Meta da Ação para a UF ({uf_filtro_pna}):", min_value=0.0, value=1.0, step=1.0, key="pna_meta_uf_input")
+            uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_filtro_pna), disabled=True)
             st.text_input("Importância da Atividade (Herdada do Catálogo)", value=importancia, disabled=True)
             
             tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="pna_sel_tema_acao")
@@ -2843,7 +2851,6 @@ elif modo == "➕ Inserir Nova Linha":
             dt_termino = st.date_input("Data de Término:", value=val_dt_termino, format="DD/MM/YYYY", key="pna_dt_fim_acao")
             
             dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
-            # 🚀 Feedback imediato do Nível
             nivel_calculado = classificar_nivel_acao(dias_plan)
             st.metric("Classificação de Esforço:", nivel_calculado)
             
@@ -2855,7 +2862,9 @@ elif modo == "➕ Inserir Nova Linha":
             rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), step=50.0, format="%.2f", key="pna_rpo_acao")
             
             calc_plan_acao = float(rec_p_diarias + rec_p_passagens + rec_p_outras)
-            st.number_input("Rec_Plan_Total (Soma Automática)", value=calc_plan_acao, disabled=True, format="%.2f")
+            
+            # 🚀 TOTAL FORMATADO COM MOEDA BRASILEIRA (ex: R$ 0,00)
+            st.text_input("Rec_Plan_Total (Soma Automática)", value=formatar_moeda_br(calc_plan_acao), disabled=True)
 
         with aba5:
             obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "", key="pna_obs_acao")
@@ -2881,7 +2890,6 @@ elif modo == "➕ Inserir Nova Linha":
             st.text_input("Número da Ação PNAPA (Automático)", value=val_num_acao, disabled=True)
             st.text_input("Nome da Ação PNAPA (Automático)", value=val_nome_acao, disabled=True)
             
-            # 🚀 GESTOR INTELIGENTE DE CÓDIGO DA ATIVIDADE (REATIVO POR AÇÃO)
             st.markdown("##### 🏷️ Código e Agrupador da Atividade")
             
             if "Codigo_Atividade" not in df_atual.columns:
@@ -2923,7 +2931,6 @@ elif modo == "➕ Inserir Nova Linha":
                 opcoes_atvs_existentes.append(label_opc)
                 mapa_dados_atv_existente[label_opc] = linhas_deste_cod.iloc[0]
             
-            # 🚀 CHAVES DINÂMICAS COM {val_num_acao} PARA RESETAR AO TROCAR DE AÇÃO
             modo_codigo = st.radio(
                 "Definição da Atividade:", 
                 ["➕ Criar Nova Atividade", "🔗 Vincular a Atividade já Existente (Mesma Equipe/Missão)"],
@@ -2969,7 +2976,7 @@ elif modo == "➕ Inserir Nova Linha":
             st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
             resultado_indicador = st.text_input("Resultado do Indicador (Aferição Real):", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "", key="atv_res_ind")
             doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI):", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "", key="atv_doc_sei")
-            uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_usuario if uf_usuario != "Acesso Restrito" else "SP"), disabled=True)
+            uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_filtro_pna), disabled=True)
             st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
             
             tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="atv_sel_tema")
@@ -2980,16 +2987,13 @@ elif modo == "➕ Inserir Nova Linha":
         with aba3:
             st.markdown("##### 👥 Recursos Humanos & Liderança da Operação")
             
-            uf_filtro_servidor = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
-            df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_servidor]
+            df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_pna]
             lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist()) if not df_servidores_filtrados.empty else [email_logado]
             
-            # 🚀 1. SELEÇÃO DO SERVIDOR (PRIMEIRO)
             c_rh1, c_rh2 = st.columns(2)
             with c_rh1:
-                servidor = st.selectbox("Servidor Integrante / Responsável:", lista_nomes_servidores, key=f"atv_sel_servidor_{val_num_acao}")
+                servidor = st.selectbox(f"Servidor Integrante / Responsável ({uf_filtro_pna}):", lista_nomes_servidores, key=f"atv_sel_servidor_{val_num_acao}")
 
-            # 🚀 2. FUNÇÃO NO CAMPO COM SUGESTÃO AUTOMÁTICA REATIVA (SEGUNDO)
             with c_rh2:
                 eh_ponto_focal = bool(ponto_focal_estado and str(servidor).strip().lower() == str(ponto_focal_estado).strip().lower())
                 idx_funcao_sugerida = 0 if eh_ponto_focal else 1
@@ -3003,11 +3007,11 @@ elif modo == "➕ Inserir Nova Linha":
 
             if not df_servidores_filtrados.empty and servidor in df_servidores_filtrados["Servidor"].values:
                 dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
-                uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_servidor))
+                uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_pna))
                 lotacao = str(dados_serv_linha.get("Lotacao", "Sede Superintendência"))
                 equipe_emergencia = str(dados_serv_linha.get("Equipe_Emergencias", "Não"))
             else:
-                uf_servidor, lotacao, equipe_emergencia = uf_filtro_servidor, "Sede Superintendência", "Não"
+                uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Não"
 
             st.text_input("UF do Servidor (Automático)", value=uf_servidor, disabled=True)
             st.text_input("Lotação (Automático)", value=lotacao, disabled=True)
@@ -3017,7 +3021,8 @@ elif modo == "➕ Inserir Nova Linha":
             st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
             pais = st.text_input("País", value="Brasil", disabled=True)
             
-            uf_ocorrencia = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA, key="atv_sel_uf_ocorrencia")
+            idx_uf_oc_padrao = LISTA_UFS_COMPLETA.index(uf_filtro_pna) if uf_filtro_pna in LISTA_UFS_COMPLETA else 0
+            uf_ocorrencia = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA, index=idx_uf_oc_padrao, key="atv_sel_uf_ocorrencia")
             estado_local = MAPEAMENTO_ESTADOS_COMPLETO[uf_ocorrencia]
             st.text_input("Estado_Local_Acao (Automático)", value=estado_local, disabled=True)
             
@@ -3043,16 +3048,20 @@ elif modo == "➕ Inserir Nova Linha":
                 rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), step=50.0, format="%.2f", key="atv_rpd")
                 rec_p_passagens = st.number_input("Rec_Plan_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), step=50.0, format="%.2f", key="atv_rpp")
                 rec_p_outras = st.number_input("Rec_Plan_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), step=50.0, format="%.2f", key="atv_rpo")
+                
                 calc_tot_p_atv = float(rec_p_diarias + rec_p_passagens + rec_p_outras)
-                st.number_input("Rec_Plan_Total (Soma Automática)", value=calc_tot_p_atv, disabled=True, format="%.2f")
+                # 🚀 TOTAL FORMATADO COM MOEDA BRASILEIRA (ex: R$ 0,00)
+                st.text_input("Rec_Plan_Total (Soma Automática)", value=formatar_moeda_br(calc_tot_p_atv), disabled=True)
 
             with c_ex:
                 st.caption("Executado")
                 rec_e_diarias = st.number_input("Rec_Exec_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Diarias"), step=50.0, format="%.2f", key="atv_red")
                 rec_e_passagens = st.number_input("Rec_Exec_Passagens", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Passagens"), step=50.0, format="%.2f", key="atv_rep")
                 rec_e_outras = st.number_input("Rec_Exec_Outras_Despesas", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Exec_Outras_Despesas"), step=50.0, format="%.2f", key="atv_reo")
+                
                 calc_tot_e_atv = float(rec_e_diarias + rec_e_passagens + rec_e_outras)
-                st.number_input("Rec_Exec_Total (Soma Automática)", value=calc_tot_e_atv, disabled=True, format="%.2f")
+                # 🚀 TOTAL FORMATADO COM MOEDA BRASILEIRA (ex: R$ 0,00)
+                st.text_input("Rec_Exec_Total (Soma Automática)", value=formatar_moeda_br(calc_tot_e_atv), disabled=True)
 
         with aba5:
             obs = st.text_area("Observações", value=str(registro_selecionado["Observações"]) if registro_selecionado is not None else "", key="atv_obs")
@@ -3254,7 +3263,7 @@ elif modo == "➕ Inserir Nova Linha":
                 
                 executar_envio_sharepoint(payloads_lote)
 
-# --- TELA 5: GERENCIAR UNIDADES (COM PREENCHIMENTO AUTOMÁTICO E CASCATA) ---
+# --- TELA 3: GERENCIAR UNIDADES (COM PREENCHIMENTO AUTOMÁTICO E CASCATA) ---
 elif modo == "🏢 Gerenciar Unidades":
     st.markdown("<h3 style='color: #03170a;'>🏢 Gerenciamento de Unidades / Lotações (Tabela Auxiliar)</h3>", unsafe_allow_html=True)
     st.caption("Catálogo corporativo de setores e unidades de lotação dos servidores.")
@@ -3493,7 +3502,7 @@ elif modo == "🏢 Gerenciar Unidades":
                     time.sleep(1.5)
                     st.rerun()
 
-# --- TELA 6: GERENCIAR EQUIPES ---
+# --- TELA 4: GERENCIAR EQUIPES ---
 elif modo == "👥 Gerenciar Equipes":
     st.markdown(f"<h3>👥 Gerenciamento de Equipe e Permissões (Tabela Auxiliar via SharePoint)</h3>", unsafe_allow_html=True)
     df_visualizacao_srv = df_servidores if perfil_usuario == "Administrador" else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
@@ -3778,7 +3787,7 @@ elif modo == "👥 Gerenciar Equipes":
                 st.success(f"Acesso revogado com sucesso!")
                 st.rerun()
 
-# --- TELA AUXILIAR: GERENCIAR AÇÕES PNAPA ---
+# --- TELA 5: GERENCIAR AÇÕES PNAPA ---
 elif modo == "🗂️ Gerenciar Ações PNAPA":
     st.markdown("<h3 style='color: #03170a;'>🗂️ Catálogo Oficial de Ações PNAPA</h3>", unsafe_allow_html=True)
     st.caption("Tabela auxiliar corporativa para governança nacional, vinculação e padronização das ações.")
