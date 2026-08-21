@@ -556,7 +556,8 @@ if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
         "➕ Inserir Nova Linha", 
         "🏢 Gerenciar Unidades", 
         "👥 Gerenciar Equipes", 
-        "🗂️ Gerenciar Ações PNAPA"
+        "🗂️ Gerenciar Ações PNAPA",
+        "⭐ Meus Feedbacks (360º)"
     ])
 
 # 🚀 Sugestões sempre como o último item para todos os perfis:
@@ -1464,37 +1465,7 @@ if modo == "📈 Dashboards Executivos":
                 fig_matriz.update_layout(xaxis_title="Dias Planejados", yaxis_title="", plot_bgcolor="white", margin=dict(t=10, b=0, l=0, r=0), height=350)
                 st.plotly_chart(fig_matriz, use_container_width=True)
 
-        # ---------------------------------------------------------------------
-        # ABA 4: DESEMPENHO DAS EQUIPES
-        # ---------------------------------------------------------------------
-        with tab_desemp:
-            st.markdown("### ⭐ Avaliação de Qualidade e Entregas")
-            if "Avaliacao_Qualidade" in df_filt_atv.columns:
-                df_avaliados = df_filt_atv[df_filt_atv["Avaliacao_Qualidade"].isin(["0 - Insatisfatória", "1 - Satisfatória"])]
-                
-                if df_avaliados.empty:
-                    st.info("Nenhuma atividade avaliada pela liderança nos filtros selecionados.")
-                else:
-                    total_aval = len(df_avaliados)
-                    sat_count = len(df_avaliados[df_avaliados["Avaliacao_Qualidade"] == "1 - Satisfatória"])
-                    taxa_sucesso = (sat_count / total_aval) * 100 if total_aval > 0 else 0
-                    
-                    c_ds1, c_ds2 = st.columns([1, 2])
-                    with c_ds1:
-                        st.metric("Taxa de Entregas Satisfatórias", f"{taxa_sucesso:.1f}%")
-                        st.caption(f"Baseado em {total_aval} avaliações concluídas.")
-                        
-                    with c_ds2:
-                        st.markdown("##### Desempenho por Servidor")
-                        df_perf = df_avaliados.groupby("Servidor")["Avaliacao_Qualidade"].value_counts().unstack(fill_value=0).reset_index()
-                        if "1 - Satisfatória" not in df_perf.columns: df_perf["1 - Satisfatória"] = 0
-                        if "0 - Insatisfatória" not in df_perf.columns: df_perf["0 - Insatisfatória"] = 0
-                        
-                        df_perf["Total"] = df_perf["1 - Satisfatória"] + df_perf["0 - Insatisfatória"]
-                        df_perf["Taxa Sucesso (%)"] = (df_perf["1 - Satisfatória"] / df_perf["Total"] * 100).round(1)
-                        st.dataframe(df_perf.sort_values("Taxa Sucesso (%)", ascending=False), use_container_width=True, hide_index=True)
-            else:
-                st.info("A coluna de avaliação de qualidade ainda não foi sincronizada ou gerada na base.")
+        
 
 # --- TELA 1: VISUALIZAÇÃO E EDIÇÃO EM DUAS SUBPÁGINAS (AÇÕES vs ATIVIDADES) ---
 elif modo == "📊 Visualizar Base":
@@ -3583,7 +3554,152 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         except Exception as e:
                             st.error(f"❌ Erro de conexão: {e}")
 
-# --- TELA: CENTRAL DE SUGESTÕES E MELHORIAS ---
+
+
+# --- TELA: MEUS FEEDBACKS (360º) ---
+elif modo == "⭐ Meus Feedbacks (360º)":
+    st.markdown("<h3 style='color: #03170a;'>⭐ Meus Feedbacks e Avaliações de Pares (360º)</h3>", unsafe_allow_html=True)
+    st.markdown("Nesta área, você avalia colegas de missões concluídas (com 3 ou mais membros) e consulta os feedbacks anônimos que recebeu para o seu desenvolvimento profissional.")
+    
+    import json
+    
+    # 1. Filtra atividades Concluídas e Agrupa por Código de Atividade
+    df_atvs = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
+    df_concluidas = df_atvs[df_atvs["Andamento"].astype(str).str.strip() == "Concluída"].copy()
+    
+    # Descobre quais atividades têm 3 ou mais membros
+    contagem_membros = df_concluidas.groupby("Codigo_Atividade")["Servidor"].nunique().reset_index()
+    codigos_elegiveis = contagem_membros[contagem_membros["Servidor"] >= 3]["Codigo_Atividade"].tolist()
+    
+    df_elegiveis = df_concluidas[df_concluidas["Codigo_Atividade"].isin(codigos_elegiveis)]
+    
+    # Descobre em quais dessas o usuário logado participou
+    minhas_missoes_elegiveis = df_elegiveis[df_elegiveis["Servidor"] == nome_usuario_logado]["Codigo_Atividade"].unique().tolist()
+    
+    tab_pendentes, tab_recebidos = st.tabs(["⏳ Avaliações Pendentes (Avaliar Colegas)", "📊 Meu Desempenho (Feedbacks Recebidos)"])
+    
+    with tab_pendentes:
+        st.markdown("#### 🎯 Colegas aguardando sua avaliação")
+        
+        # Filtra os colegas que participaram das MESMAS missões que eu
+        df_colegas = df_elegiveis[
+            (df_elegiveis["Codigo_Atividade"].isin(minhas_missoes_elegiveis)) & 
+            (df_elegiveis["Servidor"] != nome_usuario_logado)
+        ].copy()
+        
+        # Função para verificar se eu já avaliei esse colega nessa missão
+        def ja_avaliei(json_str):
+            try:
+                avals = json.loads(str(json_str))
+                return any(a.get("avaliador") == email_logado for a in avals)
+            except:
+                return False
+                
+        df_colegas["Ja_Avaliei"] = df_colegas["Avaliacao_Feedback"].apply(ja_avaliei)
+        df_pendentes = df_colegas[~df_colegas["Ja_Avaliei"]]
+        
+        if df_pendentes.empty:
+            st.success("🎉 Excelente! Você não tem nenhuma avaliação pendente. Todos os seus colegas de missão já foram avaliados.")
+        else:
+            st.info(f"Você tem **{len(df_pendentes)}** avaliação(ões) pendente(s).")
+            
+            # Monta a lista de opções para o Selectbox
+            opcoes_pendentes = []
+            mapa_linhas_pendentes = {}
+            for _, row in df_pendentes.iterrows():
+                label = f"[{row['Codigo_Atividade']}] Missão: {row['Nome da Atividade']} | Colega: {row['Servidor']}"
+                opcoes_pendentes.append(label)
+                mapa_linhas_pendentes[label] = row
+                
+            alvo_sel = st.selectbox("Selecione o Colega para Avaliar:", opcoes_pendentes)
+            linha_alvo = mapa_linhas_pendentes[alvo_sel]
+            
+            st.markdown(f"**Avaliando:** {linha_alvo['Servidor']}")
+            
+            nota_360 = st.radio("Como você avalia a participação e entrega deste colega nesta missão?", ["1 - Satisfatória / Positiva 👍", "0 - Insatisfatória / Precisa Melhorar 👎"])
+            feedback_360 = st.text_area("Deixe um comentário construtivo (O colega verá o texto, mas não saberá quem escreveu):")
+            
+            if st.button("💾 Enviar Avaliação", type="primary"):
+                # Recupera o JSON antigo (se houver) e adiciona a nova avaliação
+                json_antigo = str(linha_alvo["Avaliacao_Feedback"]).strip()
+                try:
+                    lista_avals = json.loads(json_antigo)
+                    if not isinstance(lista_avals, list): lista_avals = []
+                except:
+                    lista_avals = []
+                    
+                nova_aval = {
+                    "avaliador": email_logado,
+                    "nota": 1 if "1" in nota_360 else 0,
+                    "feedback": feedback_360.strip()
+                }
+                lista_avals.append(nova_aval)
+                json_novo = json.dumps(lista_avals, ensure_ascii=False)
+                
+                # Monta o payload para atualizar a linha do colega
+                p_item = {col: linha_alvo[col] for col in df_atual.columns if col in linha_alvo}
+                p_item["Acao"] = "Editar"
+                p_item["Id"] = str(linha_alvo["Id"])
+                p_item["Avaliacao_Feedback"] = json_novo
+                
+                # Sanitiza NaN
+                payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
+                
+                with st.spinner("Enviando avaliação..."):
+                    executar_envio_sharepoint([payload_sanit])
+                    time.sleep(1.5)
+                    st.cache_data.clear()
+                    if "df" in st.session_state: del st.session_state.df
+                st.success("Avaliação enviada com sucesso! Obrigado pelo feedback.")
+                time.sleep(1.5)
+                st.rerun()
+
+    with tab_recebidos:
+        st.markdown("#### 📊 Meu Computo Geral e Feedbacks")
+        
+        # Filtra apenas as linhas do usuário logado
+        minhas_linhas = df_elegiveis[df_elegiveis["Servidor"] == nome_usuario_logado]
+        
+        todas_avals_recebidas = []
+        for _, row in minhas_linhas.iterrows():
+            try:
+                avals = json.loads(str(row["Avaliacao_Feedback"]))
+                for a in avals:
+                    a["Atividade"] = row["Nome da Atividade"]
+                    a["Codigo"] = row["Codigo_Atividade"]
+                todas_avals_recebidas.extend(avals)
+            except:
+                continue
+                
+        if not todas_avals_recebidas:
+            st.info("Você ainda não recebeu avaliações dos seus colegas nas missões elegíveis.")
+        else:
+            total_recebido = len(todas_avals_recebidas)
+            total_positivos = sum(1 for a in todas_avals_recebidas if a.get("nota") == 1)
+            taxa_satisfacao = (total_positivos / total_recebido) * 100
+            
+            c_dash1, c_dash2, c_dash3 = st.columns(3)
+            c_dash1.metric("Total de Avaliações Recebidas", total_recebido)
+            c_dash2.metric("Avaliações Positivas (Satisfatório)", total_positivos)
+            c_dash3.metric("Taxa de Aprovação", f"{taxa_satisfacao:.1f}%")
+            
+            st.markdown("---")
+            st.markdown("##### 💬 Mural de Feedbacks Anônimos")
+            for av in todas_avals_recebidas:
+                cor_borda = "#22c55e" if av.get("nota") == 1 else "#ef4444"
+                icone = "👍" if av.get("nota") == 1 else "👎"
+                texto = av.get("feedback", "Sem comentário.")
+                if texto == "": texto = "*Avaliador não deixou comentário.*"
+                
+                st.markdown(f"""
+                <div style="border-left: 5px solid {cor_borda}; padding: 10px; margin-bottom: 10px; background-color: #f8fafc; border-radius: 5px;">
+                    <p style="margin:0; font-size:12px; color:#64748b;">Missão: {av['Codigo']} - {av['Atividade']}</p>
+                    <p style="margin:5px 0 0 0; color:#0f172a;"><b>{icone}</b> "{texto}"</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+
+# --- TELA 7: CENTRAL DE SUGESTÕES E MELHORIAS ---
 elif modo == "💡 Sugestões & Melhorias":
     st.markdown("<h2 style='color: #03170a;'>💡 Central de Feedback & Sugestões de Melhoria</h2>", unsafe_allow_html=True)
     st.caption("Espaço colaborativo para que testadores e usuários enviem inconsistências, ideias e solicitações.")
