@@ -1157,7 +1157,7 @@ if modo == "📈 Dashboards Executivos":
             }
 
             # =================================================================
-            # SUB-ABA 1: CALENDÁRIO (GANTT & CRONOGRAMA)
+            # SUB-ABA 1: CALENDÁRIO (GANTT & CRONOGRAMA INTERATIVO)
             # =================================================================
             with subtab_cal:
                 st.markdown("#### 🗓️ Cronograma e Linha do Tempo das Atividades")
@@ -1165,37 +1165,117 @@ if modo == "📈 Dashboards Executivos":
                 df_gantt_base = df_filt_atv_oper.dropna(subset=["Data_Inicio_DT", "Data_Fim_DT"]).copy()
                 
                 if not df_gantt_base.empty:
-                    df_gantt_agg = df_gantt_base.groupby(["Codigo_Atividade", "Nome da Atividade", "Status_Operacional"]).agg(
-                        Data_Inicio=('Data_Inicio_DT', 'min'),
-                        Data_Fim=('Data_Fim_DT', 'max'),
-                        Equipe=('Servidor', lambda x: ", ".join(sorted([str(s) for s in x.dropna().unique()]))),
-                        UF_Acao=('UF_Acao_PNAPA', 'first'),
-                        SEI=('Doc_Probatorio_Exec', 'first')
-                    ).reset_index()
-                    
-                    df_gantt_agg["Rotulo_Atividade"] = df_gantt_agg["Codigo_Atividade"].replace("", "S/C") + " - " + df_gantt_agg["Nome da Atividade"]
-                    
-                    # Extensão de fim do dia para que atividades de 1 único dia fiquem visíveis no Gantt
-                    df_gantt_agg["Data_Fim_Plot"] = df_gantt_agg["Data_Fim"] + pd.Timedelta(hours=23, minutes=59, seconds=59)
+                    # Detecta o ano de referência dos dados filtrados
+                    ano_ref_series = df_gantt_base["Data_Inicio_DT"].dt.year.dropna()
+                    ano_ref = int(ano_ref_series.mode()[0]) if not ano_ref_series.empty else hoje.year
 
-                    fig_gantt = px.timeline(
-                        df_gantt_agg, 
-                        x_start="Data_Inicio", 
-                        x_end="Data_Fim_Plot", 
-                        y="Rotulo_Atividade", 
-                        color="Status_Operacional",
-                        color_discrete_map=cor_mapa_gantt,
-                        hover_data={"Equipe": True, "UF_Acao": True, "SEI": True, "Rotulo_Atividade": False, "Data_Fim_Plot": False}
-                    )
-                    fig_gantt.update_yaxes(autorange="reversed", title_text="", showticklabels=True)
-                    fig_gantt.update_xaxes(title_text="", rangeslider_visible=False)
-                    fig_gantt.update_layout(
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, title_text=""),
-                        margin=dict(t=10, b=0, l=0, r=0),
-                        height=max(350, min(800, len(df_gantt_agg) * 32 + 120)),
-                        plot_bgcolor="white"
-                    )
-                    st.plotly_chart(fig_gantt, use_container_width=True)
+                    # --- 1. PAINEL DE CONTROLE E NAVEGAÇÃO TEMPORAL ---
+                    col_nav1, col_nav2 = st.columns([1, 1.8])
+                    
+                    with col_nav1:
+                        modo_escala = st.radio(
+                            "Escala de Visualização:", 
+                            ["🗓️ Mensal", "📊 Trimestral", "🌐 Anual (Completo)"], 
+                            horizontal=True,
+                            key="gantt_escala_modo"
+                        )
+                    
+                    lista_meses_nomes = [
+                        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
+                        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+                    ]
+
+                    with col_nav2:
+                        if modo_escala == "🗓️ Mensal":
+                            # Seleciona o mês atual por padrão se estiver no ano corrente
+                            mes_idx_padrao = (hoje.month - 1) if hoje.year == ano_ref else 0
+                            mes_selecionado = st.selectbox("Selecione o Mês:", lista_meses_nomes, index=mes_idx_padrao, key="gantt_mes_sel")
+                            num_mes = lista_meses_nomes.index(mes_selecionado) + 1
+                            
+                            ts_ini = pd.Timestamp(year=ano_ref, month=num_mes, day=1)
+                            ts_fim = (ts_ini + pd.offsets.MonthEnd(1)) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+                            label_periodo = f"{mes_selecionado} de {ano_ref}"
+                            formato_data_eixo = "%d/%m"
+                            
+                        elif modo_escala == "📊 Trimestral":
+                            trimestres = [
+                                "1º Trimestre (Jan - Mar)", 
+                                "2º Trimestre (Abr - Jun)", 
+                                "3º Trimestre (Jul - Set)", 
+                                "4º Trimestre (Out - Dez)"
+                            ]
+                            trim_selecionado = st.selectbox("Selecione o Trimestre:", trimestres, index=0, key="gantt_trim_sel")
+                            num_trim = trimestres.index(trim_selecionado) + 1
+                            
+                            mes_ini_trim = (num_trim - 1) * 3 + 1
+                            mes_fim_trim = num_trim * 3
+                            
+                            ts_ini = pd.Timestamp(year=ano_ref, month=mes_ini_trim, day=1)
+                            ts_fim = (pd.Timestamp(year=ano_ref, month=mes_fim_trim, day=1) + pd.offsets.MonthEnd(1)) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+                            label_periodo = f"{trim_selecionado} de {ano_ref}"
+                            formato_data_eixo = "%d/%m"
+                            
+                        else: # Anual
+                            ts_ini = pd.Timestamp(year=ano_ref, month=1, day=1)
+                            ts_fim = pd.Timestamp(year=ano_ref, month=12, day=31, hour=23, minute=59, second=59)
+                            label_periodo = f"Ano Completo de {ano_ref}"
+                            formato_data_eixo = "%b %Y"
+
+                    # --- 2. FILTRAGEM POR INTERSECÇÃO COM O PERÍODO ---
+                    df_gantt_periodo = df_gantt_base[
+                        (df_gantt_base["Data_Inicio_DT"] <= ts_fim) & 
+                        (df_gantt_base["Data_Fim_DT"] >= ts_ini)
+                    ].copy()
+
+                    if not df_gantt_periodo.empty:
+                        df_gantt_agg = df_gantt_periodo.groupby(["Codigo_Atividade", "Nome da Atividade", "Status_Operacional"]).agg(
+                            Data_Inicio=('Data_Inicio_DT', 'min'),
+                            Data_Fim=('Data_Fim_DT', 'max'),
+                            Equipe=('Servidor', lambda x: ", ".join(sorted([str(s) for s in x.dropna().unique()]))),
+                            UF_Acao=('UF_Acao_PNAPA', 'first'),
+                            SEI=('Doc_Probatorio_Exec', 'first')
+                        ).reset_index()
+                        
+                        df_gantt_agg["Rotulo_Atividade"] = df_gantt_agg["Codigo_Atividade"].replace("", "S/C") + " - " + df_gantt_agg["Nome da Atividade"]
+                        
+                        # Ajusta a data final para preencher o dia completo no visual do Gantt
+                        df_gantt_agg["Data_Fim_Plot"] = df_gantt_agg["Data_Fim"] + pd.Timedelta(hours=23, minutes=59, seconds=59)
+
+                        # Ordena de cima para baixo pela data de início
+                        df_gantt_agg = df_gantt_agg.sort_values(by="Data_Inicio", ascending=True).reset_index(drop=True)
+
+                        fig_gantt = px.timeline(
+                            df_gantt_agg, 
+                            x_start="Data_Inicio", 
+                            x_end="Data_Fim_Plot", 
+                            y="Rotulo_Atividade", 
+                            color="Status_Operacional",
+                            color_discrete_map=cor_mapa_gantt,
+                            hover_data={"Equipe": True, "UF_Acao": True, "SEI": True, "Rotulo_Atividade": False, "Data_Fim_Plot": False}
+                        )
+                        fig_gantt.update_yaxes(autorange="reversed", title_text="", showticklabels=True)
+                        
+                        # Ajusta os limites do eixo X para enquadrar perfeitamente o período selecionado
+                        fig_gantt.update_xaxes(
+                            title_text="", 
+                            rangeslider_visible=False,
+                            tickformat=formato_data_eixo,
+                            range=[ts_ini, ts_fim] if modo_escala != "🌐 Anual (Completo)" else None
+                        )
+                        
+                        # Altura dinâmica proporcional à quantidade de atividades
+                        altura_dinamica = max(280, min(800, len(df_gantt_agg) * 36 + 100))
+                        
+                        fig_gantt.update_layout(
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, title_text=""),
+                            margin=dict(t=10, b=0, l=0, r=0),
+                            height=altura_dinamica,
+                            plot_bgcolor="white"
+                        )
+                        st.plotly_chart(fig_gantt, use_container_width=True)
+                    else:
+                        st.info(f"ℹ️ Nenhuma atividade com execução prevista ou realizada para **{label_periodo}**.")
+
                 else:
                     st.info("Não há atividades com datas válidas de início e término no período filtrado.")
 
@@ -1211,17 +1291,14 @@ if modo == "📈 Dashboards Executivos":
                 df_tab_cal = df_filt_atv_oper[[c for c in cols_tab_cal if c in df_filt_atv_oper.columns]].copy()
                 df_tab_cal["Status"] = df_tab_cal["Status_Operacional"].apply(badge_status)
                 
-                # 🚀 Mantém como data real (date object) para a ordenação ser 100% cronológica
                 df_tab_cal["Data de Início"] = df_tab_cal["Data_Inicio_DT"].dt.date
                 df_tab_cal["Data de Término"] = df_tab_cal["Data_Fim_DT"].dt.date
                 
                 df_tab_cal = df_tab_cal.drop(columns=["Status_Operacional", "Data_Inicio_DT", "Data_Fim_DT"])
                 
-                # Ordenação cronológica real padrão
                 ordem_cols = ["Id", "Codigo_Atividade", "Nome da Atividade", "Servidor", "UF_Acao_PNAPA", "Data de Início", "Data de Término", "Doc_Probatorio_Exec", "Status"]
                 df_tab_cal = df_tab_cal[[c for c in ordem_cols if c in df_tab_cal.columns]].sort_values(by=["Data de Início", "Id"], ascending=[True, True]).reset_index(drop=True)
                 
-                # 🚀 Configuração que exibe em DD/MM/YYYY sem transformar em texto
                 config_cols_cal = {
                     "Data de Início": st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY"),
                     "Data de Término": st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY"),
