@@ -15,7 +15,7 @@ URL_FLOW_UNIDADES = "https://default6ae3f5e7541942a780758c1490c72b.25.environmen
 URL_FLOW_EQUIPES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3d124cc6783845e1b8618cfb3302eca0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ubTQ-LAIsToMOX0CGytlI2YM_WKmC_mRT64ybRLBRSY"
 URL_FLOW_PNAPAS = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/38cc92ea33ba4d6387b924d6eac62d58/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=LlCDUzrETHyXxp_QLte1eGxKR_4LuwRGzPJbgUsHvgk"
 URL_FLOW_SUGESTOES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/12/workflows/879c1fc3770545039e738cc24d0a4a23/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=_4vVSJhFVRuYWXneiKhnPkx3A66J9DFzLWM0OmISV-U"
-URL_FLOW_EMAIL_360 = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/24/workflows/a2a7b0526f8e4730853282bf013e5603/triggers/manual/paths/invoke?api-version=1"
+URL_FLOW_EMAIL_360 = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/24/workflows/a2a7b0526f8e4730853282bf013e5603/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=57OBkb0svwTTghUCsEjVkVxF2zMYVke_gDtcT3upaGI"
 
 # URL da Planilha Macro Principal (Movidas para o topo para evitar NameError)
 URL_FLOW_PRINCIPAL = st.secrets["power_automate"]["URL_PRINCIPAL"]
@@ -235,8 +235,11 @@ def executar_api_equipes(dados_json):
 def disparar_email_360(codigo_atv, nome_atv, lista_servidores_equipe, df_serv_aux):
     """Envia o comando de e-mail ao PA se a equipe for >= 3 membros."""
     equipe_unica = list(set(lista_servidores_equipe)) # Remove duplicidades
+    
     if len(equipe_unica) >= 3:
+        # Tenta buscar os emails dos servidores da equipe
         emails = df_serv_aux[df_serv_aux["Servidor"].isin(equipe_unica)]["E_mail"].dropna().tolist()
+        
         if emails:
             payload_email = {
                 "destinatarios": ";".join(emails),
@@ -244,9 +247,17 @@ def disparar_email_360(codigo_atv, nome_atv, lista_servidores_equipe, df_serv_au
                 "nome": nome_atv
             }
             try:
-                requests.post(URL_FLOW_EMAIL_360, json=payload_email, timeout=10)
-            except:
-                pass # Ignora silenciosamente se o e-mail falhar para não travar o app
+                resposta = requests.post(URL_FLOW_EMAIL_360, json=payload_email, timeout=10)
+                
+                # NOVO: Verifica se o Power Automate aceitou ou rejeitou
+                if resposta.status_code not in [200, 202]:
+                    st.error(f"Erro ao disparar o fluxo de E-mail 360: Código {resposta.status_code} - {resposta.text}")
+                else:
+                    st.toast("📧 Gatilho de E-mail 360º disparado com sucesso!", icon="✅")
+            except Exception as e:
+                st.error(f"Falha de conexão ao tentar enviar e-mail: {e}")
+        else:
+            st.warning("⚠️ Equipe >= 3 formada, mas nenhum e-mail foi encontrado no cadastro de servidores.")
 
 @st.cache_data(ttl=15, show_spinner=False)
 def carregar_sugestoes():
