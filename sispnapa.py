@@ -936,6 +936,10 @@ if modo == "📈 Dashboards Executivos":
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
             
+            # Percentuais de Execução em relação ao Planejado
+            pct_rec_exec = (rec_exec_total / rec_plan_total * 100) if rec_plan_total > 0 else 0.0
+            pct_dias_exec = (dias_exec_total / dias_plan_total * 100) if dias_plan_total > 0 else 0.0
+
             # --- CARTÕES DE MÉTRICAS CONSOLIDADAS ---
             # Linha 1 (Planejamento)
             col_m1, col_m2, col_m3 = st.columns(3)
@@ -943,11 +947,11 @@ if modo == "📈 Dashboards Executivos":
             col_m2.metric("💰 Orçamento Planejado (Ações)", f"R$ {rec_plan_total:,.2f}")
             col_m3.metric("📅 Dias Planejados (Ações)", f"{dias_plan_total:,.1f}")
             
-            # Linha 2 (Execução)
+            # Linha 2 (Execução com % do Planejado)
             col_m4, col_m5, col_m6 = st.columns(3)
             col_m4.metric(card_atingidas_label, f"{total_nac_exec}", f"{pct_nac_exec:.1f}% do total")
-            col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}")
-            col_m6.metric("⏳ Dias Executados (Ativ.)", f"{dias_exec_total:,.1f}")
+            col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}", f"{pct_rec_exec:.1f}% do planejado")
+            col_m6.metric("⏳ Dias Executados (Ativ.)", f"{dias_exec_total:,.1f}", f"{pct_dias_exec:.1f}% do planejado")
             
             st.markdown("---")
             st.markdown("### 🏆 Status de Execução Geral do PNAPA (Por UF e Nacional)")
