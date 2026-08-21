@@ -317,6 +317,32 @@ def classificar_nivel_acao(dias):
     else:
         return "Nível 3 (Intensivo)"
 
+# =================================================================
+# FUNÇÕES UTILITÁRIAS DE FORMATAÇÃO NO PADRÃO BRASILEIRO (BRL)
+# =================================================================
+def formatar_moeda_br(val, casas=2, incluir_cifrao=True):
+    """Converte qualquer número para formato de moeda brasileira (ex: R$ 413.049,20)."""
+    if pd.isna(val) or val is None:
+        return "R$ 0,00" if incluir_cifrao else "0,00"
+    try:
+        val_f = float(val)
+    except (ValueError, TypeError):
+        return str(val)
+    fmt = f"{val_f:,.{casas}f}" if casas > 0 else f"{val_f:,.0f}"
+    s_br = fmt.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {s_br}" if incluir_cifrao else s_br
+
+def formatar_numero_br(val, casas=1):
+    """Converte qualquer número/decimal para o padrão BR com vírgula (ex: 1.486,5)."""
+    if pd.isna(val) or val is None:
+        return "0,0" if casas > 0 else "0"
+    try:
+        val_f = float(val)
+    except (ValueError, TypeError):
+        return str(val)
+    fmt = f"{val_f:,.{casas}f}" if casas > 0 else f"{val_f:,.0f}"
+    return fmt.replace(",", "X").replace(".", ",").replace("X", ".")
+
 # Carregamento das tabelas de apoio (Unidades, Servidores e Ações PNAPA)
 @st.cache_data(ttl=60)
 def carregar_bases_vias_power_automate():
@@ -887,7 +913,6 @@ if modo == "📈 Dashboards Executivos":
         with tab_exec:
             st.markdown("### Visão Geral do Portfólio")
             
-            # Seletor de perspectiva de cálculo (posicionado no topo para orientar todo o painel)
             visao_consolidacao = st.radio(
                 "Selecione a perspectiva de cálculo da Execução:", 
                 [
@@ -898,7 +923,7 @@ if modo == "📈 Dashboards Executivos":
                 horizontal=True
             )
 
-            # 1. Definição de Parâmetros e Limiares da Perspectiva Selecionada
+            # 1. Definição de Parâmetros e Limiares
             if "Metas Físicas" in visao_consolidacao:
                 st.caption("Consolidação baseada no atingimento de **80% ou mais** da meta dos indicadores (considera apenas atividades concluídas).")
                 atv_base = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
@@ -927,9 +952,8 @@ if modo == "📈 Dashboards Executivos":
                 card_atingidas_label = "⏳ Ações Executadas (Nac. ≥ 50%)"
                 limiar_execucao = 0.5
 
-            # 2. Processamento e Cálculo das Ações Únicas Nacionais e Estaduais
+            # 2. Processamento e Cálculo
             if not df_filt_acao.empty:
-                # --- CÁLCULO ESTADUAL ---
                 meta_uf = df_filt_acao.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_meta].sum().reset_index()
                 res_uf = atv_base.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_res].sum().reset_index()
                 
@@ -953,7 +977,6 @@ if modo == "📈 Dashboards Executivos":
                 tab1_uf = tab1_uf[tab1_uf["UF / Nível"].astype(str).str.strip() != ""]
                 tab1_uf[nome_col_pct] = (tab1_uf["Acoes_Executadas"] / tab1_uf["Acoes_Planejadas"]) * 100
                 
-                # --- CÁLCULO NACIONAL (Ações Únicas Globais) ---
                 meta_nac = df_filt_acao.groupby("Número da Ação PNAPA")[col_meta].sum().reset_index()
                 res_nac = atv_base.groupby("Número da Ação PNAPA")[col_res].sum().reset_index()
                 
@@ -965,11 +988,8 @@ if modo == "📈 Dashboards Executivos":
                 total_nac_exec = int(df_nac_calc["Executada"].sum())
                 pct_nac_exec = (total_nac_exec / total_nac_plan * 100) if total_nac_plan > 0 else 0
             else:
-                total_nac_plan = 0
-                total_nac_exec = 0
-                pct_nac_exec = 0
-                df_nac_calc = pd.DataFrame()
-                tab1_uf = pd.DataFrame()
+                total_nac_plan, total_nac_exec, pct_nac_exec = 0, 0, 0
+                df_nac_calc, tab1_uf = pd.DataFrame(), pd.DataFrame()
 
             # 3. Totais Financeiros e de Dias
             rec_plan_total = pd.to_numeric(df_filt_acao["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
@@ -978,22 +998,19 @@ if modo == "📈 Dashboards Executivos":
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
             
-            # Percentuais de Execução em relação ao Planejado
             pct_rec_exec = (rec_exec_total / rec_plan_total * 100) if rec_plan_total > 0 else 0.0
             pct_dias_exec = (dias_exec_total / dias_plan_total * 100) if dias_plan_total > 0 else 0.0
 
-            # --- CARTÕES DE MÉTRICAS CONSOLIDADAS ---
-            # Linha 1 (Planejamento)
+            # --- CARTÕES DE MÉTRICAS FORMATADOS NO PADRÃO BR ---
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric("🎯 Ações Planejadas (Nacional)", f"{total_nac_plan}")
-            col_m2.metric("💰 Orçamento Planejado (Ações)", f"R$ {rec_plan_total:,.2f}")
-            col_m3.metric("📅 Dias Planejados (Ações)", f"{dias_plan_total:,.1f}")
+            col_m2.metric("💰 Orçamento Planejado (Ações)", formatar_moeda_br(rec_plan_total))
+            col_m3.metric("📅 Dias Planejados (Ações)", formatar_numero_br(dias_plan_total, 1))
             
-            # Linha 2 (Execução com % do Planejado)
             col_m4, col_m5, col_m6 = st.columns(3)
-            col_m4.metric(card_atingidas_label, f"{total_nac_exec}", f"{pct_nac_exec:.1f}% do total")
-            col_m5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_total:,.2f}", f"{pct_rec_exec:.1f}% do planejado")
-            col_m6.metric("⏳ Dias Executados (Ativ.)", f"{dias_exec_total:,.1f}", f"{pct_dias_exec:.1f}% do planejado")
+            col_m4.metric(card_atingidas_label, f"{total_nac_exec}", f"{formatar_numero_br(pct_nac_exec, 1)}% do total")
+            col_m5.metric("💳 Orçamento Executado (Ativ.)", formatar_moeda_br(rec_exec_total), f"{formatar_numero_br(pct_rec_exec, 1)}% do planejado")
+            col_m6.metric("⏳ Dias Executados (Ativ.)", formatar_numero_br(dias_exec_total, 1), f"{formatar_numero_br(pct_dias_exec, 1)}% do planejado")
             
             st.markdown("---")
             st.markdown("### 🏆 Status de Execução Geral do PNAPA (Por UF e Nacional)")
@@ -1018,13 +1035,13 @@ if modo == "📈 Dashboards Executivos":
                     else: return 'background-color: #93c5fd; color: black; font-weight: bold;'
 
                 try:
-                    t1_styled = tab1_uf.style.applymap(cor_percentual, subset=[nome_col_pct]).format({nome_col_pct: "{:.1f}%"})
+                    t1_styled = tab1_uf.style.applymap(cor_percentual, subset=[nome_col_pct]).format({nome_col_pct: lambda v: f"{formatar_numero_br(v, 1)}%"})
                 except AttributeError:
-                    t1_styled = tab1_uf.style.map(cor_percentual, subset=[nome_col_pct]).format({nome_col_pct: "{:.1f}%"})
+                    t1_styled = tab1_uf.style.map(cor_percentual, subset=[nome_col_pct]).format({nome_col_pct: lambda v: f"{formatar_numero_br(v, 1)}%"})
                     
                 st.dataframe(t1_styled, use_container_width=True, hide_index=True)
                 
-                # --- Tabela 2: Por Ação Nacional ---
+                # --- Tabela 2: Por Ação Nacional Formatada no Padrão BR ---
                 st.markdown("<br>#### 🎯 Status de Execução Geral do PNAPA (Por Ação Nacional)", unsafe_allow_html=True)
                 nomes_acoes = df_filt_acao[["Número da Ação PNAPA", "Nome da Ação PNAPA"]].drop_duplicates("Número da Ação PNAPA")
                 tab2_acao = pd.merge(df_nac_calc, nomes_acoes, on="Número da Ação PNAPA", how="left")
@@ -1035,13 +1052,25 @@ if modo == "📈 Dashboards Executivos":
                 
                 if "Metas Físicas" in visao_consolidacao:
                     tab2_acao.columns = ["Ação PNAPA", "% Execução", "Meta (Física)", "Resultado (Físico)"]
-                    format_dict = {"% Execução": "{:.1f}%", "Meta (Física)": "{:.1f}", "Resultado (Físico)": "{:.1f}"}
+                    format_dict = {
+                        "% Execução": lambda v: f"{formatar_numero_br(v, 1)}%",
+                        "Meta (Física)": lambda v: formatar_numero_br(v, 1),
+                        "Resultado (Físico)": lambda v: formatar_numero_br(v, 1)
+                    }
                 elif "Orçamento" in visao_consolidacao:
                     tab2_acao.columns = ["Ação PNAPA", "% Execução", "Orçamento Planejado", "Orçamento Executado"]
-                    format_dict = {"% Execução": "{:.1f}%", "Orçamento Planejado": "R$ {:,.2f}", "Orçamento Executado": "R$ {:,.2f}"}
+                    format_dict = {
+                        "% Execução": lambda v: f"{formatar_numero_br(v, 1)}%",
+                        "Orçamento Planejado": lambda v: formatar_moeda_br(v),
+                        "Orçamento Executado": lambda v: formatar_moeda_br(v)
+                    }
                 else:
                     tab2_acao.columns = ["Ação PNAPA", "% Execução", "Dias Planejados", "Dias Executados"]
-                    format_dict = {"% Execução": "{:.1f}%", "Dias Planejados": "{:.1f}", "Dias Executados": "{:.1f}"}
+                    format_dict = {
+                        "% Execução": lambda v: f"{formatar_numero_br(v, 1)}%",
+                        "Dias Planejados": lambda v: formatar_numero_br(v, 1),
+                        "Dias Executados": lambda v: formatar_numero_br(v, 1)
+                    }
 
                 tab2_acao = tab2_acao.sort_values("% Execução", ascending=False).reset_index(drop=True)
                 
@@ -1090,7 +1119,7 @@ if modo == "📈 Dashboards Executivos":
         with tab_oper:
             st.markdown("### 🗓️ Gestão Operacional & Execução de Atividades")
             
-            # --- 1. CLASSIFICAÇÃO DE STATUS DAS ATIVIDADES ---
+            # 1. Classificação de Status
             def classificar_status_operacional(row):
                 andamento = str(row.get("Andamento", "")).strip()
                 doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
@@ -1098,19 +1127,16 @@ if modo == "📈 Dashboards Executivos":
                 dt_fim = row.get("Data_Fim_DT")
                 
                 if andamento == "Concluída":
-                    if not doc:
-                        return "Sem Documento de Conclusão"
+                    if not doc: return "Sem Documento de Conclusão"
                     return "Concluída"
-                else: # Prevista, Não Iniciada, etc.
-                    if pd.notna(dt_fim) and hoje > dt_fim:
-                        return "Atrasada"
+                else:
+                    if pd.notna(dt_fim) and hoje > dt_fim: return "Atrasada"
                     return "Prevista"
 
             df_filt_atv_oper = df_filt_atv.copy()
             df_filt_atv_oper["Status_Operacional"] = df_filt_atv_oper.apply(classificar_status_operacional, axis=1)
 
-            # --- 2. CÁLCULO DAS MÉTRICAS GLOBAIS DO TOPO ---
-            # Identificador de atividade única (Codigo_Atividade ou Nome da Atividade)
+            # 2. Métricas do Topo
             id_atv_series = df_filt_atv_oper["Codigo_Atividade"].replace("", pd.NA).fillna(df_filt_atv_oper["Nome da Atividade"])
             total_atv_unicas_plan = int(id_atv_series.nunique())
             
@@ -1127,37 +1153,35 @@ if modo == "📈 Dashboards Executivos":
             dias_exec_atv = pd.to_numeric(df_filt_atv_oper["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
             pct_dias_atv = (dias_exec_atv / dias_plan_atv * 100) if dias_plan_atv > 0 else 0.0
 
-            # Linha 1 (Planejamento)
+            # Cartões de Métricas Formatados em Padrão BR
             col_op1, col_op2, col_op3 = st.columns(3)
             col_op1.metric("📌 Atividades Únicas Planejadas", f"{total_atv_unicas_plan}")
-            col_op2.metric("💰 Orçamento Planejado (Ativ.)", f"R$ {rec_plan_atv:,.2f}")
-            col_op3.metric("📅 Dias Planejados (Ativ.)", f"{dias_plan_atv:,.1f}")
+            col_op2.metric("💰 Orçamento Planejado (Ativ.)", formatar_moeda_br(rec_plan_atv))
+            col_op3.metric("📅 Dias Planejados (Ativ.)", formatar_numero_br(dias_plan_atv, 1))
 
-            # Linha 2 (Execução)
             col_op4, col_op5, col_op6 = st.columns(3)
-            col_op4.metric("✅ Atividades Únicas Executadas", f"{total_atv_unicas_exec}", f"{pct_atv_unicas_exec:.1f}% do planejado")
-            col_op5.metric("💳 Orçamento Executado (Ativ.)", f"R$ {rec_exec_atv:,.2f}", f"{pct_rec_atv:.1f}% do planejado")
-            col_op6.metric("⏳ Dias Executados (Ativ.)", f"{dias_exec_atv:,.1f}", f"{pct_dias_atv:.1f}% do planejado")
+            col_op4.metric("✅ Atividades Únicas Executadas", f"{total_atv_unicas_exec}", f"{formatar_numero_br(pct_atv_unicas_exec, 1)}% do planejado")
+            col_op5.metric("💳 Orçamento Executado (Ativ.)", formatar_moeda_br(rec_exec_atv), f"{formatar_numero_br(pct_rec_atv, 1)}% do planejado")
+            col_op6.metric("⏳ Dias Executados (Ativ.)", formatar_numero_br(dias_exec_atv, 1), f"{formatar_numero_br(pct_dias_atv, 1)}% do planejado")
 
             st.markdown("---")
 
-            # --- 3. SUB-ABAS OPERACIONAIS ---
+            # 3. Sub-Abas
             subtab_cal, subtab_fin, subtab_esf = st.tabs([
                 "🗓️ 1. Calendário & Cronograma", 
                 "💰 2. Execução Financeira", 
                 "⏳ 3. Esforço & Dedicação"
             ])
 
-            # Mapa padrão de cores operacionais
             cor_mapa_gantt = {
-                "Concluída": "#22c55e",                  # Verde
-                "Sem Documento de Conclusão": "#facc15", # Amarelo
-                "Atrasada": "#ef4444",                   # Vermelho
-                "Prevista": "#60a5fa"                    # Azul
+                "Concluída": "#22c55e",
+                "Sem Documento de Conclusão": "#facc15",
+                "Atrasada": "#ef4444",
+                "Prevista": "#60a5fa"
             }
 
             # =================================================================
-            # SUB-ABA 1: CALENDÁRIO (GANTT & CRONOGRAMA INTERATIVO)
+            # SUB-ABA 1: CALENDÁRIO
             # =================================================================
             with subtab_cal:
                 st.markdown("#### 🗓️ Cronograma e Linha do Tempo das Atividades")
@@ -1165,11 +1189,9 @@ if modo == "📈 Dashboards Executivos":
                 df_gantt_base = df_filt_atv_oper.dropna(subset=["Data_Inicio_DT", "Data_Fim_DT"]).copy()
                 
                 if not df_gantt_base.empty:
-                    # Detecta o ano de referência dos dados filtrados
                     ano_ref_series = df_gantt_base["Data_Inicio_DT"].dt.year.dropna()
                     ano_ref = int(ano_ref_series.mode()[0]) if not ano_ref_series.empty else hoje.year
 
-                    # --- 1. PAINEL DE CONTROLE E NAVEGAÇÃO TEMPORAL ---
                     col_nav1, col_nav2 = st.columns([1, 1.8])
                     
                     with col_nav1:
@@ -1214,13 +1236,12 @@ if modo == "📈 Dashboards Executivos":
                             label_periodo = f"{trim_selecionado} de {ano_ref}"
                             formato_data_eixo = "%d/%m"
                             
-                        else: # Anual
+                        else:
                             ts_ini = pd.Timestamp(year=ano_ref, month=1, day=1)
                             ts_fim = pd.Timestamp(year=ano_ref, month=12, day=31, hour=23, minute=59, second=59)
                             label_periodo = f"Ano Completo de {ano_ref}"
                             formato_data_eixo = "%b %Y"
 
-                    # --- 2. FILTRAGEM POR INTERSECÇÃO COM O PERÍODO ---
                     df_gantt_periodo = df_gantt_base[
                         (df_gantt_base["Data_Inicio_DT"] <= ts_fim) & 
                         (df_gantt_base["Data_Fim_DT"] >= ts_ini)
@@ -1236,10 +1257,8 @@ if modo == "📈 Dashboards Executivos":
                         ).reset_index()
                         
                         df_gantt_agg["Rotulo_Atividade"] = df_gantt_agg["Codigo_Atividade"].replace("", "S/C") + " - " + df_gantt_agg["Nome da Atividade"]
-                        
                         df_gantt_agg["Início"] = df_gantt_agg["Data_Inicio"].dt.strftime('%d/%m/%Y')
                         df_gantt_agg["Término"] = df_gantt_agg["Data_Fim"].dt.strftime('%d/%m/%Y')
-                        
                         df_gantt_agg["Data_Fim_Plot"] = df_gantt_agg["Data_Fim"] + pd.Timedelta(hours=23, minutes=59, seconds=59)
                         df_gantt_agg = df_gantt_agg.sort_values(by="Data_Inicio", ascending=True).reset_index(drop=True)
 
@@ -1251,43 +1270,26 @@ if modo == "📈 Dashboards Executivos":
                             color="Status_Operacional",
                             color_discrete_map=cor_mapa_gantt,
                             hover_data={
-                                "Início": True,
-                                "Término": True,
-                                "Equipe": True, 
-                                "UF_Acao": True, 
-                                "SEI": True, 
-                                "Rotulo_Atividade": False, 
-                                "Data_Fim_Plot": False,
-                                "Data_Inicio": False
+                                "Início": True, "Término": True, "Equipe": True, 
+                                "UF_Acao": True, "SEI": True, "Rotulo_Atividade": False, 
+                                "Data_Fim_Plot": False, "Data_Inicio": False
                             }
                         )
                         fig_gantt.update_yaxes(autorange="reversed", title_text="", showticklabels=True)
-                        
                         fig_gantt.update_xaxes(
-                            title_text="", 
-                            rangeslider_visible=False,
-                            tickformat=formato_data_eixo,
+                            title_text="", rangeslider_visible=False, tickformat=formato_data_eixo,
                             range=[ts_ini, ts_fim] if modo_escala != "🌐 Anual (Completo)" else None
                         )
                         
                         altura_dinamica = max(280, min(800, len(df_gantt_agg) * 36 + 100))
-                        
-                        # 🚀 hoverlabel com align="left" para alinhar todo o texto à esquerda
                         fig_gantt.update_layout(
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, title_text=""),
-                            margin=dict(t=10, b=0, l=0, r=0),
-                            height=altura_dinamica,
-                            plot_bgcolor="white",
-                            hoverlabel=dict(
-                                align="left",
-                                bgcolor="white",
-                                font_size=12
-                            )
+                            margin=dict(t=10, b=0, l=0, r=0), height=altura_dinamica, plot_bgcolor="white",
+                            hoverlabel=dict(align="left", bgcolor="white", font_size=12)
                         )
                         st.plotly_chart(fig_gantt, use_container_width=True)
                     else:
                         st.info(f"ℹ️ Nenhuma atividade com execução prevista ou realizada para **{label_periodo}**.")
-
                 else:
                     st.info("Não há atividades com datas válidas de início e término no período filtrado.")
 
@@ -1302,10 +1304,8 @@ if modo == "📈 Dashboards Executivos":
                 cols_tab_cal = ["Id", "Codigo_Atividade", "Nome da Atividade", "Status_Operacional", "Servidor", "UF_Acao_PNAPA", "Data_Inicio_DT", "Data_Fim_DT", "Doc_Probatorio_Exec"]
                 df_tab_cal = df_filt_atv_oper[[c for c in cols_tab_cal if c in df_filt_atv_oper.columns]].copy()
                 df_tab_cal["Status"] = df_tab_cal["Status_Operacional"].apply(badge_status)
-                
                 df_tab_cal["Data de Início"] = df_tab_cal["Data_Inicio_DT"].dt.date
                 df_tab_cal["Data de Término"] = df_tab_cal["Data_Fim_DT"].dt.date
-                
                 df_tab_cal = df_tab_cal.drop(columns=["Status_Operacional", "Data_Inicio_DT", "Data_Fim_DT"])
                 
                 ordem_cols = ["Id", "Codigo_Atividade", "Nome da Atividade", "Servidor", "UF_Acao_PNAPA", "Data de Início", "Data de Término", "Doc_Probatorio_Exec", "Status"]
@@ -1315,11 +1315,10 @@ if modo == "📈 Dashboards Executivos":
                     "Data de Início": st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY"),
                     "Data de Término": st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY"),
                 }
-                
                 st.dataframe(df_tab_cal, use_container_width=True, hide_index=True, column_config=config_cols_cal)
 
             # =================================================================
-            # SUB-ABA 2: FINANCEIRO
+            # SUB-ABA 2: FINANCEIRO FORMATADA NO PADRÃO BR
             # =================================================================
             with subtab_fin:
                 st.markdown("#### 💰 Acompanhamento Financeiro das Atividades")
@@ -1335,7 +1334,7 @@ if modo == "📈 Dashboards Executivos":
                     y=df_fin_mensal["Rec_Plan_Total"], 
                     name='Planejado', 
                     marker_color='#94b396', 
-                    text=df_fin_mensal["Rec_Plan_Total"].apply(lambda v: f"R$ {v:,.0f}"), 
+                    text=df_fin_mensal["Rec_Plan_Total"].apply(lambda v: formatar_moeda_br(v, casas=0)), 
                     textposition='outside'
                 ))
                 fig_fin.add_trace(go.Bar(
@@ -1343,15 +1342,13 @@ if modo == "📈 Dashboards Executivos":
                     y=df_fin_mensal["Rec_Exec_Total"], 
                     name='Executado', 
                     marker_color='#4f7942', 
-                    text=df_fin_mensal["Rec_Exec_Total"].apply(lambda v: f"R$ {v:,.0f}"), 
+                    text=df_fin_mensal["Rec_Exec_Total"].apply(lambda v: formatar_moeda_br(v, casas=0)), 
                     textposition='outside'
                 ))
                 fig_fin.update_layout(
-                    barmode='group', 
-                    plot_bgcolor='rgba(0,0,0,0)', 
+                    barmode='group', plot_bgcolor='rgba(0,0,0,0)', 
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), 
-                    margin=dict(t=30, b=0, l=0, r=0), 
-                    height=360
+                    margin=dict(t=30, b=0, l=0, r=0), height=360
                 )
                 st.plotly_chart(fig_fin, use_container_width=True)
 
@@ -1368,14 +1365,14 @@ if modo == "📈 Dashboards Executivos":
                     pct_c = (v_e / v_p * 100) if v_p > 0 else 0.0
                     resumo_custos.append({
                         "Categoria de Despesa": label_c,
-                        "Orçamento Planejado": f"R$ {v_p:,.2f}",
-                        "Orçamento Executado": f"R$ {v_e:,.2f}",
-                        "% Executado": f"{pct_c:.1f}%"
+                        "Orçamento Planejado": formatar_moeda_br(v_p),
+                        "Orçamento Executado": formatar_moeda_br(v_e),
+                        "% Executado": f"{formatar_numero_br(pct_c, 1)}%"
                     })
                 st.dataframe(pd.DataFrame(resumo_custos), use_container_width=True, hide_index=True)
 
             # =================================================================
-            # SUB-ABA 3: ESFORÇO (DIAS GASTOS)
+            # SUB-ABA 3: ESFORÇO FORMATADA NO PADRÃO BR
             # =================================================================
             with subtab_esf:
                 st.markdown("#### ⏳ Acompanhamento do Esforço Operacional (Dias)")
@@ -1391,7 +1388,7 @@ if modo == "📈 Dashboards Executivos":
                     y=df_esf_mensal["Dias_Gastos_Plan"], 
                     name='Previstos', 
                     marker_color='#a3c1ad', 
-                    text=df_esf_mensal["Dias_Gastos_Plan"], 
+                    text=df_esf_mensal["Dias_Gastos_Plan"].apply(lambda v: formatar_numero_br(v, 1)), 
                     textposition='outside'
                 ))
                 fig_esf.add_trace(go.Bar(
@@ -1399,15 +1396,13 @@ if modo == "📈 Dashboards Executivos":
                     y=df_esf_mensal["Dias_Gastos_Exec"], 
                     name='Executados', 
                     marker_color='#557056', 
-                    text=df_esf_mensal["Dias_Gastos_Exec"], 
+                    text=df_esf_mensal["Dias_Gastos_Exec"].apply(lambda v: formatar_numero_br(v, 1)), 
                     textposition='outside'
                 ))
                 fig_esf.update_layout(
-                    barmode='group', 
-                    plot_bgcolor='rgba(0,0,0,0)', 
+                    barmode='group', plot_bgcolor='rgba(0,0,0,0)', 
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), 
-                    margin=dict(t=30, b=0, l=0, r=0), 
-                    height=360
+                    margin=dict(t=30, b=0, l=0, r=0), height=360
                 )
                 st.plotly_chart(fig_esf, use_container_width=True)
 
@@ -1417,8 +1412,10 @@ if modo == "📈 Dashboards Executivos":
                     Dias_Previstos=('Dias_Gastos_Plan', 'sum'),
                     Dias_Executados=('Dias_Gastos_Exec', 'sum')
                 ).reset_index()
-                df_esf_srv["% Cumprido"] = (df_esf_srv["Dias_Executados"] / df_esf_srv["Dias_Previstos"] * 100).fillna(0).round(1).astype(str) + "%"
-                df_esf_srv = df_esf_srv.sort_values(by="Dias_Executados", ascending=False).reset_index(drop=True)
+                df_esf_srv["% Cumprido"] = ((df_esf_srv["Dias_Executados"] / df_esf_srv["Dias_Previstos"]) * 100).fillna(0).apply(lambda v: f"{formatar_numero_br(v, 1)}%")
+                df_esf_srv["Dias_Previstos"] = df_esf_srv["Dias_Previstos"].apply(lambda v: formatar_numero_br(v, 1))
+                df_esf_srv["Dias_Executados"] = df_esf_srv["Dias_Executados"].apply(lambda v: formatar_numero_br(v, 1))
+                df_esf_srv = df_esf_srv.sort_values(by="Atividades", ascending=False).reset_index(drop=True)
                 st.dataframe(df_esf_srv, use_container_width=True, hide_index=True)
 
         # ---------------------------------------------------------------------
