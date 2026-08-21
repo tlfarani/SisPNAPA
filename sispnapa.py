@@ -3025,13 +3025,25 @@ elif modo == "👥 Gerenciar Equipes":
     LISTA_PERFIS = ["Visualização", "Editor Regional", "Administrador"]
     LISTA_UFS_COMPLETA = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Ceneac"]
     
+    # 🚀 NOVA LISTA RESTRITA DE FUNÇÕES
+    LISTA_FUNCOES_SERVIDOR = [
+        "Responsável Nupaem", 
+        "Responsável Nupaem Substituto(a)", 
+        "Coordenador(a) Geral Ceneac", 
+        "Coordenador(a) CPrev", 
+        "Coordenador(a) Coate"
+    ]
+    
     with ts_add:
         n_srv = st.text_input("Nome Completo do Servidor:")
         e_srv = st.text_input("E-mail Institucional (@ibama.gov.br):")
         uf_srv = st.selectbox("UF/Órgão de Lotação:", LISTA_UFS_COMPLETA, key="srv_add_uf") if perfil_usuario == "Administrador" else st.text_input("UF de Lotação:", value=uf_usuario, disabled=True, key="srv_add_uf_rep")
         unidades_lotacao_disponiveis = df_lotacoes[df_lotacoes["UF"] == uf_srv]["Unidade"].tolist()
         lot_srv = st.selectbox("Unidade de Lotação Relacionada:", unidades_lotacao_disponiveis if unidades_lotacao_disponiveis else ["Sede Superintendência"])
-        fun_srv = st.text_input("Função / Cargo Interno:")
+        
+        # 🚀 TROCA PARA SELECTBOX EM VEZ DE TEXT_INPUT
+        fun_srv = st.selectbox("Função / Cargo Institucional:", LISTA_FUNCOES_SERVIDOR)
+        
         col_eq1, col_eq2, col_eq3 = st.columns(3)
         with col_eq1: eq_emerg = st.selectbox("Equipe de Emergências?", ["Sim", "Não"])
         with col_eq2: eq_fiscal = st.selectbox("Fiscal de Campo?", ["Sim", "Não"])
@@ -3115,7 +3127,6 @@ elif modo == "👥 Gerenciar Equipes":
                     nova_uf_srv = val_atual_uf
 
             with col_loc2:
-                # Carrega as unidades disponíveis para a UF selecionada
                 unidades_disponiveis = df_lotacoes[df_lotacoes["UF"] == nova_uf_srv]["Unidade"].tolist()
                 if not unidades_disponiveis:
                     unidades_disponiveis = ["Sede Superintendência"]
@@ -3135,9 +3146,16 @@ elif modo == "👥 Gerenciar Equipes":
             # --- LINHA 3: CARGO E CREDENCIAIS ---
             col_cr1, col_cr2 = st.columns(2)
             with col_cr1:
-                nova_funcao = st.text_input(
-                    "Função / Cargo Interno:", 
-                    value=val_atual_funcao, 
+                # 🚀 TROCA PARA SELECTBOX
+                try:
+                    idx_func_edit = LISTA_FUNCOES_SERVIDOR.index(val_atual_funcao)
+                except ValueError:
+                    idx_func_edit = 0
+                    
+                nova_funcao = st.selectbox(
+                    "Função / Cargo Institucional:", 
+                    LISTA_FUNCOES_SERVIDOR,
+                    index=idx_func_edit,
                     key=f"srv_ed_funcao_{id_srv_edit}"
                 )
             with col_cr2:
@@ -3252,7 +3270,6 @@ elif modo == "👥 Gerenciar Equipes":
                                 }
                                 payloads_cascata.append(payload_sanit)
 
-                            # Disparo concorrente
                             def enviar_req(p):
                                 try:
                                     r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
