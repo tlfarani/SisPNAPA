@@ -1187,7 +1187,6 @@ if modo == "📈 Dashboards Executivos":
 
                     with col_nav2:
                         if modo_escala == "🗓️ Mensal":
-                            # Seleciona o mês atual por padrão se estiver no ano corrente
                             mes_idx_padrao = (hoje.month - 1) if hoje.year == ano_ref else 0
                             mes_selecionado = st.selectbox("Selecione o Mês:", lista_meses_nomes, index=mes_idx_padrao, key="gantt_mes_sel")
                             num_mes = lista_meses_nomes.index(mes_selecionado) + 1
@@ -1238,6 +1237,10 @@ if modo == "📈 Dashboards Executivos":
                         
                         df_gantt_agg["Rotulo_Atividade"] = df_gantt_agg["Codigo_Atividade"].replace("", "S/C") + " - " + df_gantt_agg["Nome da Atividade"]
                         
+                        # 🚀 Datas formatadas especificamente para o tooltip ao passar o mouse
+                        df_gantt_agg["Início"] = df_gantt_agg["Data_Inicio"].dt.strftime('%d/%m/%Y')
+                        df_gantt_agg["Término"] = df_gantt_agg["Data_Fim"].dt.strftime('%d/%m/%Y')
+                        
                         # Ajusta a data final para preencher o dia completo no visual do Gantt
                         df_gantt_agg["Data_Fim_Plot"] = df_gantt_agg["Data_Fim"] + pd.Timedelta(hours=23, minutes=59, seconds=59)
 
@@ -1251,7 +1254,16 @@ if modo == "📈 Dashboards Executivos":
                             y="Rotulo_Atividade", 
                             color="Status_Operacional",
                             color_discrete_map=cor_mapa_gantt,
-                            hover_data={"Equipe": True, "UF_Acao": True, "SEI": True, "Rotulo_Atividade": False, "Data_Fim_Plot": False}
+                            hover_data={
+                                "Início": True,
+                                "Término": True,
+                                "Equipe": True, 
+                                "UF_Acao": True, 
+                                "SEI": True, 
+                                "Rotulo_Atividade": False, 
+                                "Data_Fim_Plot": False,
+                                "Data_Inicio": False
+                            }
                         )
                         fig_gantt.update_yaxes(autorange="reversed", title_text="", showticklabels=True)
                         
@@ -1263,7 +1275,6 @@ if modo == "📈 Dashboards Executivos":
                             range=[ts_ini, ts_fim] if modo_escala != "🌐 Anual (Completo)" else None
                         )
                         
-                        # Altura dinâmica proporcional à quantidade de atividades
                         altura_dinamica = max(280, min(800, len(df_gantt_agg) * 36 + 100))
                         
                         fig_gantt.update_layout(
