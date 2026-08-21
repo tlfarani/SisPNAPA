@@ -600,10 +600,27 @@ if st.sidebar.button("🔄 Atualizar Base (Refresh)", use_container_width=True):
     if "df" in st.session_state: 
         del st.session_state.df
     st.rerun()
-    
-# Variáveis de controle de contexto para a Planilha Macro
-registro_selecionado = None
-id_atual = ""
+
+# --- 🧪 INÍCIO DO BLOCO DE TESTE ---
+st.sidebar.markdown("---")
+if st.sidebar.button("🧪 FORÇAR TESTE DE E-MAIL", type="primary", use_container_width=True):
+    payload_teste = {
+        "destinatarios": email_logado,
+        "codigo": "TESTE-ALFA",
+        "nome": "Simulação de Missão 360"
+    }
+    try:
+        r = requests.post(URL_FLOW_EMAIL_360, json=payload_teste, timeout=15)
+        st.sidebar.write(f"**Código HTTP:** {r.status_code}")
+        st.sidebar.write(f"**Resposta PA:** {r.text}")
+        
+        if r.status_code in [200, 202]:
+            st.sidebar.success("✅ Sinal enviado com sucesso! Verifique seu Outlook.")
+        else:
+            st.sidebar.error("❌ O Power Automate recusou a conexão.")
+    except Exception as e:
+        st.sidebar.error(f"❌ Erro do Python: {e}")
+# --- FIM DO BLOCO DE TESTE ---
 
 # =================================================================
 # V. NÚCLEO OPERACIONAL DAS TELAS
