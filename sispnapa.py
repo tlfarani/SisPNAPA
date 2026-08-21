@@ -425,6 +425,7 @@ st.markdown("""
         }
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg { fill: #03170a !important; }
         
+        /* Selectboxes e Popovers */
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
         div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div,
         div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] > div,
@@ -452,17 +453,21 @@ st.markdown("""
         div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
         div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
         
-        /* 🚀 FORÇA BRUTA: Correção definitiva do fundo das Caixas de Data */
+        /* 🚀 CORREÇÃO CIRÚRGICA: Caixas de Data com fundo branco e texto escuro */
         div[data-testid="stDateInput"] > div,
         div[data-testid="stDateInput"] div[data-baseweb="input"],
-        div[data-testid="stDateInput"] div[data-baseweb="base-input"],
-        div[data-testid="stDateInput"] div[role="button"],
-        div[data-testid="stDateInput"] input {
+        div[data-testid="stDateInput"] div[data-baseweb="base-input"] {
             background-color: #ffffff !important;
-            color: #03170a !important;
             border: 1px solid #cbd5e1 !important;
         }
-        div[data-testid="stDateInput"] svg { fill: #03170a !important; }
+        div[data-testid="stDateInput"] *,
+        div[data-testid="stDateInput"] input {
+            color: #03170a !important;
+            background-color: transparent !important;
+        }
+        div[data-testid="stDateInput"] svg {
+            fill: #03170a !important;
+        }
         
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
@@ -1951,102 +1956,117 @@ elif modo == "📊 Visualizar Base":
             if df_base_atvs.empty:
                 st.info("Nenhuma Atividade de Campo cadastrada na base.")
             else:
-                # --- DICIONÁRIO DE ESTADO ATUAL DOS FILTROS DE ATIVIDADES ---
+                # 1. 🚀 INICIALIZAÇÃO SEGURA DOS FILTROS POPOVER
+                for k in ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_and_at", "f_tema_at"]:
+                    if k not in st.session_state:
+                        st.session_state[k] = "Todas" if k in ["f_pna_at", "f_uf_at", "f_func_at"] else "Todos"
+
+                def limpar_filtros_atividades_t1():
+                    for k in ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_and_at", "f_tema_at"]:
+                        st.session_state[k] = "Todas" if k in ["f_pna_at", "f_uf_at", "f_func_at"] else "Todos"
+                    if "f_slider_dts_at" in st.session_state:
+                        del st.session_state["f_slider_dts_at"]
+
                 filtros_at = {
-                    "ano": ("Ano da Ação", st.session_state.get("f_ano_at", "Todos")),
-                    "pna": ("Número da Ação PNAPA", st.session_state.get("f_pna_at", "Todas")),
-                    "cod": ("Codigo_Atividade", st.session_state.get("f_cod_at", "Todos")),
-                    "uf": ("UF_Acao_PNAPA", st.session_state.get("f_uf_at", "Todas")),
-                    "srv": ("Servidor", st.session_state.get("f_srv_at", "Todos")),
-                    "func": ("Coordenador_Operacao", st.session_state.get("f_func_at", "Todas")),
-                    "and": ("Andamento", st.session_state.get("f_and_at", "Todos")),
-                    "tema": ("Tema da Atividade", st.session_state.get("f_tema_at", "Todos")),
+                    "ano": ("Ano da Ação", st.session_state["f_ano_at"]),
+                    "pna": ("Número da Ação PNAPA", st.session_state["f_pna_at"]),
+                    "cod": ("Codigo_Atividade", st.session_state["f_cod_at"]),
+                    "uf": ("UF_Acao_PNAPA", st.session_state["f_uf_at"]),
+                    "srv": ("Servidor", st.session_state["f_srv_at"]),
+                    "func": ("Coordenador_Operacao", st.session_state["f_func_at"]),
+                    "and": ("Andamento", st.session_state["f_and_at"]),
+                    "tema": ("Tema da Atividade", st.session_state["f_tema_at"]),
                     "data": ("Data_Inicio_Datetime", st.session_state.get("f_slider_dts_at", None))
                 }
 
-                # --- LINHA 1 DE FILTROS RESPONSIVOS ---
-                col_at1, col_at2, col_at3, col_at4 = st.columns(4)
-                with col_at1:
-                    df_p_ano_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "ano")
-                    anos_at = sorted([str(a).split('.')[0] for a in df_p_ano_at["Ano da Ação"].dropna().unique() if str(a).strip() != ""], reverse=True)
-                    opcs_ano_at = ["Todos"] + anos_at
-                    idx_ano_at = opcs_ano_at.index(filtros_at["ano"][1]) if filtros_at["ano"][1] in opcs_ano_at else 0
-                    f_ano_at = st.selectbox("📅 Ano:", opcs_ano_at, index=idx_ano_at, key="f_ano_at")
-                    filtros_at["ano"] = ("Ano da Ação", f_ano_at)
+                # 2. 🚀 BARRA DE FILTROS SUPERIOR COM POPOVERS (PADRÃO MODERNO)
+                c_fat1, c_fat2, c_fat3, c_fat4 = st.columns([1, 1.2, 1.2, 0.5])
+                
+                with c_fat1:
+                    with st.popover("📅 Período Considerado", use_container_width=True):
+                        df_p_ano_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "ano")
+                        anos_at = sorted([str(a).split('.')[0] for a in df_p_ano_at["Ano da Ação"].dropna().unique() if str(a).strip() != ""], reverse=True)
+                        opcs_ano_at = ["Todos"] + anos_at
+                        idx_ano_at = opcs_ano_at.index(filtros_at["ano"][1]) if filtros_at["ano"][1] in opcs_ano_at else 0
+                        f_ano_at = st.selectbox("Ano:", opcs_ano_at, index=idx_ano_at, key="f_ano_at")
+                        filtros_at["ano"] = ("Ano da Ação", f_ano_at)
 
-                with col_at2:
-                    df_p_pna_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "pna")
-                    acoes_at = sorted(df_p_pna_at["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
-                    opcs_pna_at = ["Todas"] + acoes_at
-                    idx_pna_at = opcs_pna_at.index(filtros_at["pna"][1]) if filtros_at["pna"][1] in opcs_pna_at else 0
-                    f_pna_at = st.selectbox("🗂️ Ação PNAPA:", opcs_pna_at, index=idx_pna_at, key="f_pna_at")
-                    filtros_at["pna"] = ("Número da Ação PNAPA", f_pna_at)
+                        df_p_data_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "data")
+                        dts_validas_at = df_p_data_at["Data_Inicio_Datetime"].dropna()
+                        min_dt_at = dts_validas_at.min().date() if not dts_validas_at.empty else date(2025, 1, 1)
+                        max_dt_at = dts_validas_at.max().date() if not dts_validas_at.empty else date(2026, 12, 31)
+                        if min_dt_at >= max_dt_at: max_dt_at = min_dt_at + pd.Timedelta(days=1)
 
-                with col_at3:
-                    df_p_cod_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "cod")
-                    cods_at = sorted([str(c).strip() for c in df_p_cod_at["Codigo_Atividade"].dropna().unique() if str(c).strip() != ""])
-                    opcs_cod_at = ["Todos"] + cods_at
-                    idx_cod_at = opcs_cod_at.index(filtros_at["cod"][1]) if filtros_at["cod"][1] in opcs_cod_at else 0
-                    f_cod_at = st.selectbox("🏷️ Código Atividade:", opcs_cod_at, index=idx_cod_at, key="f_cod_at")
-                    filtros_at["cod"] = ("Codigo_Atividade", f_cod_at)
+                        val_atual_sl_at = st.session_state.get("f_slider_dts_at", (min_dt_at, max_dt_at))
+                        v_start_at = max(min_dt_at, min(val_atual_sl_at[0], max_dt_at))
+                        v_end_at = max(min_dt_at, min(val_atual_sl_at[1], max_dt_at))
+                        if v_start_at > v_end_at: v_start_at = min_dt_at
 
-                with col_at4:
-                    df_p_uf_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "uf")
-                    ufs_at = sorted([str(u).strip() for u in df_p_uf_at["UF_Acao_PNAPA"].dropna().unique() if str(u).strip() != ""])
-                    opcs_uf_at = ["Todas"] + ufs_at
-                    idx_uf_at = opcs_uf_at.index(filtros_at["uf"][1]) if filtros_at["uf"][1] in opcs_uf_at else 0
-                    f_uf_at = st.selectbox("📍 UF da Ação:", opcs_uf_at, index=idx_uf_at, key="f_uf_at")
-                    filtros_at["uf"] = ("UF_Acao_PNAPA", f_uf_at)
+                        f_slider_dts_at = st.slider(
+                            "Data de Início:",
+                            min_value=min_dt_at,
+                            max_value=max_dt_at,
+                            value=(v_start_at, v_end_at),
+                            format="DD/MM/YYYY"
+                        )
+                        st.session_state["f_slider_dts_at"] = f_slider_dts_at
+                        filtros_at["data"] = ("Data_Inicio_Datetime", f_slider_dts_at)
 
-                # --- LINHA 2 DE FILTROS RESPONSIVOS ---
-                col_at5, col_at6, col_at7, col_at8 = st.columns(4)
-                with col_at5:
-                    df_p_srv_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "srv")
-                    srvs_at = sorted([str(s).strip() for s in df_p_srv_at["Servidor"].dropna().unique() if str(s).strip() != ""])
-                    opcs_srv_at = ["Todos"] + srvs_at
-                    idx_srv_at = opcs_srv_at.index(filtros_at["srv"][1]) if filtros_at["srv"][1] in opcs_srv_at else 0
-                    f_srv_at = st.selectbox("👤 Servidor:", opcs_srv_at, index=idx_srv_at, key="f_srv_at")
-                    filtros_at["srv"] = ("Servidor", f_srv_at)
+                with c_fat2:
+                    with st.popover("🗺️ UF / Servidor / Função", use_container_width=True):
+                        df_p_uf_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "uf")
+                        ufs_at = sorted([str(u).strip() for u in df_p_uf_at["UF_Acao_PNAPA"].dropna().unique() if str(u).strip() != ""])
+                        opcs_uf_at = ["Todas"] + ufs_at
+                        idx_uf_at = opcs_uf_at.index(filtros_at["uf"][1]) if filtros_at["uf"][1] in opcs_uf_at else 0
+                        f_uf_at = st.selectbox("UF da Ação:", opcs_uf_at, index=idx_uf_at, key="f_uf_at")
+                        filtros_at["uf"] = ("UF_Acao_PNAPA", f_uf_at)
 
-                with col_at6:
-                    df_p_func_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "func")
-                    funcs_disp = [f for f in LISTA_FUNCOES_CAMPO if f in df_p_func_at["Coordenador_Operacao"].astype(str).str.strip().unique()]
-                    opcs_func_at = ["Todas"] + (funcs_disp if funcs_disp else LISTA_FUNCOES_CAMPO)
-                    idx_func_at = opcs_func_at.index(filtros_at["func"][1]) if filtros_at["func"][1] in opcs_func_at else 0
-                    f_func_at = st.selectbox("🎖️ Função de Campo:", opcs_func_at, index=idx_func_at, key="f_func_at")
-                    filtros_at["func"] = ("Coordenador_Operacao", f_func_at)
+                        df_p_srv_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "srv")
+                        srvs_at = sorted([str(s).strip() for s in df_p_srv_at["Servidor"].dropna().unique() if str(s).strip() != ""])
+                        opcs_srv_at = ["Todos"] + srvs_at
+                        idx_srv_at = opcs_srv_at.index(filtros_at["srv"][1]) if filtros_at["srv"][1] in opcs_srv_at else 0
+                        f_srv_at = st.selectbox("Servidor:", opcs_srv_at, index=idx_srv_at, key="f_srv_at")
+                        filtros_at["srv"] = ("Servidor", f_srv_at)
 
-                with col_at7:
-                    df_p_and_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "and")
-                    ands_at = sorted([str(a).strip() for a in df_p_and_at["Andamento"].dropna().unique() if str(a).strip() != ""])
-                    opcs_and_at = ["Todos"] + ands_at
-                    idx_and_at = opcs_and_at.index(filtros_at["and"][1]) if filtros_at["and"][1] in opcs_and_at else 0
-                    f_and_at = st.selectbox("🔄 Andamento:", opcs_and_at, index=idx_and_at, key="f_and_at")
-                    filtros_at["and"] = ("Andamento", f_and_at)
+                        df_p_func_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "func")
+                        funcs_disp = [f for f in LISTA_FUNCOES_CAMPO if f in df_p_func_at["Coordenador_Operacao"].astype(str).str.strip().unique()]
+                        opcs_func_at = ["Todas"] + (funcs_disp if funcs_disp else LISTA_FUNCOES_CAMPO)
+                        idx_func_at = opcs_func_at.index(filtros_at["func"][1]) if filtros_at["func"][1] in opcs_func_at else 0
+                        f_func_at = st.selectbox("Função de Campo:", opcs_func_at, index=idx_func_at, key="f_func_at")
+                        filtros_at["func"] = ("Coordenador_Operacao", f_func_at)
 
-                with col_at8:
-                    df_p_tema_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "tema")
-                    temas_at = sorted([str(t).strip() for t in df_p_tema_at["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
-                    opcs_tema_at = ["Todos"] + temas_at
-                    idx_tema_at = opcs_tema_at.index(filtros_at["tema"][1]) if filtros_at["tema"][1] in opcs_tema_at else 0
-                    f_tema_at = st.selectbox("🏷️ Tema:", opcs_tema_at, index=idx_tema_at, key="f_tema_at")
-                    filtros_at["tema"] = ("Tema da Atividade", f_tema_at)
+                with c_fat3:
+                    with st.popover("🏷️ Classificação & Atividade", use_container_width=True):
+                        df_p_pna_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "pna")
+                        acoes_at = sorted(df_p_pna_at["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
+                        opcs_pna_at = ["Todas"] + acoes_at
+                        idx_pna_at = opcs_pna_at.index(filtros_at["pna"][1]) if filtros_at["pna"][1] in opcs_pna_at else 0
+                        f_pna_at = st.selectbox("Ação PNAPA:", opcs_pna_at, index=idx_pna_at, key="f_pna_at")
+                        filtros_at["pna"] = ("Número da Ação PNAPA", f_pna_at)
 
-                # --- LINHA 3: SLIDER DE DATAS RESPONSIVO DE ATIVIDADES ---
-                dts_validas_at = df_base_atvs["Data_Inicio_Datetime"].dropna()
-                min_dt_at = dts_validas_at.min().date() if not dts_validas_at.empty else date(2025, 1, 1)
-                max_dt_at = dts_validas_at.max().date() if not dts_validas_at.empty else date(2026, 12, 31)
-                if min_dt_at >= max_dt_at: max_dt_at = min_dt_at + pd.Timedelta(days=1)
+                        df_p_cod_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "cod")
+                        cods_at = sorted([str(c).strip() for c in df_p_cod_at["Codigo_Atividade"].dropna().unique() if str(c).strip() != ""])
+                        opcs_cod_at = ["Todos"] + cods_at
+                        idx_cod_at = opcs_cod_at.index(filtros_at["cod"][1]) if filtros_at["cod"][1] in opcs_cod_at else 0
+                        f_cod_at = st.selectbox("Código Atividade:", opcs_cod_at, index=idx_cod_at, key="f_cod_at")
+                        filtros_at["cod"] = ("Codigo_Atividade", f_cod_at)
 
-                f_slider_dts_at = st.slider(
-                    "⏳ Período (Data de Início da Atividade):",
-                    min_value=min_dt_at,
-                    max_value=max_dt_at,
-                    value=(min_dt_at, max_dt_at),
-                    format="DD/MM/YYYY",
-                    key="f_slider_dts_at"
-                )
-                filtros_at["data"] = ("Data_Inicio_Datetime", f_slider_dts_at)
+                        df_p_and_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "and")
+                        ands_at = sorted([str(a).strip() for a in df_p_and_at["Andamento"].dropna().unique() if str(a).strip() != ""])
+                        opcs_and_at = ["Todos"] + ands_at
+                        idx_and_at = opcs_and_at.index(filtros_at["and"][1]) if filtros_at["and"][1] in opcs_and_at else 0
+                        f_and_at = st.selectbox("Andamento:", opcs_and_at, index=idx_and_at, key="f_and_at")
+                        filtros_at["and"] = ("Andamento", f_and_at)
+
+                        df_p_tema_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "tema")
+                        temas_at = sorted([str(t).strip() for t in df_p_tema_at["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
+                        opcs_tema_at = ["Todos"] + temas_at
+                        idx_tema_at = opcs_tema_at.index(filtros_at["tema"][1]) if filtros_at["tema"][1] in opcs_tema_at else 0
+                        f_tema_at = st.selectbox("Tema:", opcs_tema_at, index=idx_tema_at, key="f_tema_at")
+                        filtros_at["tema"] = ("Tema da Atividade", f_tema_at)
+
+                with c_fat4:
+                    st.button("🧹 Limpar", use_container_width=True, on_click=limpar_filtros_atividades_t1, key="btn_limpar_at_t1")
 
                 # Aplicação final de todos os filtros
                 df_exib_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, None)
@@ -2071,7 +2091,7 @@ elif modo == "📊 Visualizar Base":
                 cols_at_validas = [c for c in COLS_TABELA_ATIVIDADES if c in df_exib_at.columns]
                 df_tab_at = df_exib_at[cols_at_validas].copy()
                 
-                # 🚀 FORMATAÇÃO DIRETA NO PADRÃO BR (Elimina None e ponto decimal)
+                # 🚀 FORMATAÇÃO DIRETA NO PADRÃO BR
                 df_tab_at["Resultado_Indicador"] = df_tab_at["Resultado_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
                 df_tab_at["Dias_Gastos_Plan"] = df_tab_at["Dias_Gastos_Plan"].apply(lambda v: formatar_numero_br(v, 1))
                 df_tab_at["Dias_Gastos_Exec"] = df_tab_at["Dias_Gastos_Exec"].apply(lambda v: formatar_numero_br(v, 1))
@@ -2128,8 +2148,8 @@ elif modo == "📊 Visualizar Base":
                             id_r_at = str(alvo_at["Id"])
                             uf_l_at = str(alvo_at.get("UF_Acao_PNAPA", "")).strip()
                             if perfil_usuario == "Editor Regional" and uf_l_at != uf_usuario and alt["Selecionar"] is True:
-                                st.error(f"⛔ Acesso Negado: Como Editor Regional ({uf_usuario}), você não tem permissão para editar registros da UF: {uf_l_ac}.")
-                                st.session_state["selecoes_atividades"][id_r_ac] = False
+                                st.error(f"⛔ Acesso Negado: Como Editor Regional ({uf_usuario}), você não tem permissão para editar registros da UF: {uf_l_at}.")
+                                st.session_state["selecoes_atividades"][id_r_at] = False
                             else:
                                 st.session_state["selecoes_atividades"][id_r_at] = alt["Selecionar"]
                             st.rerun()
@@ -2673,7 +2693,7 @@ elif modo == "📊 Visualizar Base":
                                         
                                         payload_linha = payload_gerador(
                                             v_ano, v_num_acao, v_nome_acao, v_indicador, "Atividade",
-                                            v_nome_atv, v_and, v_res_ind, v_doc, v_uf_acao,
+                                            v_nome_atv, v_and, v_res_ind, v_doc, ed_uf_acao_val,
                                             v_imp, v_tema, v_obj, v_tipo, v_perigo, v_srv,
                                             v_uf_srv, v_lot, v_eq, v_pcdp, v_pais, v_uf_oc,
                                             v_est_oc, v_mun_oc, v_dti, v_dtf, v_dpl, v_dex,
