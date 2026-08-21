@@ -1956,13 +1956,31 @@ elif modo == "📊 Visualizar Base":
             if df_base_atvs.empty:
                 st.info("Nenhuma Atividade de Campo cadastrada na base.")
             else:
-                # 1. 🚀 INICIALIZAÇÃO SEGURA DOS FILTROS POPOVER
-                for k in ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_and_at", "f_tema_at"]:
+                # 1. 🚀 CÁLCULO DO STATUS DE CONCLUSÃO COM BADGES COLORIDOS
+                def calc_status_atv_t1(row):
+                    andamento = str(row.get("Andamento", "")).strip()
+                    doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
+                    if doc.lower() in ["nan", "none", "null"]: doc = ""
+                    dt_fim = row.get("Data_Termino_Datetime")
+                    
+                    if andamento == "Concluída":
+                        if not doc:
+                            return "🟡 Sem Documento de Conclusão"
+                        return "🟢 Concluída"
+                    else: # Prevista, Não Iniciada, etc.
+                        if pd.notna(dt_fim) and hoje > dt_fim:
+                            return "🔴 Atrasada"
+                        return "🔵 Prevista"
+
+                df_base_atvs["Status de Conclusão"] = df_base_atvs.apply(calc_status_atv_t1, axis=1)
+
+                # 2. 🚀 INICIALIZAÇÃO SEGURA DOS FILTROS POPOVER
+                for k in ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_status_at", "f_tema_at"]:
                     if k not in st.session_state:
                         st.session_state[k] = "Todas" if k in ["f_pna_at", "f_uf_at", "f_func_at"] else "Todos"
 
                 def limpar_filtros_atividades_t1():
-                    for k in ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_and_at", "f_tema_at"]:
+                    for k in ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_status_at", "f_tema_at"]:
                         st.session_state[k] = "Todas" if k in ["f_pna_at", "f_uf_at", "f_func_at"] else "Todos"
                     if "f_slider_dts_at" in st.session_state:
                         del st.session_state["f_slider_dts_at"]
@@ -1974,12 +1992,12 @@ elif modo == "📊 Visualizar Base":
                     "uf": ("UF_Acao_PNAPA", st.session_state["f_uf_at"]),
                     "srv": ("Servidor", st.session_state["f_srv_at"]),
                     "func": ("Coordenador_Operacao", st.session_state["f_func_at"]),
-                    "and": ("Andamento", st.session_state["f_and_at"]),
+                    "status": ("Status de Conclusão", st.session_state["f_status_at"]),
                     "tema": ("Tema da Atividade", st.session_state["f_tema_at"]),
                     "data": ("Data_Inicio_Datetime", st.session_state.get("f_slider_dts_at", None))
                 }
 
-                # 2. 🚀 BARRA DE FILTROS SUPERIOR COM POPOVERS (PADRÃO MODERNO)
+                # 3. 🚀 BARRA DE FILTROS SUPERIOR COM POPOVERS
                 c_fat1, c_fat2, c_fat3, c_fat4 = st.columns([1, 1.2, 1.2, 0.5])
                 
                 with c_fat1:
@@ -2037,6 +2055,13 @@ elif modo == "📊 Visualizar Base":
 
                 with c_fat3:
                     with st.popover("🏷️ Classificação & Atividade", use_container_width=True):
+                        # 🚀 Filtro de Status de Conclusão no Popover
+                        df_p_status_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "status")
+                        status_disp_at = ["Todos"] + sorted([s for s in df_p_status_at["Status de Conclusão"].dropna().astype(str).unique() if s != ""])
+                        idx_status_at = status_disp_at.index(filtros_at["status"][1]) if filtros_at["status"][1] in status_disp_at else 0
+                        f_status_at = st.selectbox("Status de Conclusão:", status_disp_at, index=idx_status_at, key="f_status_at")
+                        filtros_at["status"] = ("Status de Conclusão", f_status_at)
+
                         df_p_pna_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "pna")
                         acoes_at = sorted(df_p_pna_at["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
                         opcs_pna_at = ["Todas"] + acoes_at
@@ -2050,13 +2075,6 @@ elif modo == "📊 Visualizar Base":
                         idx_cod_at = opcs_cod_at.index(filtros_at["cod"][1]) if filtros_at["cod"][1] in opcs_cod_at else 0
                         f_cod_at = st.selectbox("Código Atividade:", opcs_cod_at, index=idx_cod_at, key="f_cod_at")
                         filtros_at["cod"] = ("Codigo_Atividade", f_cod_at)
-
-                        df_p_and_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "and")
-                        ands_at = sorted([str(a).strip() for a in df_p_and_at["Andamento"].dropna().unique() if str(a).strip() != ""])
-                        opcs_and_at = ["Todos"] + ands_at
-                        idx_and_at = opcs_and_at.index(filtros_at["and"][1]) if filtros_at["and"][1] in opcs_and_at else 0
-                        f_and_at = st.selectbox("Andamento:", opcs_and_at, index=idx_and_at, key="f_and_at")
-                        filtros_at["and"] = ("Andamento", f_and_at)
 
                         df_p_tema_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "tema")
                         temas_at = sorted([str(t).strip() for t in df_p_tema_at["Tema da Atividade"].dropna().unique() if str(t).strip() != ""])
@@ -2074,12 +2092,12 @@ elif modo == "📊 Visualizar Base":
                 df_exib_at["Data de Início"] = df_exib_at["Data_Inicio_Datetime"].dt.date
                 df_exib_at["Data de Término"] = df_exib_at["Data_Termino_Datetime"].dt.date
 
-                # 📋 COLUNAS RELEVANTES PARA ATIVIDADES
+                # 4. 📋 COLUNAS REORDENADAS (Status de Conclusão após Nome da Atividade)
                 COLS_TABELA_ATIVIDADES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Codigo_Atividade", 
-                    "Nome da Atividade", "Papel_Institucional", "Coordenador_Operacao", 
+                    "Nome da Atividade", "Status de Conclusão", "Papel_Institucional", "Coordenador_Operacao", 
                     "Servidor", "UF_Servidor", "Lotação", "UF_Acao_PNAPA", 
-                    "Municipio Onde Ocorreu/Ocorrerá a Ação", "Andamento", "Indicador", 
+                    "Municipio Onde Ocorreu/Ocorrerá a Ação", "Indicador", 
                     "Resultado_Indicador", "Doc_Probatorio_Exec", "Data de Início", 
                     "Data de Término", "Dias_Gastos_Plan", "Dias_Gastos_Exec", 
                     "Origem do Recurso", "Rec_Plan_Total", "Rec_Exec_Total", 
@@ -2091,7 +2109,7 @@ elif modo == "📊 Visualizar Base":
                 cols_at_validas = [c for c in COLS_TABELA_ATIVIDADES if c in df_exib_at.columns]
                 df_tab_at = df_exib_at[cols_at_validas].copy()
                 
-                # 🚀 FORMATAÇÃO DIRETA NO PADRÃO BR
+                # Formatação Direta no Padrão Brasileiro
                 df_tab_at["Resultado_Indicador"] = df_tab_at["Resultado_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
                 df_tab_at["Dias_Gastos_Plan"] = df_tab_at["Dias_Gastos_Plan"].apply(lambda v: formatar_numero_br(v, 1))
                 df_tab_at["Dias_Gastos_Exec"] = df_tab_at["Dias_Gastos_Exec"].apply(lambda v: formatar_numero_br(v, 1))
@@ -2135,6 +2153,7 @@ elif modo == "📊 Visualizar Base":
                     colunas_travadas_at = {col: st.column_config.Column(disabled=True) for col in df_tab_at.columns}
 
                 colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+                colunas_travadas_at["Status de Conclusão"] = st.column_config.TextColumn("Status de Conclusão", disabled=True)
                 colunas_travadas_at["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_at["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
 
@@ -2202,7 +2221,7 @@ elif modo == "📊 Visualizar Base":
                         with aba1_at:
                             st.markdown("##### 🗂️ Ação PNAPA Vinculada (Pai)")
                             lista_opcoes_vinc = sorted((df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas.empty else []
-                            cod_atual_salvo = str(reg_at_alvo.get("Número da Ação PNAPA", "")).strip()
+                            cod_atual_salvo = str(reg_at_alvo.get("Número da Ação PNAPA", "")) .strip()
                             
                             idx_pna_atual = 0
                             for i, opc in enumerate(lista_opcoes_vinc):
@@ -2378,7 +2397,6 @@ elif modo == "📊 Visualizar Base":
                                 ed_rp_p_at = st.number_input("Rec_Plan_Passagens:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Passagens")), step=50.0, format="%.2f", key=f"t1_at_rpp_{id_at_ref}")
                                 ed_rp_o_at = st.number_input("Rec_Plan_Outras_Despesas:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Plan_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_at_rpo_{id_at_ref}")
                                 
-                                # 🚀 RECALCULO REATIVO SEM TRAVA DE KEY
                                 tot_pl_calc = ed_rp_d_at + ed_rp_p_at + ed_rp_o_at
                                 st.text_input("Rec_Plan_Total (Soma):", value=formatar_moeda_br(tot_pl_calc), disabled=True)
                                 
@@ -2388,7 +2406,6 @@ elif modo == "📊 Visualizar Base":
                                 ed_re_p_at = st.number_input("Rec_Exec_Passagens:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Passagens")), step=50.0, format="%.2f", key=f"t1_at_rep_{id_at_ref}")
                                 ed_re_o_at = st.number_input("Rec_Exec_Outras_Despesas:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Rec_Exec_Outras_Despesas")), step=50.0, format="%.2f", key=f"t1_at_reo_{id_at_ref}")
                                 
-                                # 🚀 RECALCULO REATIVO SEM TRAVA DE KEY
                                 tot_ex_calc = ed_re_d_at + ed_re_p_at + ed_re_o_at
                                 st.text_input("Rec_Exec_Total (Soma):", value=formatar_moeda_br(tot_ex_calc), disabled=True)
 
