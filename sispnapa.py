@@ -15,6 +15,7 @@ URL_FLOW_UNIDADES = "https://default6ae3f5e7541942a780758c1490c72b.25.environmen
 URL_FLOW_EQUIPES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3d124cc6783845e1b8618cfb3302eca0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ubTQ-LAIsToMOX0CGytlI2YM_WKmC_mRT64ybRLBRSY"
 URL_FLOW_PNAPAS = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/38cc92ea33ba4d6387b924d6eac62d58/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=LlCDUzrETHyXxp_QLte1eGxKR_4LuwRGzPJbgUsHvgk"
 URL_FLOW_SUGESTOES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/12/workflows/879c1fc3770545039e738cc24d0a4a23/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=_4vVSJhFVRuYWXneiKhnPkx3A66J9DFzLWM0OmISV-U"
+URL_FLOW_EMAIL_360 = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/24/workflows/a2a7b0526f8e4730853282bf013e5603/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=57OBkb0svwTTghUCsEjVkVxF2zMYVke_gDtcT3upaGI"
 
 # URL da Planilha Macro Principal (Movidas para o topo para evitar NameError)
 URL_FLOW_PRINCIPAL = st.secrets["power_automate"]["URL_PRINCIPAL"]
@@ -230,6 +231,38 @@ def executar_api_equipes(dados_json):
         if resposta.status_code == 200: return resposta.json()
         return []
     except: return []
+
+def disparar_email_360(codigo_atv, nome_atv, lista_servidores_equipe, df_serv_aux):
+    """Envia o comando de e-mail ao PA se a equipe for >= 3 membros."""
+    
+    # 🚀 PAUSA DO ALFA: Aborta o disparo de e-mails até o módulo ser oficialmente lançado
+    return
+    
+    equipe_unica = list(set(lista_servidores_equipe))
+    
+    if len(equipe_unica) >= 3:
+        emails = df_serv_aux[df_serv_aux["Servidor"].isin(equipe_unica)]["E_mail"].dropna().tolist()
+        
+        # 🚀 DEDUPLICA OS E-MAILS (Evita que o Outlook bloqueie o envio por destinatários repetidos)
+        emails_unicos = list(set([str(e).strip() for e in emails if str(e).strip()]))
+        
+        if emails_unicos:
+            payload_email = {
+                "destinatarios": ";".join(emails_unicos),
+                "codigo": str(codigo_atv),
+                "nome": str(nome_atv)
+            }
+            try:
+                r = requests.post(URL_FLOW_EMAIL_360, json=payload_email, timeout=10)
+                if r.status_code in [200, 202]:
+                    # 🚀 ALERTA VISUAL PARA O SEU TESTE
+                    st.toast(f"📧 E-mail 360º enviado com sucesso para {len(emails_unicos)} endereço(s)!", icon="✅")
+                else:
+                    st.toast(f"❌ Falha no E-mail (Status {r.status_code})", icon="⚠️")
+            except:
+                st.toast("❌ Erro de conexão ao enviar E-mail 360º", icon="⚠️")
+        else:
+            st.toast("⚠️ Missão c/ 3 membros, mas nenhum e-mail cadastrado na base.", icon="⚠️")
 
 @st.cache_data(ttl=15, show_spinner=False)
 def carregar_sugestoes():
@@ -544,7 +577,7 @@ else:
     else:
         st.sidebar.info("👁️ Perfil: Somente Visualização")
 
-# Montagem Dinâmica do Menu Lateral (Garantindo Sugestões como a ÚLTIMA opção)
+# Montagem Dinâmica do Menu Lateral
 opcoes_menu = [
     "📈 Dashboards Executivos", 
     "📊 Visualizar Base"
@@ -559,7 +592,8 @@ if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
         "🗂️ Gerenciar Ações PNAPA"
     ])
 
-# 🚀 Sugestões sempre como o último item para todos os perfis:
+# 🚀 Módulo 360º PAUSADO para o Alfa (Basta tirar o '#' para ele voltar a aparecer)
+#opcoes_menu.append("⭐ Meus Feedbacks (360º)")
 opcoes_menu.append("💡 Sugestões & Melhorias")
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
@@ -571,10 +605,7 @@ if st.sidebar.button("🔄 Atualizar Base (Refresh)", use_container_width=True):
     if "df" in st.session_state: 
         del st.session_state.df
     st.rerun()
-    
-# Variáveis de controle de contexto para a Planilha Macro
-registro_selecionado = None
-id_atual = ""
+
 
 # =================================================================
 # V. NÚCLEO OPERACIONAL DAS TELAS
@@ -1464,37 +1495,7 @@ if modo == "📈 Dashboards Executivos":
                 fig_matriz.update_layout(xaxis_title="Dias Planejados", yaxis_title="", plot_bgcolor="white", margin=dict(t=10, b=0, l=0, r=0), height=350)
                 st.plotly_chart(fig_matriz, use_container_width=True)
 
-        # ---------------------------------------------------------------------
-        # ABA 4: DESEMPENHO DAS EQUIPES
-        # ---------------------------------------------------------------------
-        with tab_desemp:
-            st.markdown("### ⭐ Avaliação de Qualidade e Entregas")
-            if "Avaliacao_Qualidade" in df_filt_atv.columns:
-                df_avaliados = df_filt_atv[df_filt_atv["Avaliacao_Qualidade"].isin(["0 - Insatisfatória", "1 - Satisfatória"])]
-                
-                if df_avaliados.empty:
-                    st.info("Nenhuma atividade avaliada pela liderança nos filtros selecionados.")
-                else:
-                    total_aval = len(df_avaliados)
-                    sat_count = len(df_avaliados[df_avaliados["Avaliacao_Qualidade"] == "1 - Satisfatória"])
-                    taxa_sucesso = (sat_count / total_aval) * 100 if total_aval > 0 else 0
-                    
-                    c_ds1, c_ds2 = st.columns([1, 2])
-                    with c_ds1:
-                        st.metric("Taxa de Entregas Satisfatórias", f"{taxa_sucesso:.1f}%")
-                        st.caption(f"Baseado em {total_aval} avaliações concluídas.")
-                        
-                    with c_ds2:
-                        st.markdown("##### Desempenho por Servidor")
-                        df_perf = df_avaliados.groupby("Servidor")["Avaliacao_Qualidade"].value_counts().unstack(fill_value=0).reset_index()
-                        if "1 - Satisfatória" not in df_perf.columns: df_perf["1 - Satisfatória"] = 0
-                        if "0 - Insatisfatória" not in df_perf.columns: df_perf["0 - Insatisfatória"] = 0
-                        
-                        df_perf["Total"] = df_perf["1 - Satisfatória"] + df_perf["0 - Insatisfatória"]
-                        df_perf["Taxa Sucesso (%)"] = (df_perf["1 - Satisfatória"] / df_perf["Total"] * 100).round(1)
-                        st.dataframe(df_perf.sort_values("Taxa Sucesso (%)", ascending=False), use_container_width=True, hide_index=True)
-            else:
-                st.info("A coluna de avaliação de qualidade ainda não foi sincronizada ou gerada na base.")
+        
 
 # --- TELA 1: VISUALIZAÇÃO E EDIÇÃO EM DUAS SUBPÁGINAS (AÇÕES vs ATIVIDADES) ---
 elif modo == "📊 Visualizar Base":
@@ -2223,6 +2224,8 @@ elif modo == "📊 Visualizar Base":
 
 # --- TELA 2: FORMULÁRIO DA PLANILHA MACRO (INSERIR NOVA LINHA) ---
 elif modo == "➕ Inserir Nova Linha":
+    registro_selecionado = None
+    id_atual = ""
     st.markdown(f"<h3 style='color: #03170a;'>Formulário de Dados PNAPA — Modo: {modo}</h3>", unsafe_allow_html=True)
     
     idx_nivel_padrao = 0 if registro_selecionado is None or str(registro_selecionado.get("Nível", "")) == "Ação" else 1
@@ -3583,7 +3586,166 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         except Exception as e:
                             st.error(f"❌ Erro de conexão: {e}")
 
-# --- TELA: CENTRAL DE SUGESTÕES E MELHORIAS ---
+
+
+# --- TELA: MEUS FEEDBACKS (360º) ---
+elif modo == "⭐ Meus Feedbacks (360º)":
+    st.markdown("<h3 style='color: #03170a;'>⭐ Meus Feedbacks e Avaliações de Pares (360º)</h3>", unsafe_allow_html=True)
+    st.markdown("Nesta área, você avalia colegas de missões concluídas (com 3 ou mais membros) e consulta os feedbacks anônimos que recebeu para o seu desenvolvimento profissional.")
+    
+    import json
+    
+    # 🚀 DATA DE CORTE RETROATIVA (01 de Agosto) para garantir que seus testes apareçam
+    DATA_CORTE_360 = pd.Timestamp(date(2026, 8, 1))
+    
+    def limpar_e_converter_data(valor):
+        if pd.isna(valor): return pd.NaT
+        val_str = str(valor).strip()
+        if val_str == "" or val_str.lower() in ["none", "nat", "nan"]: return pd.NaT
+        if val_str.replace('.', '', 1).isdigit():
+            try: return pd.to_datetime(int(float(val_str)), unit='D', origin='1899-12-30')
+            except: pass
+        return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
+
+    df_atvs = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
+    df_atvs["Data_Termino_DT"] = df_atvs["Data de Término"].apply(limpar_e_converter_data)
+    
+    df_concluidas = df_atvs[
+        (df_atvs["Andamento"].astype(str).str.strip() == "Concluída") &
+        (df_atvs["Data_Termino_DT"].notna()) &
+        (df_atvs["Data_Termino_DT"] >= DATA_CORTE_360)
+    ].copy()
+    
+    contagem_membros = df_concluidas.groupby("Codigo_Atividade")["Servidor"].nunique().reset_index()
+    codigos_elegiveis = contagem_membros[contagem_membros["Servidor"] >= 3]["Codigo_Atividade"].tolist()
+    
+    df_elegiveis = df_concluidas[df_concluidas["Codigo_Atividade"].isin(codigos_elegiveis)]
+    
+    # 🚀 CORREÇÃO DE IDENTIDADE: Mapeia TODOS os nomes que estão com o seu e-mail
+    meus_nomes_cadastrados = df_servidores[df_servidores["E_mail"] == email_logado]["Servidor"].unique().tolist()
+    if not meus_nomes_cadastrados:
+        meus_nomes_cadastrados = [nome_usuario_logado]
+        
+    minhas_missoes_elegiveis = df_elegiveis[df_elegiveis["Servidor"].isin(meus_nomes_cadastrados)]["Codigo_Atividade"].unique().tolist()
+    
+    tab_pendentes, tab_recebidos = st.tabs(["⏳ Avaliações Pendentes (Avaliar Colegas)", "📊 Meu Desempenho (Feedbacks Recebidos)"])
+    
+    with tab_pendentes:
+        st.markdown("#### 🎯 Colegas aguardando sua avaliação")
+        
+        # Filtra os colegas da missão, ignorando você (A trava está desabilitada para o teste)
+        df_colegas = df_elegiveis[
+            (df_elegiveis["Codigo_Atividade"].isin(minhas_missoes_elegiveis)) 
+            # & (~df_elegiveis["Servidor"].isin(meus_nomes_cadastrados))  <-- COMENTADO PARA O SEU TESTE
+        ].copy()
+        
+        def ja_avaliei(json_str):
+            try:
+                avals = json.loads(str(json_str))
+                return any(a.get("avaliador") == email_logado for a in avals)
+            except:
+                return False
+                
+        df_colegas["Ja_Avaliei"] = df_colegas["Avaliacao_Feedback"].apply(ja_avaliei)
+        df_pendentes = df_colegas[~df_colegas["Ja_Avaliei"]]
+        
+        if df_pendentes.empty:
+            st.success("🎉 Excelente! Você não tem nenhuma avaliação pendente. Todos os seus colegas de missão já foram avaliados.")
+        else:
+            st.info(f"Você tem **{len(df_pendentes)}** avaliação(ões) pendente(s).")
+            
+            opcoes_pendentes = []
+            mapa_linhas_pendentes = {}
+            for _, row in df_pendentes.iterrows():
+                label = f"[{row['Codigo_Atividade']}] Missão: {row['Nome da Atividade']} | Colega: {row['Servidor']}"
+                opcoes_pendentes.append(label)
+                mapa_linhas_pendentes[label] = row
+                
+            alvo_sel = st.selectbox("Selecione o Colega para Avaliar:", opcoes_pendentes)
+            linha_alvo = mapa_linhas_pendentes[alvo_sel]
+            
+            st.markdown(f"**Avaliando:** {linha_alvo['Servidor']}")
+            
+            nota_360 = st.radio("Como você avalia a participação e entrega deste colega nesta missão?", ["1 - Satisfatória / Positiva 👍", "0 - Insatisfatória / Precisa Melhorar 👎"])
+            feedback_360 = st.text_area("Deixe um comentário construtivo (O colega verá o texto, mas não saberá quem escreveu):")
+            
+            if st.button("💾 Enviar Avaliação", type="primary"):
+                json_antigo = str(linha_alvo["Avaliacao_Feedback"]).strip()
+                try:
+                    lista_avals = json.loads(json_antigo)
+                    if not isinstance(lista_avals, list): lista_avals = []
+                except:
+                    lista_avals = []
+                    
+                nova_aval = {
+                    "avaliador": email_logado,
+                    "nota": 1 if "1" in nota_360 else 0,
+                    "feedback": feedback_360.strip()
+                }
+                lista_avals.append(nova_aval)
+                json_novo = json.dumps(lista_avals, ensure_ascii=False)
+                
+                p_item = {col: linha_alvo[col] for col in df_atual.columns if col in linha_alvo}
+                p_item["Acao"] = "Editar"
+                p_item["Id"] = str(linha_alvo["Id"])
+                p_item["Avaliacao_Feedback"] = json_novo
+                
+                payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
+                
+                with st.spinner("Enviando avaliação..."):
+                    executar_envio_sharepoint([payload_sanit])
+                    time.sleep(1.5)
+                    st.cache_data.clear()
+                    if "df" in st.session_state: del st.session_state.df
+                st.success("Avaliação enviada com sucesso! Obrigado pelo feedback.")
+                time.sleep(1.5)
+                st.rerun()
+
+    with tab_recebidos:
+        st.markdown("#### 📊 Meu Computo Geral e Feedbacks")
+        
+        minhas_linhas = df_elegiveis[df_elegiveis["Servidor"].isin(meus_nomes_cadastrados)]
+        
+        todas_avals_recebidas = []
+        for _, row in minhas_linhas.iterrows():
+            try:
+                avals = json.loads(str(row["Avaliacao_Feedback"]))
+                for a in avals:
+                    a["Atividade"] = row["Nome da Atividade"]
+                    a["Codigo"] = row["Codigo_Atividade"]
+                todas_avals_recebidas.extend(avals)
+            except:
+                continue
+                
+        if not todas_avals_recebidas:
+            st.info("Você ainda não recebeu avaliações dos seus colegas nas missões elegíveis.")
+        else:
+            total_recebido = len(todas_avals_recebidas)
+            total_positivos = sum(1 for a in todas_avals_recebidas if a.get("nota") == 1)
+            taxa_satisfacao = (total_positivos / total_recebido) * 100
+            
+            c_dash1, c_dash2, c_dash3 = st.columns(3)
+            c_dash1.metric("Total de Avaliações Recebidas", total_recebido)
+            c_dash2.metric("Avaliações Positivas (Satisfatório)", total_positivos)
+            c_dash3.metric("Taxa de Aprovação", f"{taxa_satisfacao:.1f}%")
+            
+            st.markdown("---")
+            st.markdown("##### 💬 Mural de Feedbacks Anônimos")
+            for av in todas_avals_recebidas:
+                cor_borda = "#22c55e" if av.get("nota") == 1 else "#ef4444"
+                icone = "👍" if av.get("nota") == 1 else "👎"
+                texto = av.get("feedback", "Sem comentário.")
+                if texto == "": texto = "*Avaliador não deixou comentário.*"
+                
+                st.markdown(f"""
+                <div style="border-left: 5px solid {cor_borda}; padding: 10px; margin-bottom: 10px; background-color: #f8fafc; border-radius: 5px;">
+                    <p style="margin:0; font-size:12px; color:#64748b;">Missão: {av['Codigo']} - {av['Atividade']}</p>
+                    <p style="margin:5px 0 0 0; color:#0f172a;"><b>{icone}</b> "{texto}"</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+
+# --- TELA 7: CENTRAL DE SUGESTÕES E MELHORIAS ---
 elif modo == "💡 Sugestões & Melhorias":
     st.markdown("<h2 style='color: #03170a;'>💡 Central de Feedback & Sugestões de Melhoria</h2>", unsafe_allow_html=True)
     st.caption("Espaço colaborativo para que testadores e usuários enviem inconsistências, ideias e solicitações.")
