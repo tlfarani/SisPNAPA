@@ -2500,10 +2500,19 @@ elif modo == "📊 Visualizar Base":
                                     edicoes_lote["Indicador"] = str(dados_novo_pai_lt["Indicador"])
                                     edicoes_lote["Importância da Atividade"] = str(dados_novo_pai_lt.get("Importância", "Ordinária")).strip()
 
+                            # 🚀 NOVO: UF DA AÇÃO EDITÁVEL EM LOTE (SOMENTE ADMINISTRADOR)
+                            if perfil_usuario == "Administrador":
+                                st.markdown("##### 📍 UF da Ação")
+                                if st.checkbox("Alterar UF da Ação PNAPA?", key="chk_uf_acao_lt"):
+                                    uf_atual_lote = str(df_at_sel.iloc[0].get("UF_Acao_PNAPA", "SP")).strip()
+                                    idx_uf_padrao = LISTA_UFS_COMPLETA.index(uf_atual_lote) if uf_atual_lote in LISTA_UFS_COMPLETA else 0
+                                    edicoes_lote["UF_Acao_PNAPA"] = st.selectbox("Nova UF da Ação:", LISTA_UFS_COMPLETA, index=idx_uf_padrao, key="in_uf_acao_lt")
+
                             st.markdown("##### 🏷️ Código e Agrupador da Atividade")
                             if st.checkbox("Alterar Código da Atividade/Missão?", key="chk_cod_lt"):
                                 acao_base_lt = edicoes_lote.get("Número da Ação PNAPA", str(df_at_sel.iloc[0].get("Número da Ação PNAPA", "")).strip())
-                                uf_base_lt = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
+                                # Puxa dinamicamente a nova UF escolhida ou a da primeira linha selecionada
+                                uf_base_lt = edicoes_lote.get("UF_Acao_PNAPA", str(df_at_sel.iloc[0].get("UF_Acao_PNAPA", uf_usuario)).strip())
                                 
                                 df_atvs_acao_uf_lt = df_atual[
                                     (df_atual["Nível"] == "Atividade") &
@@ -2657,7 +2666,9 @@ elif modo == "📊 Visualizar Base":
                                         v_nome_acao = edicoes_lote.get("Nome da Ação PNAPA", row.get("Nome da Ação PNAPA", ""))
                                         v_indicador = edicoes_lote.get("Indicador", row.get("Indicador", ""))
                                         v_imp = edicoes_lote.get("Importância da Atividade", row.get("Importância da Atividade", "Ordinária"))
-                                        v_uf_acao = str(row.get("UF_Acao_PNAPA", uf_usuario)).strip()
+                                        
+                                        # 🚀 AGORA ELE LÊ A UF ESCOLHIDA NO LOTE!
+                                        v_uf_acao = edicoes_lote.get("UF_Acao_PNAPA", str(row.get("UF_Acao_PNAPA", uf_usuario)).strip())
                                         v_papel = str(row.get("Papel_Institucional", "")).strip()
                                         
                                         v_cod_atv = edicoes_lote.get("Codigo_Atividade", str(row.get("Codigo_Atividade", "")).strip())
@@ -2708,7 +2719,6 @@ elif modo == "📊 Visualizar Base":
                                         
                                         v_obs = edicoes_lote.get("Observações", str(row.get("Observações", "")))
                                         
-                                        # 🚀 CORREÇÃO: Usando v_uf_acao em vez de ed_uf_acao_val
                                         payload_linha = payload_gerador(
                                             v_ano, v_num_acao, v_nome_acao, v_indicador, "Atividade",
                                             v_nome_atv, v_and, v_res_ind, v_doc, v_uf_acao,
