@@ -577,43 +577,6 @@ if modo == "📈 Dashboards Executivos":
         # 2. PREPARAÇÃO DE DADOS E LÓGICA DE STATUS
         # =====================================================================
         
-        # --- AÇÕES (Macro) ---
-        df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
-        df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], dayfirst=True, errors='coerce')
-        df_dash_acao["Data_Fim_DT"] = pd.to_datetime(df_dash_acao["Data de Término"], dayfirst=True, errors='coerce')
-        df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
-        df_dash_acao["Rec_Plan_Total"] = pd.to_numeric(df_dash_acao["Rec_Plan_Total"], errors='coerce').fillna(0)
-        df_dash_acao["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0)
-        df_dash_acao["Justificativa_Acao_PNAPA"] = df_dash_acao.get("Justificativa_Acao_PNAPA", "").fillna("")
-
-        def classificar_status_acao(row):
-            andamento = str(row.get("Andamento", "")).strip()
-            justif = str(row.get("Justificativa_Acao_PNAPA", "")).strip()
-            if justif.lower() in ["nan", "none", "null"]: justif = ""
-            dt_fim = row.get("Data_Fim_DT")
-            
-            if andamento in ["Planejada", "Planejado", "Planejadas"]:
-                if pd.notna(dt_fim):
-                    if dt_fim >= hoje:
-                        return "Planejada"
-                    else:
-                        return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
-                else:
-                    ano_str = str(row.get("Ano da Ação", "")).split('.')[0]
-                    if ano_str.isdigit() and int(ano_str) < hoje.year:
-                        return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
-                    return "Planejada"
-                    
-            elif andamento in ["Não Demandada", "Não demandada", "Não_demandada"]:
-                return "Não Demandada"
-                
-            elif andamento == "Cancelada":
-                return "Cancelada - Sem Justificativa" if justif == "" else "Cancelada (Justificada)"
-                
-            return andamento
-
-        df_dash_acao["Status de Execução"] = df_dash_acao.apply(classificar_status_acao, axis=1)
-
         # --- ATIVIDADES (Micro) ---
         df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
         df_dash_atv["Data_Inicio_DT"] = pd.to_datetime(df_dash_atv["Data de Início"], dayfirst=True, errors='coerce')
@@ -641,10 +604,78 @@ if modo == "📈 Dashboards Executivos":
             return andamento
             
         df_dash_atv["Status_Atividade"] = df_dash_atv.apply(classificar_status_atv, axis=1)
-        
-        # Propagar Status da Ação para as Atividades (garante que o filtro global funcione cruzado)
-        mapa_status_acao = dict(zip(df_dash_acao["Número da Ação PNAPA"], df_dash_acao["Status de Execução"]))
-        df_dash_atv["Status de Execução"] = df_dash_atv["Número da Ação PNAPA"].map(mapa_status_acao)
+
+        # 🚀 Agrega previamente as atividades concluídas por Ação e UF para alimentar a classificação
+        atv_concluidas_prev = df_dash_atv[df_dash_atv["Andamento"] == "Concluída"]
+        agg_atv_acao = atv_concluidas_prev.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"]).agg(
+            Resultado_Indicador_Agregado=('Resultado_Indicador', 'sum'),
+            Dias_Gastos_Exec_Agregado=('Dias_Gastos_Exec', 'sum')
+        ).reset_index()
+
+        # --- AÇÕES (Macro) ---
+        df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
+        df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], dayfirst=True, errors='coerce')
+        df_dash_acao["Data_Fim_DT"] = pd.to_datetime(df_dash_acao["Data de Término"], dayfirst=True, errors='coerce')
+        df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
+        df_dash_acao["Rec_Plan_Total"] = pd.to_numeric(df_dash_acao["Rec_Plan_Total"], errors='coerce').fillna(0)
+        df_dash_acao["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0)
+        df_dash_acao["Justificativa_Acao_PNAPA"] = df_dash_acao.get("Justificativa_Acao_PNAPA", "").fillna("")
+
+        # Cruza as métricas agregadas na tabela de Ações
+        df_dash_acao = pd.merge(df_dash_acao, agg_atv_acao, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left")
+        df_dash_acao["Resultado_Indicador_Agregado"] = df_dash_acao["Resultado_Indicador_Agregado"].fillna(0)
+        df_dash_acao["Dias_Gastos_Exec_Agregado"] = df_dash_acao["Dias_Gastos_Exec_Agregado"].fillna(0)
+
+        def classificar_status_acao(row):
+            andamento = str(row.get("Andamento", "")).strip()
+            justif = str(row.get("Justificativa_Acao_PNAPA", "")).strip()
+            if justif.lower() in ["nan", "none", "null"]: justif = ""
+            dt_fim = row.get("Data_Fim_DT")
+            
+            meta = float(row.get("Meta_Indicador", 0) or 0)
+            res = float(row.get("Resultado_Indicador_Agregado", 0) or 0)
+            dias_exec = float(row.get("Dias_Gastos_Exec_Agregado", 0) or 0)
+            
+            # 1. Trata andamentos especiais
+            if andamento in ["Não Demandada", "Não demandada", "Não_demandada"]:
+                return "Não Demandada"
+                
+            if andamento == "Cancelada":
+                return "Cancelada - Sem Justificativa" if justif == "" else "Cancelada (Justificada)"
+            
+            # 2. Avalia se a Ação atingiu o critério de Executada (Meta >= 80% OU Meta=0 com dias > 0)
+            atingiu_meta = False
+            if meta > 0:
+                if (res / meta) >= 0.8:
+                    atingiu_meta = True
+            elif meta == 0 and dias_exec > 0:
+                atingiu_meta = True
+                
+            if atingiu_meta:
+                return "Executada"
+
+            # 3. Se não atingiu, avalia prazo (data de término) e justificativa
+            if andamento in ["Planejada", "Planejado", "Planejadas", "Não Executada", ""]:
+                if pd.notna(dt_fim):
+                    if dt_fim >= hoje:
+                        return "Planejada"
+                    else:
+                        return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
+                else:
+                    ano_str = str(row.get("Ano da Ação", "")).split('.')[0]
+                    if ano_str.isdigit() and int(ano_str) < hoje.year:
+                        return "Não Executada - Sem Justificativa" if justif == "" else "Não Executada - Justificada"
+                    return "Planejada"
+                    
+            return andamento
+
+        df_dash_acao["Status de Execução"] = df_dash_acao.apply(classificar_status_acao, axis=1)
+
+        # 🚀 Mapeamento composto seguro (Ação + UF) para propagar o status para as atividades
+        mapa_status_acao = df_dash_acao.set_index(["Número da Ação PNAPA", "UF_Acao_PNAPA"])["Status de Execução"].to_dict()
+        df_dash_atv["Status de Execução"] = df_dash_atv.apply(
+            lambda r: mapa_status_acao.get((r["Número da Ação PNAPA"], r["UF_Acao_PNAPA"]), "Planejada"), axis=1
+        )
 
         # =====================================================================
         # 3. BARRA SUPERIOR DE FILTROS FIXA (STICKY TOP BAR)
