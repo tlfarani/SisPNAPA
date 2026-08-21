@@ -15,6 +15,7 @@ URL_FLOW_UNIDADES = "https://default6ae3f5e7541942a780758c1490c72b.25.environmen
 URL_FLOW_EQUIPES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3d124cc6783845e1b8618cfb3302eca0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ubTQ-LAIsToMOX0CGytlI2YM_WKmC_mRT64ybRLBRSY"
 URL_FLOW_PNAPAS = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/38cc92ea33ba4d6387b924d6eac62d58/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=LlCDUzrETHyXxp_QLte1eGxKR_4LuwRGzPJbgUsHvgk"
 URL_FLOW_SUGESTOES = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/12/workflows/879c1fc3770545039e738cc24d0a4a23/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=_4vVSJhFVRuYWXneiKhnPkx3A66J9DFzLWM0OmISV-U"
+URL_FLOW_EMAIL_360 = "https://default6ae3f5e7541942a780758c1490c72b.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/24/workflows/a2a7b0526f8e4730853282bf013e5603/triggers/manual/paths/invoke?api-version=1"
 
 # URL da Planilha Macro Principal (Movidas para o topo para evitar NameError)
 URL_FLOW_PRINCIPAL = st.secrets["power_automate"]["URL_PRINCIPAL"]
@@ -230,6 +231,22 @@ def executar_api_equipes(dados_json):
         if resposta.status_code == 200: return resposta.json()
         return []
     except: return []
+
+def disparar_email_360(codigo_atv, nome_atv, lista_servidores_equipe, df_serv_aux):
+    """Envia o comando de e-mail ao PA se a equipe for >= 3 membros."""
+    equipe_unica = list(set(lista_servidores_equipe)) # Remove duplicidades
+    if len(equipe_unica) >= 3:
+        emails = df_serv_aux[df_serv_aux["Servidor"].isin(equipe_unica)]["E_mail"].dropna().tolist()
+        if emails:
+            payload_email = {
+                "destinatarios": ";".join(emails),
+                "codigo": codigo_atv,
+                "nome": nome_atv
+            }
+            try:
+                requests.post(URL_FLOW_EMAIL_360, json=payload_email, timeout=10)
+            except:
+                pass # Ignora silenciosamente se o e-mail falhar para não travar o app
 
 @st.cache_data(ttl=15, show_spinner=False)
 def carregar_sugestoes():
@@ -544,7 +561,7 @@ else:
     else:
         st.sidebar.info("👁️ Perfil: Somente Visualização")
 
-# Montagem Dinâmica do Menu Lateral (Garantindo Sugestões como a ÚLTIMA opção)
+# Montagem Dinâmica do Menu Lateral
 opcoes_menu = [
     "📈 Dashboards Executivos", 
     "📊 Visualizar Base"
@@ -556,11 +573,11 @@ if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
         "➕ Inserir Nova Linha", 
         "🏢 Gerenciar Unidades", 
         "👥 Gerenciar Equipes", 
-        "🗂️ Gerenciar Ações PNAPA",
-        "⭐ Meus Feedbacks (360º)"
+        "🗂️ Gerenciar Ações PNAPA"
     ])
 
-# 🚀 Sugestões sempre como o último item para todos os perfis:
+# 🚀 Módulo 360º e Sugestões abertos para todos (Visualização, Editor e Admin)
+opcoes_menu.append("⭐ Meus Feedbacks (360º)")
 opcoes_menu.append("💡 Sugestões & Melhorias")
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
@@ -3563,9 +3580,28 @@ elif modo == "⭐ Meus Feedbacks (360º)":
     
     import json
     
-    # 1. Filtra atividades Concluídas e Agrupa por Código de Atividade
+    # 🚀 DATA DE CORTE: Define a partir de quando as missões geram backlog (Hoje)
+    from datetime import date
+    DATA_LANCAMENTO_360 = pd.Timestamp(date.today())
+    
+    def limpar_e_converter_data(valor):
+        if pd.isna(valor): return pd.NaT
+        val_str = str(valor).strip()
+        if val_str == "" or val_str.lower() in ["none", "nat", "nan"]: return pd.NaT
+        if val_str.replace('.', '', 1).isdigit():
+            try: return pd.to_datetime(int(float(val_str)), unit='D', origin='1899-12-30')
+            except: pass
+        return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
+
+    # 1. Filtra atividades e converte a data de término
     df_atvs = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
-    df_concluidas = df_atvs[df_atvs["Andamento"].astype(str).str.strip() == "Concluída"].copy()
+    df_atvs["Data_Termino_DT"] = df_atvs["Data de Término"].apply(limpar_e_converter_data)
+    
+    # 2. Mantém apenas Concluídas com Data de Término >= Hoje
+    df_concluidas = df_atvs[
+        (df_atvs["Andamento"].astype(str).str.strip() == "Concluída") &
+        (df_atvs["Data_Termino_DT"] >= DATA_LANCAMENTO_360)
+    ].copy()
     
     # Descobre quais atividades têm 3 ou mais membros
     contagem_membros = df_concluidas.groupby("Codigo_Atividade")["Servidor"].nunique().reset_index()
@@ -3583,8 +3619,8 @@ elif modo == "⭐ Meus Feedbacks (360º)":
         
         # Filtra os colegas que participaram das MESMAS missões que eu
         df_colegas = df_elegiveis[
-            (df_elegiveis["Codigo_Atividade"].isin(minhas_missoes_elegiveis)) & 
-            (df_elegiveis["Servidor"] != nome_usuario_logado)
+            (df_elegiveis["Codigo_Atividade"].isin(minhas_missoes_elegiveis)) 
+        #    & (df_elegiveis["Servidor"] != nome_usuario_logado) # 🚀 REMOVA O PRIMEIRO '&' E APAGUE ESTA LINHA PARA TESTAR AVALIAR A SI MESMO
         ].copy()
         
         # Função para verificar se eu já avaliei esse colega nessa missão
@@ -3597,7 +3633,7 @@ elif modo == "⭐ Meus Feedbacks (360º)":
                 
         df_colegas["Ja_Avaliei"] = df_colegas["Avaliacao_Feedback"].apply(ja_avaliei)
         df_pendentes = df_colegas[~df_colegas["Ja_Avaliei"]]
-        
+                        
         if df_pendentes.empty:
             st.success("🎉 Excelente! Você não tem nenhuma avaliação pendente. Todos os seus colegas de missão já foram avaliados.")
         else:
