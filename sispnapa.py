@@ -3081,9 +3081,9 @@ elif modo == "👥 Gerenciar Equipes":
             val_atual_lotacao = str(dados_atuais_srv.get("Lotacao", "")).strip()
             val_atual_funcao = str(dados_atuais_srv.get("Funcao", "")).strip()
             val_atual_token = str(dados_atuais_srv.get("Token", "")).strip()
-            val_atual_emerg = str(dados_atuais_srv.get("Equipe_Emergencias", "Não")).strip().capitalize()
-            val_atual_fiscal = str(dados_atuais_srv.get("Fiscal", "Não")).strip().capitalize()
-            val_atual_aeac = str(dados_atuais_srv.get("AEAC", "Não")).strip().capitalize()
+            val_atual_emerg = str(dados_atuais_srv.get("Faz parte de Equipe de Emergências?", "Não")).strip().capitalize()
+            val_atual_fiscal = str(dados_atuais_srv.get("É Fiscal?", "Não")).strip().capitalize()
+            val_atual_aeac = str(dados_atuais_srv.get("É Agente de Emergências Ambientais e Climáticas?", "Não")).strip().capitalize()
             val_atual_perfil = str(dados_atuais_srv.get("Perfil", "Visualização")).strip()
 
             st.markdown(f"#### 👤 Ficha Cadastral: **{val_atual_nome}** `(ID: {id_srv_edit})`")
