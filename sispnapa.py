@@ -577,10 +577,21 @@ if modo == "📈 Dashboards Executivos":
         # 2. PREPARAÇÃO DE DADOS E LÓGICA DE STATUS
         # =====================================================================
         
+        # 🚀 Função blindada para converter texto, data normal e serial do Excel (ex: 46023)
+        def converter_dt_seguro(valor):
+            if pd.isna(valor) or valor is None: return pd.NaT
+            if isinstance(valor, (datetime, pd.Timestamp)): return pd.to_datetime(valor)
+            val_str = str(valor).strip()
+            if val_str == "" or val_str.lower() in ["none", "nat", "nan"]: return pd.NaT
+            if val_str.replace('.', '', 1).isdigit():
+                try: return pd.to_datetime(int(float(val_str)), unit='D', origin='1899-12-30')
+                except: pass
+            return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
+
         # --- ATIVIDADES (Micro) ---
         df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
-        df_dash_atv["Data_Inicio_DT"] = pd.to_datetime(df_dash_atv["Data de Início"], dayfirst=True, errors='coerce')
-        df_dash_atv["Data_Fim_DT"] = pd.to_datetime(df_dash_atv["Data de Término"], dayfirst=True, errors='coerce')
+        df_dash_atv["Data_Inicio_DT"] = df_dash_atv["Data de Início"].apply(converter_dt_seguro)
+        df_dash_atv["Data_Fim_DT"] = df_dash_atv["Data de Término"].apply(converter_dt_seguro)
         df_dash_atv["Mes_Inicio"] = df_dash_atv["Data_Inicio_DT"].dt.month
         df_dash_atv["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Plan"], errors='coerce').fillna(0)
         df_dash_atv["Dias_Gastos_Exec"] = pd.to_numeric(df_dash_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0)
@@ -614,8 +625,8 @@ if modo == "📈 Dashboards Executivos":
 
         # --- AÇÕES (Macro) ---
         df_dash_acao = df_atual[df_atual["Nível"].astype(str).str.strip() == "Ação"].copy()
-        df_dash_acao["Data_Inicio_DT"] = pd.to_datetime(df_dash_acao["Data de Início"], dayfirst=True, errors='coerce')
-        df_dash_acao["Data_Fim_DT"] = pd.to_datetime(df_dash_acao["Data de Término"], dayfirst=True, errors='coerce')
+        df_dash_acao["Data_Inicio_DT"] = df_dash_acao["Data de Início"].apply(converter_dt_seguro)
+        df_dash_acao["Data_Fim_DT"] = df_dash_acao["Data de Término"].apply(converter_dt_seguro)
         df_dash_acao["Meta_Indicador"] = pd.to_numeric(df_dash_acao["Meta_Indicador"], errors='coerce').fillna(0)
         df_dash_acao["Rec_Plan_Total"] = pd.to_numeric(df_dash_acao["Rec_Plan_Total"], errors='coerce').fillna(0)
         df_dash_acao["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0)
@@ -1154,32 +1165,34 @@ if modo == "📈 Dashboards Executivos":
                 df_gantt_base = df_filt_atv_oper.dropna(subset=["Data_Inicio_DT", "Data_Fim_DT"]).copy()
                 
                 if not df_gantt_base.empty:
-                    # Agrupa por atividade única para exibição limpa no gráfico
                     df_gantt_agg = df_gantt_base.groupby(["Codigo_Atividade", "Nome da Atividade", "Status_Operacional"]).agg(
                         Data_Inicio=('Data_Inicio_DT', 'min'),
                         Data_Fim=('Data_Fim_DT', 'max'),
-                        Equipe=('Servidor', lambda x: ", ".join(sorted(x.dropna().unique()))),
+                        Equipe=('Servidor', lambda x: ", ".join(sorted([str(s) for s in x.dropna().unique()]))),
                         UF_Acao=('UF_Acao_PNAPA', 'first'),
                         SEI=('Doc_Probatorio_Exec', 'first')
                     ).reset_index()
                     
                     df_gantt_agg["Rotulo_Atividade"] = df_gantt_agg["Codigo_Atividade"].replace("", "S/C") + " - " + df_gantt_agg["Nome da Atividade"]
                     
+                    # 🚀 Extensão de fim do dia para que atividades de 1 único dia fiquem visíveis no Gantt
+                    df_gantt_agg["Data_Fim_Plot"] = df_gantt_agg["Data_Fim"] + pd.Timedelta(hours=23, minutes=59, seconds=59)
+
                     fig_gantt = px.timeline(
                         df_gantt_agg, 
                         x_start="Data_Inicio", 
-                        x_end="Data_Fim", 
+                        x_end="Data_Fim_Plot", 
                         y="Rotulo_Atividade", 
                         color="Status_Operacional",
                         color_discrete_map=cor_mapa_gantt,
-                        hover_data={"Equipe": True, "UF_Acao": True, "SEI": True, "Rotulo_Atividade": False}
+                        hover_data={"Equipe": True, "UF_Acao": True, "SEI": True, "Rotulo_Atividade": False, "Data_Fim_Plot": False}
                     )
                     fig_gantt.update_yaxes(autorange="reversed", title_text="", showticklabels=True)
                     fig_gantt.update_xaxes(title_text="", rangeslider_visible=False)
                     fig_gantt.update_layout(
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, title_text=""),
                         margin=dict(t=10, b=0, l=0, r=0),
-                        height=max(350, min(800, len(df_gantt_agg) * 28 + 100)),
+                        height=max(350, min(800, len(df_gantt_agg) * 32 + 120)),
                         plot_bgcolor="white"
                     )
                     st.plotly_chart(fig_gantt, use_container_width=True)
@@ -1188,18 +1201,25 @@ if modo == "📈 Dashboards Executivos":
 
                 st.markdown("<br>##### 📋 Detalhamento das Atividades Filtradas", unsafe_allow_html=True)
                 
-                # Badges de status para a tabela
                 def badge_status(val):
                     if val == "Concluída": return "🟢 Concluída"
                     if val == "Sem Documento de Conclusão": return "🟡 Sem Doc. Conclusão"
                     if val == "Atrasada": return "🔴 Atrasada"
                     return "🔵 Prevista"
 
-                cols_tab_cal = ["Id", "Codigo_Atividade", "Nome da Atividade", "Status_Operacional", "Servidor", "UF_Acao_PNAPA", "Data de Início", "Data de Término", "Doc_Probatorio_Exec"]
+                cols_tab_cal = ["Id", "Codigo_Atividade", "Nome da Atividade", "Status_Operacional", "Servidor", "UF_Acao_PNAPA", "Data_Inicio_DT", "Data_Fim_DT", "Doc_Probatorio_Exec"]
                 df_tab_cal = df_filt_atv_oper[[c for c in cols_tab_cal if c in df_filt_atv_oper.columns]].copy()
                 df_tab_cal["Status"] = df_tab_cal["Status_Operacional"].apply(badge_status)
-                df_tab_cal = df_tab_cal.drop(columns=["Status_Operacional"])
-                df_tab_cal = df_tab_cal.sort_values(by="Data de Início", ascending=True).reset_index(drop=True)
+                
+                # 🚀 Formatação bonita das datas para não mostrar serial numérico (ex: 46023)
+                df_tab_cal["Data de Início"] = df_tab_cal["Data_Inicio_DT"].dt.strftime('%d/%m/%Y').fillna("-")
+                df_tab_cal["Data de Término"] = df_tab_cal["Data_Fim_DT"].dt.strftime('%d/%m/%Y').fillna("-")
+                
+                df_tab_cal = df_tab_cal.drop(columns=["Status_Operacional", "Data_Inicio_DT", "Data_Fim_DT"])
+                
+                # Reorganiza a ordem das colunas
+                ordem_cols = ["Id", "Codigo_Atividade", "Nome da Atividade", "Servidor", "UF_Acao_PNAPA", "Data de Início", "Data de Término", "Doc_Probatorio_Exec", "Status"]
+                df_tab_cal = df_tab_cal[[c for c in ordem_cols if c in df_tab_cal.columns]].sort_values(by="Id", ascending=True).reset_index(drop=True)
                 
                 st.dataframe(df_tab_cal, use_container_width=True, hide_index=True)
 
