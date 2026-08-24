@@ -664,7 +664,8 @@ if acesso_liberado:
 
 # opcoes_menu.append("⭐ Meus Feedbacks (360º)")
 opcoes_menu.append("💡 Sugestões & Melhorias")
-opcoes_menu.append("🤖 Assistente Virtual")  # 🚀 Agora no final do menu
+opcoes_menu.append("📖 Base de Conhecimento (FAQ)")
+opcoes_menu.append("🤖 Assistente Virtual")
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
 modo = st.sidebar.radio("Navegação:", opcoes_menu)
@@ -4611,9 +4612,22 @@ elif modo == "💡 Sugestões & Melhorias":
                                     st.error(f"Erro: {e}")
 
 
-# --- TELA: ASSISTENTE VIRTUAL (GEMINI API) ---
+# --- TELA 8: BASE DE CONHECIMENTO (FAQ) ---
+elif modo == "📖 Base de Conhecimento (FAQ)":
+    st.markdown("<h2 style='color: #03170a;'>📖 Base de Conhecimento & Regras de Negócio</h2>", unsafe_allow_html=True)
+    st.caption("Manual oficial de governança, diretrizes operacionais, fórmulas de metas e regras do SisPNAPA.")
+    
+    try:
+        with open("conhecimento_faq.md", "r", encoding="utf-8") as f_faq:
+            conteudo_faq = f_faq.read()
+        st.markdown(conteudo_faq)
+    except Exception as e:
+        st.error(f"Erro ao carregar o arquivo 'conhecimento_faq.md': {e}")
+        st.info("Certifique-se de que o arquivo 'conhecimento_faq.md' está na raiz do seu repositório no GitHub.")
+
+# --- TELA 9: ASSISTENTE VIRTUAL (GEMINI API) ---
 elif modo == "🤖 Assistente Virtual":
-    # 1. CSS para estilização do chat e campo inferior
+    # CSS para garantir fundo claro no container inferior e no campo de digitação
     st.markdown("""
     <style>
     div[data-testid="stBottomBlockContainer"] {
@@ -4640,9 +4654,9 @@ elif modo == "🤖 Assistente Virtual":
     """, unsafe_allow_html=True)
 
     st.markdown("<h3 style='color: #03170a;'>🤖 Assistente Virtual SisPNAPA</h3>", unsafe_allow_html=True)
-    st.caption("Consulte a base de conhecimento oficial ou tire dúvidas em tempo real com a IA.")
+    st.caption("Tire dúvidas interativas sobre preenchimentos, regras de metas, cálculo de dashboards e operações do sistema.")
 
-    # 2. Configuração de Autenticação da API Gemini
+    # Configuração de Autenticação da API Gemini
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
         st.error("Chave GEMINI_API_KEY não encontrada nas configurações do sistema.")
@@ -4650,7 +4664,7 @@ elif modo == "🤖 Assistente Virtual":
 
     genai.configure(api_key=api_key)
 
-    # 3. Leitura Dinâmica do FAQ e do Código-Fonte
+    # Leitura Dinâmica do FAQ e do Código-Fonte para Injeção de Contexto
     try:
         with open("conhecimento_faq.md", "r", encoding="utf-8") as f_faq:
             conteudo_faq = f_faq.read()
@@ -4663,13 +4677,6 @@ elif modo == "🤖 Assistente Virtual":
     except Exception:
         conteudo_codigo = "Código-fonte não localizado."
 
-    # 4. EXIBIÇÃO PRÉVIA DO FAQ EM UM PAINEL RETRÁTIL
-    with st.expander("📖 **Consultar Perguntas Frequentes & Manual Oficial (FAQ)**", expanded=False):
-        st.markdown(conteudo_faq)
-
-    st.markdown("---")
-
-    # 5. Prompt de Sistema
     contexto_completo = f"""
     Você é o Assistente Virtual Oficial do SisPNAPA (Sistema de Planejamento de Ações de Emergências Ambientais do Ibama).
     Dados do usuário conectado:
@@ -4691,7 +4698,7 @@ elif modo == "🤖 Assistente Virtual":
     5. Oriente o usuário a relatar falhas técnicas no menu '💡 Sugestões & Melhorias'.
     """
 
-    # 6. Inicialização do Modelo
+    # Inicialização do Modelo
     try:
         modelo = genai.GenerativeModel(
             model_name="gemini-1.5-flash-latest",
@@ -4703,12 +4710,12 @@ elif modo == "🤖 Assistente Virtual":
             system_instruction=contexto_completo
         )
 
-    # 7. Histórico da Conversa
+    # Histórico da Conversa
     if "mensagens_chat" not in st.session_state:
         st.session_state.mensagens_chat = [
             {
                 "role": "assistant",
-                "content": f"Olá, **{nome_usuario_logado}**! Sou o assistente virtual do SisPNAPA. Você pode consultar o FAQ acima ou digitar sua dúvida abaixo."
+                "content": f"Olá, **{nome_usuario_logado}**! Sou o assistente virtual do SisPNAPA. Como posso auxiliar suas atividades operacionais hoje?"
             }
         ]
 
@@ -4716,7 +4723,7 @@ elif modo == "🤖 Assistente Virtual":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # 8. Entrada do Usuário e Resposta
+    # Entrada do Usuário, Gravação Silenciosa e Resposta
     if prompt := st.chat_input("Digite sua dúvida sobre o SisPNAPA aqui..."):
         threading.Thread(
             target=registrar_log_pergunta,
