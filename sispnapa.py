@@ -4,6 +4,7 @@ import requests
 import time
 from datetime import date, datetime
 import plotly.express as px
+import hashlib
 
 st.set_page_config(page_title="SisPNAPA - Emergências Ambientais e Climáticas", layout="wide")
 
@@ -439,6 +440,28 @@ for col_oficial in COLUNAS_PNAPA:
     if col_oficial not in df_atual.columns:
         df_atual[col_oficial] = ""
 
+# Funções de criptografia
+def hash_senha(senha: str) -> str:
+    """Gera o hash SHA-256 da senha."""
+    if not senha:
+        return ""
+    return hashlib.sha256(senha.encode("utf-8")).hexdigest()
+
+def validar_senha(senha_digitada: str, token_armazenado: str, senha_padrao="pnapa123") -> bool:
+    """Valida senha digitada contra hash SHA-256 ou texto puro (legado)."""
+    token_limpo = str(token_armazenado).strip()
+    
+    # 1. Se estiver vazio no Excel, compara com a senha padrão
+    if not token_limpo or token_limpo.lower() in ["nan", "none"]:
+        return senha_digitada == senha_padrao
+        
+    # 2. Se já for um hash SHA-256 (64 caracteres hexadecimais)
+    if len(token_limpo) == 64 and all(c in "0123456789abcdefABCDEF" for c in token_limpo):
+        return hash_senha(senha_digitada).lower() == token_limpo.lower()
+        
+    # 3. Retrocompatibilidade: se ainda for texto puro no Excel
+    return senha_digitada == token_limpo
+
 # =================================================================
 # III. DESIGN & CSS: BLINDAGEM DE INTERFACE CORPORATIVA
 # =================================================================
@@ -565,7 +588,12 @@ if not st.session_state["autenticado"]:
                         # Se não tem senha cadastrada no banco, aceita a senha padrão
                         senha_esperada = token_banco if token_banco not in ["", "nan", "None"] else SENHA_PADRAO
                         
-                        if senha_input == senha_esperada:
+                        else:
+                        dados_usuario = srv_match.iloc[0]
+                        token_banco = str(dados_usuario.get("Token", "")).strip()
+                        
+                        # 🚀 Validação segura com suporte a hash e texto puro legado
+                        if validar_senha(senha_input, token_banco, SENHA_PADRAO):
                             st.session_state["autenticado"] = True
                             st.session_state["email_logado"] = email_input
                             st.session_state["perfil_usuario"] = str(dados_usuario.get("Perfil", "Visualização")).strip()
