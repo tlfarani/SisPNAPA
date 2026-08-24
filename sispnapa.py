@@ -1,10 +1,12 @@
 import streamlit as st
 import pandas as pd
-import requests
 import time
 from datetime import date, datetime
 import plotly.express as px
 import hashlib
+import threading
+import requests
+import google.generativeai as genai
 
 st.set_page_config(page_title="SisPNAPA - Emergências Ambientais e Climáticas", layout="wide")
 
@@ -852,6 +854,21 @@ if modo == "📈 Dashboards Executivos":
         df_dash_atv["Status de Execução"] = df_dash_atv.apply(
             lambda r: mapa_status_acao.get((r["Número da Ação PNAPA"], r["UF_Acao_PNAPA"]), "Planejada"), axis=1
         )
+
+        def registrar_log_pergunta(usuario, uf, pergunta):
+            """Envia a dúvida do chat para a aba Logs_Chat da planilha Sugestoes.xlsx."""
+            try:
+                payload = {
+                    "Acao": "Inserir_Log",
+                    "Data": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                    "Usuario": str(usuario),
+                    "UF": str(uf),
+                    "Pergunta": str(pergunta)
+                }
+                # Utiliza diretamente a variável definida no topo do script
+                requests.post(URL_FLOW_SUGESTOES, json=payload, timeout=5)
+            except Exception:
+                pass
 
         # =====================================================================
         # 3. BARRA SUPERIOR DE FILTROS FIXA (STICKY TOP BAR)
@@ -4595,31 +4612,26 @@ elif modo == "💡 Sugestões & Melhorias":
 
 # --- TELA: ASSISTENTE VIRTUAL (GEMINI API) ---
 elif modo == "🤖 Assistente Virtual":
-    # 1. CSS dedicado para forçar fundo claro no chat e no campo de digitação
+    # 1. CSS para garantir fundo claro no container inferior e no campo de digitação
     st.markdown("""
     <style>
-    /* Container inferior fixo do chat */
     div[data-testid="stBottomBlockContainer"] {
         background-color: #f8fafc !important;
     }
-    /* Caixa externa do input */
     div[data-testid="stChatInput"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
         border-radius: 10px !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
     }
-    /* Área de texto onde o usuário digita */
     div[data-testid="stChatInput"] textarea {
         background-color: #ffffff !important;
         color: #0f172a !important;
         font-size: 14px !important;
     }
-    /* Placeholder ("Digite sua dúvida aqui...") */
     div[data-testid="stChatInput"] textarea::placeholder {
         color: #94a3b8 !important;
     }
-    /* Ícone de envio */
     div[data-testid="stChatInput"] button {
         color: #15803d !important;
     }
@@ -4627,87 +4639,101 @@ elif modo == "🤖 Assistente Virtual":
     """, unsafe_allow_html=True)
 
     st.markdown("<h3 style='color: #03170a;'>🤖 Assistente Virtual SisPNAPA</h3>", unsafe_allow_html=True)
-    st.caption("Tire dúvidas sobre cadastros, regras de execução, senhas e operações em lote.")
+    st.caption("Tire dúvidas sobre regras do plano, cadastros de equipe, cálculo de metas e operações do sistema.")
 
-    import google.generativeai as genai
-
-    # 2. Configuração da Chave da API
+    # 2. Configuração de Autenticação da API Gemini
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
-        st.error("Chave GEMINI_API_KEY não encontrada nos secrets do Streamlit.")
+        st.error("Chave GEMINI_API_KEY não encontrada nas configurações do sistema.")
         st.stop()
 
     genai.configure(api_key=api_key)
 
-    # 3. Histórico de Mensagens na Sessão
-    if "mensagens_chat" not in st.session_state:
-        st.session_state.mensagens_chat = [
-            {
-                "role": "assistant",
-                "content": f"Olá, **{nome_usuario_logado}**! Sou o assistente virtual do SisPNAPA. Como posso ajudar você hoje?"
-            }
-        ]
-
-    # 4. Ler o próprio código-fonte para dar superpoderes de consulta ao Gemini
+    # 3. Leitura Dinâmica do FAQ e do Código-Fonte para Injeção de Contexto
     try:
-        with open("sispnapa.py", "r", encoding="utf-8") as f:
-            codigo_completo = f.read()
+        with open("conhecimento_faq.md", "r", encoding="utf-8") as f_faq:
+            conteudo_faq = f_faq.read()
     except Exception:
-        codigo_completo = "Código-fonte não disponível."
+        conteudo_faq = "Base de conhecimento (FAQ) não localizada."
 
-    # Contexto e Instruções com o código embutido
-    contexto_sistema = f"""
+    try:
+        with open("sispnapa.py", "r", encoding="utf-8") as f_code:
+            conteudo_codigo = f_code.read()
+    except Exception:
+        conteudo_codigo = "Código-fonte não localizado."
+
+    contexto_completo = f"""
     Você é o Assistente Virtual Oficial do SisPNAPA (Sistema de Planejamento de Ações de Emergências Ambientais do Ibama).
-    Usuário atual: {nome_usuario_logado} | Perfil: {perfil_usuario} | UF: {uf_usuario}
+    Dados do usuário conectado:
+    - Nome: {nome_usuario_logado}
+    - Perfil de Acesso: {perfil_usuario}
+    - UF de Atuação: {uf_usuario}
 
-    Abaixo está o CÓDIGO-FONTE COMPLETO do sistema para sua consulta técnica:
-    --- INÍCIO DO CÓDIGO ---
-    {codigo_completo}
-    --- FIM DO CÓDIGO ---
+    --- BASE DE CONHECIMENTO & REGRAS DE NEGÓCIO (FAQ) ---
+    {conteudo_faq}
+
+    --- CÓDIGO-FONTE DO SISTEMA (ESTRUTURA TÉCNICA E NOMES DE BOTÕES) ---
+    {conteudo_codigo}
 
     DIRETRIZES DE ATENDIMENTO:
-    1. Use a lógica do código acima para responder com precisão sobre nomes de botões, regras de cálculo (metas, dias, orçamentos), permissões e telas.
-    2. Responda em português claro, didático, usando tópicos e emojis.
-    3. NUNCA mostre código Python bruto, nem revele segredos/URLs de Power Automate para o usuário. Explique sempre na perspectiva do usuário usando a interface gráfica.
-    4. Oriente o registro de bugs no menu '💡 Sugestões & Melhorias'.
+    1. Responda em português claro, empático, didático e objetivo, utilizando tópicos e formatação limpa.
+    2. Priorize os conceitos e tabelas explicativas do FAQ para esclarecer dúvidas sobre metas (regra de 80%), cálculos de dashboards, SEI, orçamentos e equipes.
+    3. Consulte o código-fonte para confirmar a localização exata de abas, nomes de botões, filtros e fluxos de tela.
+    4. NUNCA exiba código Python bruto, variáveis internas ou URLs confidenciais nos diálogos.
+    5. Oriente o usuário a relatar falhas técnicas no menu '💡 Sugestões & Melhorias'.
     """
 
-    # 5. Inicialização do Modelo (com fallback de versão)
+    # 4. Inicialização do Modelo
     try:
         modelo = genai.GenerativeModel(
             model_name="gemini-1.5-flash-latest",
-            system_instruction=contexto_sistema
+            system_instruction=contexto_completo
         )
     except Exception:
         modelo = genai.GenerativeModel(
             model_name="gemini-1.5-flash",
-            system_instruction=contexto_sistema
+            system_instruction=contexto_completo
         )
 
-    # 6. Renderização do Histórico
+    # 5. Histórico da Conversa na Sessão
+    if "mensagens_chat" not in st.session_state:
+        st.session_state.mensagens_chat = [
+            {
+                "role": "assistant",
+                "content": f"Olá, **{nome_usuario_logado}**! Sou o assistente virtual do SisPNAPA. Como posso ajudar nas suas atividades hoje?"
+            }
+        ]
+
+    # 6. Renderização do Histórico em Tela
     for msg in st.session_state.mensagens_chat:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # 7. Entrada do Usuário e Processamento
+    # 7. Recepção do Prompt, Gravação Silenciosa e Resposta da IA
     if prompt := st.chat_input("Digite sua dúvida sobre o SisPNAPA aqui..."):
+        # Disparo do log em segundo plano sem travar a interface
+        threading.Thread(
+            target=registrar_log_pergunta,
+            args=(email_usuario_logado, uf_usuario, prompt)
+        ).start()
+
         st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Formatação do histórico para a API
-        historico_formatado = [
+        # Montagem do histórico para o modelo
+        historico_chat = [
             {"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]}
             for m in st.session_state.mensagens_chat[:-1]
         ]
 
-        chat = modelo.start_chat(history=historico_formatado)
+        chat_session = modelo.start_chat(history=historico_chat)
 
         with st.chat_message("assistant"):
             with st.spinner("Consultando regras do SisPNAPA..."):
                 try:
-                    resposta = chat.send_message(prompt)
+                    resposta = chat_session.send_message(prompt)
                     st.markdown(resposta.text)
                     st.session_state.mensagens_chat.append({"role": "assistant", "content": resposta.text})
                 except Exception as e:
-                    st.error(f"Erro ao processar resposta: {e}")
+                    st.error(f"Erro ao processar consulta: {e}")
