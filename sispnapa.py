@@ -691,7 +691,7 @@ with st.sidebar.popover("🔑 Trocar Minha Senha", use_container_width=True):
                     "Funcao": str(linha_srv.get("Funcao", "")),
                     "E_mail": email_logado,
                     "Perfil": perfil_usuario,
-                    "Token": nova_senha
+                    "Token": hash_senha(nova_senha)  # 🚀 Salva apenas o HASH no Excel
                 }
                 with st.spinner("Atualizando senha no banco..."):
                     executar_api_equipes(payload_senha)
