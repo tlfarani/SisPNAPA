@@ -522,38 +522,70 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =================================================================
-# IV. GESTÃO DE AUTENTICAÇÃO E PERFIS DE ACESSO (SSO & PERFIS)
+# IV. SISTEMA DE LOGIN CORPORATIVO (APP PÚBLICO COM PORTA TRANCADA)
 # =================================================================
-try:
-    nome_usuario_logado = df_servidores[df_servidores["E_mail"] == email_logado]["Servidor"].iloc[0]
-except:
-    nome_usuario_logado = "Desconhecido"
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+    st.session_state["email_logado"] = ""
+    st.session_state["perfil_usuario"] = ""
+    st.session_state["uf_usuario"] = ""
+    st.session_state["nome_usuario"] = ""
+    st.session_state["id_serv_logado"] = 0
 
-try:
-    if hasattr(st, "user") and hasattr(st.user, "email"): email_logado = st.user.email
-    elif hasattr(st, "experimental_user"): email_logado = st.experimental_user.email
-    else: email_logado = st.user.get("email") if hasattr(st, "user") and hasattr(st.user, "get") else None
-except:
-    email_logado = None
+SENHA_PADRAO = "pnapa123"
 
-EMAIL_ADMIN = "tiago.farani@ibama.gov.br"
-if not email_logado:
-    email_logado = "tiago.farani@ibama.gov.br"
+# --- TELA DE LOGIN ---
+if not st.session_state["autenticado"]:
+    st.markdown("<h1 style='text-align: center; color: #03170a; margin-top: 5vh;'>🔐 SisPNAPA</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #4a5568;'>Emergências Ambientais e Climáticas</p>", unsafe_allow_html=True)
+    
+    c_login_space1, c_login, c_login_space2 = st.columns([1, 1.5, 1])
+    with c_login:
+        with st.container(border=True):
+            st.markdown("#### Login do Servidor")
+            email_input = st.text_input("E-mail Institucional (@ibama.gov.br):").strip().lower()
+            senha_input = st.text_input("Senha / Token:", type="password").strip()
+            
+            st.info(f"💡 **Primeiro acesso?** Se você já foi cadastrado na equipe pelo seu Coordenador, use a senha padrão: **{SENHA_PADRAO}**")
+            
+            if st.button("Entrar no Sistema", type="primary", use_container_width=True):
+                if not email_input or not senha_input:
+                    st.warning("⚠️ Preencha e-mail e senha.")
+                else:
+                    # Busca o usuário na base de dados
+                    srv_match = df_servidores[df_servidores["E_mail"].astype(str).str.strip().str.lower() == email_input]
+                    
+                    if srv_match.empty:
+                        st.error("❌ E-mail não encontrado. Solicite seu cadastro ao Administrador.")
+                    else:
+                        dados_usuario = srv_match.iloc[0]
+                        token_banco = str(dados_usuario.get("Token", "")).strip()
+                        
+                        # Se não tem senha cadastrada no banco, aceita a senha padrão
+                        senha_esperada = token_banco if token_banco not in ["", "nan", "None"] else SENHA_PADRAO
+                        
+                        if senha_input == senha_esperada:
+                            st.session_state["autenticado"] = True
+                            st.session_state["email_logado"] = email_input
+                            st.session_state["perfil_usuario"] = str(dados_usuario.get("Perfil", "Visualização")).strip()
+                            st.session_state["uf_usuario"] = str(dados_usuario.get("UF_Servidor", "SP")).strip()
+                            st.session_state["nome_usuario"] = str(dados_usuario.get("Servidor", "Desconhecido")).strip()
+                            st.session_state["id_serv_logado"] = int(float(dados_usuario.get("ID_SERV", 0)))
+                            st.rerun()
+                        else:
+                            st.error("❌ Senha incorreta.")
+    
+    # 🚀 O comando st.stop() é o "Cadeado". Ele impede que o resto do código abaixo seja executado se não estiver logado.
+    st.stop() 
 
-try:
-    dados_usuario = df_servidores[df_servidores["E_mail"] == email_logado].iloc[0]
-    uf_usuario = str(dados_usuario["UF_Servidor"]).strip()
-    perfil_usuario = str(dados_usuario["Perfil"]).strip()
-    token_correto = str(dados_usuario["Token"]).strip()
-except:
-    uf_usuario = "SP"
-    perfil_usuario = "Visualização"
-    token_correto = None
+# --- RESGATE DAS VARIÁVEIS PARA O APP FUNCIONAR ---
+email_logado = st.session_state["email_logado"]
+perfil_usuario = st.session_state["perfil_usuario"]
+uf_usuario = st.session_state["uf_usuario"]
+nome_usuario_logado = st.session_state["nome_usuario"]
+id_serv_logado = st.session_state["id_serv_logado"]
 
-if email_logado == EMAIL_ADMIN:
-    perfil_usuario = "Administrador"
-
-acesso_liberado = False
+acesso_liberado = True if perfil_usuario in ["Administrador", "Editor Regional"] else False
 
 # Simulador de Perfis para Testes (Exclusivo para o Desenvolvedor / Admin)
 if email_logado == EMAIL_ADMIN:
@@ -583,8 +615,7 @@ opcoes_menu = [
     "📊 Visualizar Base"
 ]
 
-# Páginas com restrição operacional (Admin e Editor Regional)
-if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
+if acesso_liberado:
     opcoes_menu.extend([
         "➕ Inserir Nova Linha", 
         "🏢 Gerenciar Unidades", 
@@ -592,8 +623,7 @@ if acesso_liberado and perfil_usuario in ["Administrador", "Editor Regional"]:
         "🗂️ Gerenciar Ações PNAPA"
     ])
 
-# 🚀 Módulo 360º PAUSADO para o Alfa (Basta tirar o '#' para ele voltar a aparecer)
-#opcoes_menu.append("⭐ Meus Feedbacks (360º)")
+# opcoes_menu.append("⭐ Meus Feedbacks (360º)")
 opcoes_menu.append("💡 Sugestões & Melhorias")
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
@@ -602,8 +632,49 @@ modo = st.sidebar.radio("Navegação:", opcoes_menu)
 st.sidebar.markdown("---")
 if st.sidebar.button("🔄 Atualizar Base (Refresh)", use_container_width=True):
     st.cache_data.clear()
-    if "df" in st.session_state: 
-        del st.session_state.df
+    if "df" in st.session_state: del st.session_state.df
+    st.rerun()
+
+st.sidebar.markdown("---")
+# Painel do Usuário (Identidade, Troca de Senha e Logout)
+st.sidebar.markdown(f"👤 **{nome_usuario_logado}**")
+st.sidebar.caption(f"Perfil: {perfil_usuario} | UF: {uf_usuario}")
+
+with st.sidebar.popover("🔑 Trocar Minha Senha", use_container_width=True):
+    st.caption("Crie uma nova senha de acesso exclusiva.")
+    nova_senha = st.text_input("Nova Senha:", type="password", key="input_nova_senha")
+    if st.button("Salvar Nova Senha", type="primary", use_container_width=True):
+        if len(nova_senha) < 4:
+            st.error("A senha deve ter pelo menos 4 caracteres.")
+        else:
+            linha_srv = df_servidores[pd.to_numeric(df_servidores["ID_SERV"], errors='coerce').fillna(0).astype(int) == id_serv_logado]
+            if not linha_srv.empty:
+                linha_srv = linha_srv.iloc[0]
+                payload_senha = {
+                    "Acao": "Editar",
+                    "ID_SERV": id_serv_logado,
+                    "Servidor": str(linha_srv.get("Servidor", "")),
+                    "UF_Servidor": str(linha_srv.get("UF_Servidor", "")),
+                    "Lotacao": str(linha_srv.get("Lotacao", "")),
+                    "Equipe_Emergencias": str(linha_srv.get("Equipe_Emergencias", "Não")),
+                    "Fiscal": str(linha_srv.get("Fiscal", "Não")),
+                    "AEAC": str(linha_srv.get("AEAC", "Não")),
+                    "Funcao": str(linha_srv.get("Funcao", "")),
+                    "E_mail": email_logado,
+                    "Perfil": perfil_usuario,
+                    "Token": nova_senha
+                }
+                with st.spinner("Atualizando senha no banco..."):
+                    executar_api_equipes(payload_senha)
+                    time.sleep(1.5)
+                    st.cache_data.clear()
+                st.success("✅ Senha atualizada! Terá efeito no próximo login.")
+            else:
+                st.error("Erro ao localizar seu cadastro no banco.")
+
+if st.sidebar.button("🚪 Sair (Logout)", use_container_width=True):
+    st.session_state.clear()
+    st.cache_data.clear()
     st.rerun()
 
 
