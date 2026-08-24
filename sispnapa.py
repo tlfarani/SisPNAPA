@@ -4396,12 +4396,12 @@ elif modo == "⭐ Meus Feedbacks (360º)":
                 if texto == "": 
                     texto = "*Avaliador não deixou comentário.*"
                 
-                st.markdown(f""
+                st.markdown(f"""
                 <div style="border-left: 5px solid {cor_borda}; padding: 10px; margin-bottom: 10px; background-color: #f8fafc; border-radius: 5px;">
                     <p style="margin:0; font-size:12px; color:#64748b;">Missão: {av['Codigo']} - {av['Atividade']}</p>
                     <p style="margin:5px 0 0 0; color:#0f172a;"><b>{icone}</b> "{texto}"</p>
                 </div>
-                "", unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
 
 # --- TELA 7: CENTRAL DE SUGESTÕES E MELHORIAS ---
