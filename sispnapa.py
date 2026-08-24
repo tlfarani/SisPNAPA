@@ -634,7 +634,8 @@ else:
 # Montagem Dinâmica do Menu Lateral
 opcoes_menu = [
     "📈 Dashboards Executivos", 
-    "📊 Visualizar Base"
+    "📊 Visualizar Base",
+    "🤖 Assistente Virtual"
 ]
 
 if acesso_liberado:
@@ -4375,7 +4376,8 @@ elif modo == "⭐ Meus Feedbacks (360º)":
                 cor_borda = "#22c55e" if av.get("nota") == 1 else "#ef4444"
                 icone = "👍" if av.get("nota") == 1 else "👎"
                 texto = av.get("feedback", "Sem comentário.")
-                if texto == "": texto = "*Avaliador não deixou comentário.*"
+                if texto == "": 
+                    texto = "*Avaliador não deixou comentário.*"
                 
                 st.markdown(f"""
                 <div style="border-left: 5px solid {cor_borda}; padding: 10px; margin-bottom: 10px; background-color: #f8fafc; border-radius: 5px;">
@@ -4589,3 +4591,82 @@ elif modo == "💡 Sugestões & Melhorias":
                                         st.rerun()
                                 except Exception as e:
                                     st.error(f"Erro: {e}")
+
+
+# --- TELA: ASSISTENTE VIRTUAL (GEMINI API) ---
+elif modo == "🤖 Assistente Virtual":
+    st.markdown("<h3 style='color: #03170a;'>🤖 Assistente Virtual SisPNAPA</h3>", unsafe_allow_html=True)
+    st.caption("Tire dúvidas sobre cadastros, regras de execução, senhas e operações em lote.")
+
+    import google.generativeai as genai
+
+    # 1. Configuração da API
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        st.error("Chave GEMINI_API_KEY não encontrada nos secrets do Streamlit.")
+        st.stop()
+
+    genai.configure(api_key=api_key)
+
+    # 2. Histórico de Mensagens na Sessão
+    if "mensagens_chat" not in st.session_state:
+        st.session_state.mensagens_chat = [
+            {
+                "role": "assistant",
+                "content": f"Olá, **{nome_usuario_logado}**! Sou o assistente virtual do SisPNAPA. Como posso ajudar você hoje?"
+            }
+        ]
+
+    # 3. System Prompt com as regras de negócio do SisPNAPA
+    contexto_sistema = f"""
+    Você é o Assistente Virtual Oficial do SisPNAPA (Sistema de Planejamento de Ações de Emergências Ambientais do Ibama).
+    Usuário atual: {nome_usuario_logado} | Perfil: {perfil_usuario} | UF: {uf_usuario}
+
+    REGRAS DO SISTEMA:
+    1. Primeiro acesso: E-mail institucional + senha padrão 'pnapa123'. A troca é feita na barra lateral em '🔑 Trocar Minha Senha'.
+    2. Cadastro de Equipe Obrigatório: Para vincular qualquer servidor em uma Atividade de Campo, ele PRECISA estar cadastrado previamente no menu '👥 Gerenciar Equipes'.
+    3. Inserção em Lote: No menu '➕ Inserir Nova Linha' (Atividade), ao selecionar múltiplos servidores na aba 'Recursos Humanos', o sistema gera registros individuais para toda a equipe simultaneamente com o mesmo Código de Atividade.
+    4. Edição em Lote: No menu '📊 Visualizar Base', marcar as caixas 'Selecionar' de várias linhas permite alterar status, datas ou colar processo SEI em massa.
+    5. Status de Conclusão: Uma atividade concluída só fica verde ('🟢 Concluída') se tiver o número do documento/processo SEI preenchido no campo 'Doc_Probatorio_Exec'. Sem o SEI, fica amarela ('🟡 Sem Documento de Conclusão').
+    6. Conflito de Liderança: Cada atividade só aceita 1 servidor como 'Coordenador de Campo'.
+    7. Relato de Bugs/Sugestões: Erros e ideias devem ser registrados na tela '💡 Sugestões & Melhorias'.
+
+    DIRETRIZES DE RESPOSTA:
+    - Seja direto, cortês e didático. Use tópicos com marcadores e emojis.
+    - Nunca mencione detalhes internos de infraestrutura (Power Automate, SharePoint, endpoints HTTP).
+    - Responda apenas com base nas regras do SisPNAPA.
+    """
+
+    # 4. Inicialização do Modelo
+    modelo = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=contexto_sistema
+    )
+
+    # 5. Renderização do Histórico em Tela
+    for msg in st.session_state.mensagens_chat:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # 6. Input do Usuário e Processamento
+    if prompt := st.chat_input("Digite sua dúvida aqui..."):
+        st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Montagem do histórico para o modelo
+        historico_formatado = [
+            {"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]}
+            for m in st.session_state.mensagens_chat[:-1]
+        ]
+        
+        chat = modelo.start_chat(history=historico_formatado)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Consultando regras do SisPNAPA..."):
+                try:
+                    resposta = chat.send_message(prompt)
+                    st.markdown(resposta.text)
+                    st.session_state.mensagens_chat.append({"role": "assistant", "content": resposta.text})
+                except Exception as e:
+                    st.error(f"Erro ao processar resposta: {e}")
