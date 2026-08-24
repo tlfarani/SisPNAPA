@@ -4698,12 +4698,11 @@ elif modo == "🤖 Assistente Virtual":
     5. Oriente o usuário a relatar falhas técnicas no menu '💡 Sugestões & Melhorias'.
     """
 
-    # Inicialização do Modelo
-    try:
-        modelo = genai.GenerativeModel(
-            model_name="gemini-1.5-flash-latest",
-            system_instruction=contexto_completo
-        )
+    # 4. Inicialização do Modelo com o identificador oficial
+    modelo = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=contexto_completo
+    )
     except Exception:
         modelo = genai.GenerativeModel(
             model_name="gemini-1.5-flash",
