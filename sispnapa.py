@@ -4379,12 +4379,12 @@ elif modo == "⭐ Meus Feedbacks (360º)":
                 if texto == "": 
                     texto = "*Avaliador não deixou comentário.*"
                 
-                st.markdown(f"""
+                st.markdown(f""
                 <div style="border-left: 5px solid {cor_borda}; padding: 10px; margin-bottom: 10px; background-color: #f8fafc; border-radius: 5px;">
                     <p style="margin:0; font-size:12px; color:#64748b;">Missão: {av['Codigo']} - {av['Atividade']}</p>
                     <p style="margin:5px 0 0 0; color:#0f172a;"><b>{icone}</b> "{texto}"</p>
                 </div>
-                """, unsafe_allow_html=True)
+                "", unsafe_allow_html=True)
 
 
 # --- TELA 7: CENTRAL DE SUGESTÕES E MELHORIAS ---
@@ -4595,12 +4595,43 @@ elif modo == "💡 Sugestões & Melhorias":
 
 # --- TELA: ASSISTENTE VIRTUAL (GEMINI API) ---
 elif modo == "🤖 Assistente Virtual":
+    # 1. CSS dedicado para forçar fundo claro no chat e no campo de digitação
+    st.markdown("""
+    <style>
+    /* Container inferior fixo do chat */
+    div[data-testid="stBottomBlockContainer"] {
+        background-color: #f8fafc !important;
+    }
+    /* Caixa externa do input */
+    div[data-testid="stChatInput"] {
+        background-color: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 10px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+    }
+    /* Área de texto onde o usuário digita */
+    div[data-testid="stChatInput"] textarea {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        font-size: 14px !important;
+    }
+    /* Placeholder ("Digite sua dúvida aqui...") */
+    div[data-testid="stChatInput"] textarea::placeholder {
+        color: #94a3b8 !important;
+    }
+    /* Ícone de envio */
+    div[data-testid="stChatInput"] button {
+        color: #15803d !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.markdown("<h3 style='color: #03170a;'>🤖 Assistente Virtual SisPNAPA</h3>", unsafe_allow_html=True)
     st.caption("Tire dúvidas sobre cadastros, regras de execução, senhas e operações em lote.")
 
     import google.generativeai as genai
 
-    # 1. Configuração da API
+    # 2. Configuração da Chave da API
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
         st.error("Chave GEMINI_API_KEY não encontrada nos secrets do Streamlit.")
@@ -4608,7 +4639,7 @@ elif modo == "🤖 Assistente Virtual":
 
     genai.configure(api_key=api_key)
 
-    # 2. Histórico de Mensagens na Sessão
+    # 3. Histórico de Mensagens na Sessão
     if "mensagens_chat" not in st.session_state:
         st.session_state.mensagens_chat = [
             {
@@ -4617,49 +4648,59 @@ elif modo == "🤖 Assistente Virtual":
             }
         ]
 
-    # 3. System Prompt com as regras de negócio do SisPNAPA
+    # 4. Ler o próprio código-fonte para dar superpoderes de consulta ao Gemini
+    try:
+        with open("sispnapa.py", "r", encoding="utf-8") as f:
+            codigo_completo = f.read()
+    except Exception:
+        codigo_completo = "Código-fonte não disponível."
+
+    # Contexto e Instruções com o código embutido
     contexto_sistema = f"""
     Você é o Assistente Virtual Oficial do SisPNAPA (Sistema de Planejamento de Ações de Emergências Ambientais do Ibama).
     Usuário atual: {nome_usuario_logado} | Perfil: {perfil_usuario} | UF: {uf_usuario}
 
-    REGRAS DO SISTEMA:
-    1. Primeiro acesso: E-mail institucional + senha padrão 'pnapa123'. A troca é feita na barra lateral em '🔑 Trocar Minha Senha'.
-    2. Cadastro de Equipe Obrigatório: Para vincular qualquer servidor em uma Atividade de Campo, ele PRECISA estar cadastrado previamente no menu '👥 Gerenciar Equipes'.
-    3. Inserção em Lote: No menu '➕ Inserir Nova Linha' (Atividade), ao selecionar múltiplos servidores na aba 'Recursos Humanos', o sistema gera registros individuais para toda a equipe simultaneamente com o mesmo Código de Atividade.
-    4. Edição em Lote: No menu '📊 Visualizar Base', marcar as caixas 'Selecionar' de várias linhas permite alterar status, datas ou colar processo SEI em massa.
-    5. Status de Conclusão: Uma atividade concluída só fica verde ('🟢 Concluída') se tiver o número do documento/processo SEI preenchido no campo 'Doc_Probatorio_Exec'. Sem o SEI, fica amarela ('🟡 Sem Documento de Conclusão').
-    6. Conflito de Liderança: Cada atividade só aceita 1 servidor como 'Coordenador de Campo'.
-    7. Relato de Bugs/Sugestões: Erros e ideias devem ser registrados na tela '💡 Sugestões & Melhorias'.
+    Abaixo está o CÓDIGO-FONTE COMPLETO do sistema para sua consulta técnica:
+    --- INÍCIO DO CÓDIGO ---
+    {codigo_completo}
+    --- FIM DO CÓDIGO ---
 
-    DIRETRIZES DE RESPOSTA:
-    - Seja direto, cortês e didático. Use tópicos com marcadores e emojis.
-    - Nunca mencione detalhes internos de infraestrutura (Power Automate, SharePoint, endpoints HTTP).
-    - Responda apenas com base nas regras do SisPNAPA.
+    DIRETRIZES DE ATENDIMENTO:
+    1. Use a lógica do código acima para responder com precisão sobre nomes de botões, regras de cálculo (metas, dias, orçamentos), permissões e telas.
+    2. Responda em português claro, didático, usando tópicos e emojis.
+    3. NUNCA mostre código Python bruto, nem revele segredos/URLs de Power Automate para o usuário. Explique sempre na perspectiva do usuário usando a interface gráfica.
+    4. Oriente o registro de bugs no menu '💡 Sugestões & Melhorias'.
     """
 
-    # 4. Inicialização do Modelo
-    modelo = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        system_instruction=contexto_sistema
-    )
+    # 5. Inicialização do Modelo (com fallback de versão)
+    try:
+        modelo = genai.GenerativeModel(
+            model_name="gemini-1.5-flash-latest",
+            system_instruction=contexto_sistema
+        )
+    except Exception:
+        modelo = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=contexto_sistema
+        )
 
-    # 5. Renderização do Histórico em Tela
+    # 6. Renderização do Histórico
     for msg in st.session_state.mensagens_chat:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # 6. Input do Usuário e Processamento
-    if prompt := st.chat_input("Digite sua dúvida aqui..."):
+    # 7. Entrada do Usuário e Processamento
+    if prompt := st.chat_input("Digite sua dúvida sobre o SisPNAPA aqui..."):
         st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Montagem do histórico para o modelo
+        # Formatação do histórico para a API
         historico_formatado = [
             {"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]}
             for m in st.session_state.mensagens_chat[:-1]
         ]
-        
+
         chat = modelo.start_chat(history=historico_formatado)
 
         with st.chat_message("assistant"):
