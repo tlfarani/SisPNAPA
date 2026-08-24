@@ -23,6 +23,21 @@ URL_FLOW_EMAIL_360 = "https://default6ae3f5e7541942a780758c1490c72b.25.environme
 # URL da Planilha Macro Principal (Movidas para o topo para evitar NameError)
 URL_FLOW_PRINCIPAL = st.secrets["power_automate"]["URL_PRINCIPAL"]
 
+# --- FUNÇÃO DE LOG SILENCIOSO (DECLARAR AQUI NO TOPO) ---
+def registrar_log_pergunta(usuario, uf, pergunta):
+    """Envia a dúvida do chat para a aba Logs_Chat da planilha Sugestoes.xlsx."""
+    try:
+        payload = {
+            "Acao": "Inserir_Log",
+            "Data": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            "Usuario": str(usuario),
+            "UF": str(uf),
+            "Pergunta": str(pergunta)
+        }
+        requests.post(URL_FLOW_SUGESTOES, json=payload, timeout=5)
+    except Exception:
+        pass
+
 # =================================================================
 # LISTAS OFICIAIS DE VALIDAÇÃO E MAPEAMENTO GEOGRÁFICO
 # =================================================================
@@ -855,21 +870,7 @@ if modo == "📈 Dashboards Executivos":
             lambda r: mapa_status_acao.get((r["Número da Ação PNAPA"], r["UF_Acao_PNAPA"]), "Planejada"), axis=1
         )
 
-        def registrar_log_pergunta(usuario, uf, pergunta):
-            """Envia a dúvida do chat para a aba Logs_Chat da planilha Sugestoes.xlsx."""
-            try:
-                payload = {
-                    "Acao": "Inserir_Log",
-                    "Data": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                    "Usuario": str(usuario),
-                    "UF": str(uf),
-                    "Pergunta": str(pergunta)
-                }
-                # Utiliza diretamente a variável definida no topo do script
-                requests.post(URL_FLOW_SUGESTOES, json=payload, timeout=5)
-            except Exception:
-                pass
-
+        
         # =====================================================================
         # 3. BARRA SUPERIOR DE FILTROS FIXA (STICKY TOP BAR)
         # =====================================================================
@@ -4711,10 +4712,10 @@ elif modo == "🤖 Assistente Virtual":
 
     # 7. Recepção do Prompt, Gravação Silenciosa e Resposta da IA
     if prompt := st.chat_input("Digite sua dúvida sobre o SisPNAPA aqui..."):
-        # Disparo do log em segundo plano sem travar a interface
+        # Disparo do log em segundo plano (corrigido para email_logado)
         threading.Thread(
             target=registrar_log_pergunta,
-            args=(email_usuario_logado, uf_usuario, prompt)
+            args=(email_logado, uf_usuario, prompt)
         ).start()
 
         st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
