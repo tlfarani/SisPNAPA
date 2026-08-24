@@ -651,8 +651,7 @@ else:
 # Montagem Dinâmica do Menu Lateral
 opcoes_menu = [
     "📈 Dashboards Executivos", 
-    "📊 Visualizar Base",
-    "🤖 Assistente Virtual"
+    "📊 Visualizar Base"
 ]
 
 if acesso_liberado:
@@ -665,6 +664,7 @@ if acesso_liberado:
 
 # opcoes_menu.append("⭐ Meus Feedbacks (360º)")
 opcoes_menu.append("💡 Sugestões & Melhorias")
+opcoes_menu.append("🤖 Assistente Virtual")  # 🚀 Agora no final do menu
 
 st.sidebar.markdown("## 🕹️ Painel de Controle")
 modo = st.sidebar.radio("Navegação:", opcoes_menu)
@@ -4613,7 +4613,7 @@ elif modo == "💡 Sugestões & Melhorias":
 
 # --- TELA: ASSISTENTE VIRTUAL (GEMINI API) ---
 elif modo == "🤖 Assistente Virtual":
-    # 1. CSS para garantir fundo claro no container inferior e no campo de digitação
+    # 1. CSS para estilização do chat e campo inferior
     st.markdown("""
     <style>
     div[data-testid="stBottomBlockContainer"] {
@@ -4640,7 +4640,7 @@ elif modo == "🤖 Assistente Virtual":
     """, unsafe_allow_html=True)
 
     st.markdown("<h3 style='color: #03170a;'>🤖 Assistente Virtual SisPNAPA</h3>", unsafe_allow_html=True)
-    st.caption("Tire dúvidas sobre regras do plano, cadastros de equipe, cálculo de metas e operações do sistema.")
+    st.caption("Consulte a base de conhecimento oficial ou tire dúvidas em tempo real com a IA.")
 
     # 2. Configuração de Autenticação da API Gemini
     api_key = st.secrets.get("GEMINI_API_KEY")
@@ -4650,7 +4650,7 @@ elif modo == "🤖 Assistente Virtual":
 
     genai.configure(api_key=api_key)
 
-    # 3. Leitura Dinâmica do FAQ e do Código-Fonte para Injeção de Contexto
+    # 3. Leitura Dinâmica do FAQ e do Código-Fonte
     try:
         with open("conhecimento_faq.md", "r", encoding="utf-8") as f_faq:
             conteudo_faq = f_faq.read()
@@ -4663,6 +4663,13 @@ elif modo == "🤖 Assistente Virtual":
     except Exception:
         conteudo_codigo = "Código-fonte não localizado."
 
+    # 4. EXIBIÇÃO PRÉVIA DO FAQ EM UM PAINEL RETRÁTIL
+    with st.expander("📖 **Consultar Perguntas Frequentes & Manual Oficial (FAQ)**", expanded=False):
+        st.markdown(conteudo_faq)
+
+    st.markdown("---")
+
+    # 5. Prompt de Sistema
     contexto_completo = f"""
     Você é o Assistente Virtual Oficial do SisPNAPA (Sistema de Planejamento de Ações de Emergências Ambientais do Ibama).
     Dados do usuário conectado:
@@ -4684,7 +4691,7 @@ elif modo == "🤖 Assistente Virtual":
     5. Oriente o usuário a relatar falhas técnicas no menu '💡 Sugestões & Melhorias'.
     """
 
-    # 4. Inicialização do Modelo
+    # 6. Inicialização do Modelo
     try:
         modelo = genai.GenerativeModel(
             model_name="gemini-1.5-flash-latest",
@@ -4696,23 +4703,21 @@ elif modo == "🤖 Assistente Virtual":
             system_instruction=contexto_completo
         )
 
-    # 5. Histórico da Conversa na Sessão
+    # 7. Histórico da Conversa
     if "mensagens_chat" not in st.session_state:
         st.session_state.mensagens_chat = [
             {
                 "role": "assistant",
-                "content": f"Olá, **{nome_usuario_logado}**! Sou o assistente virtual do SisPNAPA. Como posso ajudar nas suas atividades hoje?"
+                "content": f"Olá, **{nome_usuario_logado}**! Sou o assistente virtual do SisPNAPA. Você pode consultar o FAQ acima ou digitar sua dúvida abaixo."
             }
         ]
 
-    # 6. Renderização do Histórico em Tela
     for msg in st.session_state.mensagens_chat:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # 7. Recepção do Prompt, Gravação Silenciosa e Resposta da IA
+    # 8. Entrada do Usuário e Resposta
     if prompt := st.chat_input("Digite sua dúvida sobre o SisPNAPA aqui..."):
-        # Disparo do log em segundo plano (corrigido para email_logado)
         threading.Thread(
             target=registrar_log_pergunta,
             args=(email_logado, uf_usuario, prompt)
@@ -4722,7 +4727,6 @@ elif modo == "🤖 Assistente Virtual":
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Montagem do histórico para o modelo
         historico_chat = [
             {"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]}
             for m in st.session_state.mensagens_chat[:-1]
