@@ -585,13 +585,6 @@ if not st.session_state["autenticado"]:
                         dados_usuario = srv_match.iloc[0]
                         token_banco = str(dados_usuario.get("Token", "")).strip()
                         
-                        # Se não tem senha cadastrada no banco, aceita a senha padrão
-                        senha_esperada = token_banco if token_banco not in ["", "nan", "None"] else SENHA_PADRAO
-                        
-                        else:
-                        dados_usuario = srv_match.iloc[0]
-                        token_banco = str(dados_usuario.get("Token", "")).strip()
-                        
                         # 🚀 Validação segura com suporte a hash e texto puro legado
                         if validar_senha(senha_input, token_banco, SENHA_PADRAO):
                             st.session_state["autenticado"] = True
