@@ -524,6 +524,8 @@ st.markdown("""
 # =================================================================
 # IV. SISTEMA DE LOGIN CORPORATIVO (APP PÚBLICO COM PORTA TRANCADA)
 # =================================================================
+EMAIL_ADMIN = "tiago.farani@ibama.gov.br"
+SENHA_PADRAO = "pnapa123"
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
     st.session_state["email_logado"] = ""
@@ -532,7 +534,6 @@ if "autenticado" not in st.session_state:
     st.session_state["nome_usuario"] = ""
     st.session_state["id_serv_logado"] = 0
 
-SENHA_PADRAO = "pnapa123"
 
 # --- TELA DE LOGIN ---
 if not st.session_state["autenticado"]:
