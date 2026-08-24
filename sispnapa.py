@@ -4614,6 +4614,26 @@ elif modo == "💡 Sugestões & Melhorias":
 
 # --- TELA 8: BASE DE CONHECIMENTO (FAQ) ---
 elif modo == "📖 Base de Conhecimento (FAQ)":
+    # CSS com escopo seguro para o FAQ (alto contraste em caixas de código, listas e textos)
+    st.markdown("""
+    <style>
+    div[data-testid="stMarkdownContainer"] code {
+        background-color: #f1f5f9 !important;
+        color: #0f172a !important;
+        font-weight: 600 !important;
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        border: 1px solid #cbd5e1 !important;
+        font-size: 0.9em !important;
+    }
+    div[data-testid="stMarkdownContainer"] p, 
+    div[data-testid="stMarkdownContainer"] li {
+        color: #0f172a !important;
+        line-height: 1.6 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.markdown("<h2 style='color: #03170a;'>📖 Base de Conhecimento & Regras de Negócio</h2>", unsafe_allow_html=True)
     st.caption("Manual oficial de governança, diretrizes operacionais, fórmulas de metas e regras do SisPNAPA.")
     
@@ -4630,6 +4650,7 @@ elif modo == "🤖 Assistente Virtual":
     # CSS para garantir fundo claro no container inferior e no campo de digitação
     st.markdown("""
     <style>
+    /* 1. Barra inferior e caixa de digitação (Mantidos) */
     div[data-testid="stBottomBlockContainer"] {
         background-color: #f8fafc !important;
     }
@@ -4649,6 +4670,24 @@ elif modo == "🤖 Assistente Virtual":
     }
     div[data-testid="stChatInput"] button {
         color: #15803d !important;
+    }
+
+    /* 2. Correção de contraste para caixas de texto/código no chat */
+    div[data-testid="stChatMessage"] code {
+        background-color: #e2e8f0 !important;
+        color: #0f172a !important;
+        font-weight: 600 !important;
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        border: 1px solid #cbd5e1 !important;
+        font-size: 0.88em !important;
+    }
+
+    /* 3. Textos e listas do chat com alta legibilidade */
+    div[data-testid="stChatMessage"] p, 
+    div[data-testid="stChatMessage"] li {
+        color: #0f172a !important;
+        line-height: 1.6 !important;
     }
     </style>
     """, unsafe_allow_html=True)
