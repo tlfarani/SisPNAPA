@@ -4698,11 +4698,27 @@ elif modo == "🤖 Assistente Virtual":
     5. Oriente o usuário a relatar falhas técnicas no menu '💡 Sugestões & Melhorias'.
     """
 
-    # 4. Inicialização do Modelo Oficial
-    modelo = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        system_instruction=contexto_completo
-    )
+    # 4. Inicialização do Modelo com Fallback Automático
+    nomes_para_testar = [
+        "gemini-2.0-flash",
+        "gemini-1.5-flash-002",
+        "gemini-1.5-flash",
+        "gemini-pro"
+    ]
+
+    modelo = None
+    for nome_m in nomes_para_testar:
+        try:
+            modelo = genai.GenerativeModel(
+                model_name=nome_m,
+                system_instruction=contexto_completo
+            )
+            break
+        except Exception:
+            continue
+
+    if modelo is None:
+        modelo = genai.GenerativeModel("gemini-1.5-flash", system_instruction=contexto_completo)
 
     # Histórico da Conversa
     if "mensagens_chat" not in st.session_state:
