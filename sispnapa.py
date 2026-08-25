@@ -2324,12 +2324,32 @@ elif modo == "📊 Visualizar Base":
                                 ed_papel_inst = st.selectbox("Papel da UF nesta Ação:", LISTA_PAPEIS_INSTITUCIONAIS, index=idx_pap, key=f"t1_ac_papel_{id_ac_ref}")
                             with c_ac_p2:
                                 uf_alvo_ac = str(reg_ac_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
-                                srvs_uf_lista = df_servidores[df_servidores["UF_Servidor"] == uf_alvo_ac]["Servidor"].dropna().unique().tolist()
+                                # 🚀 LISTAGEM ESTRITA PELA UF DA AÇÃO
+                                srvs_uf_lista = obter_servidores_por_uf(df_servidores, uf_alvo_ac)
+                                
+                                val_foc_atual = str(reg_ac_alvo.get("Servidor", "")).strip()
+                                if val_foc_atual and val_foc_atual not in srvs_uf_lista:
+                                    srvs_uf_lista.append(val_foc_atual)
+                                    srvs_uf_lista = sorted(srvs_uf_lista)
+
                                 if ed_papel_inst == "Coordenação":
-                                    val_foc_atual = str(reg_ac_alvo.get("Servidor", "")).strip()
                                     idx_foc = srvs_uf_lista.index(val_foc_atual) if val_foc_atual in srvs_uf_lista else 0
-                                    ed_servidor_ac = st.selectbox(f"Ponto Focal da Ação em {uf_alvo_ac}:", srvs_uf_lista if srvs_uf_lista else [val_foc_atual], index=idx_foc, key=f"t1_ac_focal_{id_ac_ref}")
-                                    ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = uf_alvo_ac, "Sede Superintendência", "Sim"
+                                    ed_servidor_ac = st.selectbox(
+                                        f"Ponto Focal da Ação em {uf_alvo_ac}:", 
+                                        srvs_uf_lista if srvs_uf_lista else [val_foc_atual], 
+                                        index=idx_foc, 
+                                        key=f"t1_ac_focal_{id_ac_ref}"
+                                    )
+                                    
+                                    # 🚀 Resgate real dos dados do coordenador
+                                    match_srv_coord_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_ac).strip()]
+                                    if not match_srv_coord_t1.empty:
+                                        d_coord_t1 = match_srv_coord_t1.iloc[0]
+                                        ed_uf_srv_ac = str(d_coord_t1.get("UF_Servidor", uf_alvo_ac))
+                                        ed_lot_ac = str(d_coord_t1.get("Lotacao", "Sede Superintendência"))
+                                        ed_eq_ac = str(d_coord_t1.get("Equipe_Emergencias", "Sim"))
+                                    else:
+                                        ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = uf_alvo_ac, "Sede Superintendência", "Sim"
                                 else:
                                     st.info(f"ℹ️ Atuação em Apoio: Sem coordenador estadual.")
                                     ed_servidor_ac, ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = "", "", "", "Não"
@@ -2881,12 +2901,19 @@ elif modo == "📊 Visualizar Base":
                             ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo["Periculosidade/Insalubridade"]) if reg_at_alvo.get("Periculosidade/Insalubridade") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
 
                         with aba3_at:
-                            df_srv_at = df_servidores[df_servidores["UF_Servidor"] == ed_uf_acao_val]
-                            lista_nomes_servidores = sorted(df_srv_at["Servidor"].dropna().unique().tolist()) if not df_srv_at.empty else [email_logado]
+                            # 🚀 LISTAGEM ESTRITA PELA UF DA ATIVIDADE
+                            lista_nomes_servidores = obter_servidores_por_uf(df_servidores, ed_uf_acao_val)
+                            
+                            srv_atual_at = str(reg_at_alvo.get("Servidor", "")).strip()
+                            if srv_atual_at and srv_atual_at not in lista_nomes_servidores:
+                                lista_nomes_servidores.append(srv_atual_at)
+                                lista_nomes_servidores = sorted(lista_nomes_servidores)
+                                
+                            if not lista_nomes_servidores:
+                                lista_nomes_servidores = [email_logado]
                             
                             c_at_rh1, c_at_rh2 = st.columns(2)
                             with c_at_rh1:
-                                srv_atual_at = str(reg_at_alvo.get("Servidor", "")).strip()
                                 idx_srv_at = lista_nomes_servidores.index(srv_atual_at) if srv_atual_at in lista_nomes_servidores else 0
                                 ed_servidor_at = st.selectbox("Servidor Integrante / Responsável:", lista_nomes_servidores, index=idx_srv_at, key=f"t1_at_srv_{id_at_ref}")
                             with c_at_rh2:
@@ -2898,8 +2925,10 @@ elif modo == "📊 Visualizar Base":
                                     idx_func_at = 0 if eh_focal_at else 1
                                 ed_funcao_campo = st.selectbox("Função na Atividade de Campo:", LISTA_FUNCOES_CAMPO, index=idx_func_at, key=f"t1_at_func_{id_at_ref}_{ed_servidor_at}")
 
-                            if not df_srv_at.empty and ed_servidor_at in df_srv_at["Servidor"].values:
-                                dados_s_linha = df_srv_at[df_srv_at["Servidor"] == ed_servidor_at].iloc[0]
+                            # 🚀 RESGATE REAL DOS DADOS DO SERVIDOR NA BASE COMPLETA
+                            match_srv_at_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
+                            if not match_srv_at_t1.empty:
+                                dados_s_linha = match_srv_at_t1.iloc[0]
                                 ed_uf_srv_at = str(dados_s_linha.get("UF_Servidor", ed_uf_acao_val))
                                 ed_lot_at = str(dados_s_linha.get("Lotacao", "Sede Superintendência"))
                                 ed_eq_at = str(dados_s_linha.get("Equipe_Emergencias", "Não"))
@@ -3151,8 +3180,11 @@ elif modo == "📊 Visualizar Base":
                         with l_aba3:
                             st.caption("Atenção: Alterar dados de Recursos Humanos aplicará o mesmo valor a todas as linhas selecionadas.")
                             if st.checkbox("Alterar Servidor Integrante / Responsável?", key="chk_srv_lt"):
-                                lista_todos_srvs = sorted(df_servidores["Servidor"].dropna().unique().tolist())
-                                edicoes_lote["Servidor"] = st.selectbox("Novo Servidor:", lista_todos_srvs, key="in_srv_lt")
+                                uf_alvo_lote = edicoes_lote.get("UF_Acao_PNAPA", str(df_at_sel.iloc[0].get("UF_Acao_PNAPA", uf_usuario)).strip())
+                                lista_srvs_lote_uf = obter_servidores_por_uf(df_servidores, uf_alvo_lote)
+                                if not lista_srvs_lote_uf:
+                                    lista_srvs_lote_uf = sorted(df_servidores["Servidor"].dropna().unique().tolist())
+                                edicoes_lote["Servidor"] = st.selectbox(f"Novo Servidor ({uf_alvo_lote}):", lista_srvs_lote_uf, key="in_srv_lt")
                             if st.checkbox("Alterar Função na Atividade de Campo?", key="chk_func_lt"):
                                 edicoes_lote["Coordenador_Operacao"] = st.selectbox("Nova Função:", LISTA_FUNCOES_CAMPO, key="in_func_lt")
                             if st.checkbox("Alterar Número da PCDP?", key="chk_pcdp_lt"):
