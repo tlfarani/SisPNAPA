@@ -5038,12 +5038,40 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             delta_color="normal" if saldo_dipro_restante >= 0 else "inverse"
         )
         
-        # LINHA 2: COBERTURA FÍSICA E ADESÃO
+        # LINHA 2: COBERTURA FÍSICA E ADESÃO (ALTO CONTRASTE)
         c_sub1, c_sub2, c_sub3 = st.columns([1, 1.5, 1.5])
-        c_sub1.caption(f"🎯 **Ações Analisadas:** `{total_acoes_catalogo}`")
-        c_sub2.caption(f"📊 **Cobertura Física Nacional:** `{taxa_adesao_fisica:.1f}%` ({meta_fisica_demandada:.1f} de {meta_fisica_global:.1f})")
-        ufs_part_count = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
-        c_sub3.caption(f"🗺️ **Adesão Federativa:** `{ufs_part_count}/26 UFs` ({ufs_part_count/26*100:.0f}%)")
+        
+        with c_sub1:
+            st.markdown(
+                f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
+                f"🎯 <strong>Ações Analisadas:</strong> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{total_acoes_catalogo}</span>"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
+            
+        with c_sub2:
+            st.markdown(
+                f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
+                f"📊 <strong>Cobertura Física Nacional:</strong> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{taxa_adesao_fisica:.1f}%</span> "
+                f"<span style='color: #64748b; font-weight: 500;'>({meta_fisica_demandada:.1f} de {meta_fisica_global:.1f})</span>"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
+            
+        with c_sub3:
+            ufs_part_count = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
+            pct_part_uf = (ufs_part_count / 26.0 * 100.0)
+            st.markdown(
+                f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
+                f"🗺️ <strong>Adesão Federativa:</strong> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{ufs_part_count}/26 UFs</span> "
+                f"<span style='color: #64748b; font-weight: 500;'>({pct_part_uf:.0f}%)</span>"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
+            
         st.markdown("---")
 
         # 4. CARDS POR AÇÃO COM DUPLA BARRA (FÍSICO + FINANCEIRO)
