@@ -889,7 +889,8 @@ else:
 # Montagem Dinâmica do Menu Lateral
 opcoes_menu = [
     "📈 Dashboards Executivos", 
-    "📊 Visualizar Base"
+    "📊 Visualizar Base",
+    "🤝 Pactuação Pré-PNAPA" 
 ]
 
 if acesso_liberado:
@@ -4903,7 +4904,192 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
 
 
 
-# --- TELA: MEUS FEEDBACKS (360º) ---
+# =====================================================================
+# --- TELA 6: PACTUAÇÃO PRÉ-PNAPA (DUPLO MATCHMAKER: FÍSICO & FINANCEIRO) ---
+# =====================================================================
+elif modo == "🤝 Pactuação Pré-PNAPA":
+    st.markdown("<h3 style='color: #03170a;'>🤝 Painel de Pactuação Pré-PNAPA (Físico & Orçamentário)</h3>", unsafe_allow_html=True)
+    st.caption("Pactuação estratégica entre as Metas e Tetos Globais do Ceneac (Top-Down) e as demandas inseridas pelos Estados (Bottom-Up).")
+
+    if df_pnapas.empty:
+        st.warning("⚠️ O Catálogo de Ações PNAPA está vazio. Cadastre ações no catálogo para iniciar a pactuação.")
+    else:
+        # 1. FILTROS DE CABEÇALHO (ANO E DONO DA AÇÃO)
+        anos_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
+        
+        c_topo1, c_topo2, c_topo3 = st.columns([1, 1.5, 1.5])
+        with c_topo1:
+            ano_pact_sel = st.selectbox("📅 Ano de Planejamento:", anos_disponiveis, key="pact_ano_sel")
+        
+        df_pna_ano = df_pnapas[df_pnapas["Ano"].astype(int) == int(ano_pact_sel)].copy()
+        
+        with c_topo2:
+            donos_disponiveis = ["Todos os Especialistas"] + sorted([d for d in df_pna_ano["Dono_Acao"].dropna().unique() if str(d).strip()])
+            filtro_dono = st.selectbox("👑 Filtrar por Dono da Ação (Sede):", donos_disponiveis, key="pact_dono_sel")
+            
+        with c_topo3:
+            status_pact_filtro = st.selectbox(
+                "⚖️ Filtro de Alinhamento Físico:", 
+                ["Todas as Ações", "Déficit Físico (<100%)", "Meta Atingida (100%)", "Superávit Físico (>100%)", "Sem Adesão Estadual (0%)"], 
+                key="pact_status_filtro"
+            )
+
+        if filtro_dono != "Todos os Especialistas":
+            df_pna_ano = df_pna_ano[df_pna_ano["Dono_Acao"] == filtro_dono]
+
+        # 2. CRUZAMENTO DE DADOS COM AS AÇÕES ESTADUAIS (df_atual)
+        df_acoes_cadastradas = df_atual[
+            (df_atual["Nível"].astype(str).str.strip() == "Ação") &
+            (df_atual["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_pact_sel))
+        ].copy()
+
+        # Agregação das metas e recursos demandados pelos estados
+        if not df_acoes_cadastradas.empty:
+            df_acoes_cadastradas["Meta_Num"] = pd.to_numeric(df_acoes_cadastradas["Meta_Indicador"], errors='coerce').fillna(0.0)
+            
+            # Garante o cálculo do recurso financeiro planejado total
+            r_d = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Diarias", 0), errors='coerce').fillna(0.0)
+            r_p = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Passagens", 0), errors='coerce').fillna(0.0)
+            r_o = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Outras_Despesas", 0), errors='coerce').fillna(0.0)
+            df_acoes_cadastradas["Rec_Plan_Num"] = r_d + r_p + r_o
+            
+            # Código puro para cruzamento
+            df_acoes_cadastradas["Cod_Puro"] = df_acoes_cadastradas["Número da Ação PNAPA"].astype(str).apply(lambda x: x.split('-')[0].strip().upper())
+        else:
+            df_acoes_cadastradas["Cod_Puro"] = []
+
+        # 3. CONSOLIDAÇÃO GLOBAL DOS CARDS DE TOPO
+        total_acoes_catalogo = len(df_pna_ano)
+        meta_fisica_global = pd.to_numeric(df_pna_ano["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
+        
+        # Coluna opcional de teto orçamentário no catálogo (se existir; senão assume 0)
+        col_orc_nac = "Orcamento_Nacional" if "Orcamento_Nacional" in df_pna_ano.columns else ("Teto_Orcamentario" if "Teto_Orcamentario" in df_pna_ano.columns else "")
+        orcamento_global_teto = pd.to_numeric(df_pna_ano[col_orc_nac], errors='coerce').fillna(0.0).sum() if col_orc_nac else 0.0
+
+        # Demandas estaduais filtradas
+        cods_catalogo = [str(c).split('-')[0].strip().upper() for c in df_pna_ano["Num_Acao_PNAPA"].dropna().unique()]
+        df_pactuado_filtrado = df_acoes_cadastradas[df_acoes_cadastradas["Cod_Puro"].isin(cods_catalogo)] if not df_acoes_cadastradas.empty else pd.DataFrame()
+        
+        meta_fisica_demandada = df_pactuado_filtrado["Meta_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
+        orcamento_total_demandado = df_pactuado_filtrado["Rec_Plan_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
+        
+        taxa_adesao_fisica = (meta_fisica_demandada / meta_fisica_global * 100.0) if meta_fisica_global > 0 else 0.0
+        ufs_participantes_totais = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
+
+        st.markdown("---")
+        m_c1, m_c2, m_c3, m_c4 = st.columns(4)
+        m_c1.metric("🎯 Ações no Catálogo", total_acoes_catalogo)
+        m_c2.metric("📊 Cobertura Física (Metas)", f"{taxa_adesao_fisica:.1f}%", delta=f"{meta_fisica_demandada:.1f} / {meta_fisica_global:.1f}")
+        m_c3.metric("💰 Orçamento Total Demandado", formatar_moeda_br(orcamento_total_demandado))
+        m_c4.metric("🗺️ Adesão Federativa", f"{ufs_participantes_totais} / 26 UFs", delta=f"{(ufs_participantes_totais/26)*100:.0f}% adesão")
+        st.markdown("---")
+
+        # 4. CARDS POR AÇÃO COM DUPLA BARRA (FÍSICO + FINANCEIRO)
+        todas_ufs_brasil = [u for u in LISTA_UFS_COMPLETA if u not in ["Ceneac", "DF"]]
+
+        for _, acao_row in df_pna_ano.iterrows():
+            cod_acao = str(acao_row.get("Num_Acao_PNAPA", "")).strip().upper()
+            cod_puro_ac = cod_acao.split('-')[0].strip()
+            chave_acao_ano = str(acao_row.get("Acao_Ano", f"{cod_puro_ac}-{ano_pact_sel}"))
+            nome_acao = str(acao_row.get("Nome_Acao_Apelido", acao_row.get("Nome_Acao_Completo", "")))
+            dono_acao = str(acao_row.get("Dono_Acao", "Ceneac"))
+            uf_dono = str(acao_row.get("UF_Dono", "Ceneac"))
+            indicador_acao = str(acao_row.get("Indicador", "Não informado"))
+            
+            # Metas e Tetos Nacionais (Top-Down)
+            meta_nacional_fisica = float(pd.to_numeric(acao_row.get("Meta_Nacional", 0.0), errors='coerce') or 0.0)
+            teto_nacional_orc = float(pd.to_numeric(acao_row.get(col_orc_nac, 0.0), errors='coerce') or 0.0) if col_orc_nac else 0.0
+
+            # Demandas Estaduais (Bottom-Up)
+            df_propostas_ufs = df_acoes_cadastradas[df_acoes_cadastradas["Cod_Puro"] == cod_puro_ac].copy() if not df_acoes_cadastradas.empty else pd.DataFrame()
+            
+            meta_demandada_ufs = df_propostas_ufs["Meta_Num"].sum() if not df_propostas_ufs.empty else 0.0
+            orc_demandado_ufs = df_propostas_ufs["Rec_Plan_Num"].sum() if not df_propostas_ufs.empty else 0.0
+            
+            # % Físico
+            pct_fisico = (meta_demandada_ufs / meta_nacional_fisica * 100.0) if meta_nacional_fisica > 0 else (100.0 if meta_demandada_ufs > 0 else 0.0)
+
+            # Classificação Semafórica da Meta Física
+            if meta_demandada_ufs == 0:
+                badge_status = "⚪ Sem Adesão (0%)"
+            elif pct_fisico < 100:
+                badge_status = f"🟡 Déficit Físico ({pct_fisico:.0f}%)"
+            elif pct_fisico == 100:
+                badge_status = "🟢 Meta Pactuada (100%)"
+            else:
+                badge_status = f"🔵 Superávit Físico ({pct_fisico:.0f}%)"
+
+            # Filtro de visualização
+            if status_pact_filtro != "Todas as Ações":
+                if "Déficit" in status_pact_filtro and (pct_fisico >= 100 or meta_demandada_ufs == 0): continue
+                if "Atingida" in status_pact_filtro and pct_fisico != 100: continue
+                if "Superávit" in status_pact_filtro and pct_fisico <= 100: continue
+                if "Sem Adesão" in status_pact_filtro and meta_demandada_ufs > 0: continue
+
+            # RENDERIZAÇÃO DO EXPANDER DA AÇÃO
+            with st.expander(f"📌 **{chave_acao_ano}** — {nome_acao}  |  {badge_status}  |  Demandado: {formatar_moeda_br(orc_demandado_ufs)}", expanded=False):
+                c_inf1, c_inf2, c_inf3 = st.columns([1.5, 1, 1])
+                with c_inf1:
+                    st.markdown(f"👑 **Especialista Sede (Dono):** `{dono_acao} ({uf_dono})`")
+                    st.markdown(f"📈 **Indicador Oficial:** `{indicador_acao}`")
+                with c_inf2:
+                    st.metric("Meta Física Nacional", f"{meta_nacional_fisica:.1f}")
+                with c_inf3:
+                    st.metric("Meta Física Demandada (UFs)", f"{meta_demandada_ufs:.1f}", delta=f"{meta_demandada_ufs - meta_nacional_fisica:+.1f}")
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- BARRA 1: PACTUAÇÃO FÍSICA ---
+                prog_fisico_val = min(1.0, meta_demandada_ufs / meta_nacional_fisica) if meta_nacional_fisica > 0 else 0.0
+                st.markdown(f"**🎯 Alinhamento de Metas Físicas:** `{pct_fisico:.1f}%` ({meta_demandada_ufs:.1f} de {meta_nacional_fisica:.1f})")
+                st.progress(prog_fisico_val)
+
+                # --- BARRA 2: PACTUAÇÃO FINANCEIRA ---
+                if teto_nacional_orc > 0:
+                    pct_orc = (orc_demandado_ufs / teto_nacional_orc) * 100.0
+                    prog_orc_val = min(1.0, orc_demandado_ufs / teto_nacional_orc)
+                    st.markdown(f"**💰 Demanda Orçamentária vs Teto Nacional:** `{pct_orc:.1f}%` ({formatar_moeda_br(orc_demandado_ufs)} de {formatar_moeda_br(teto_nacional_orc)})")
+                    st.progress(prog_orc_val)
+                else:
+                    st.markdown(f"**💰 Demanda Orçamentária Total Acumulada das UFs:** `{formatar_moeda_br(orc_demandado_ufs)}` *(Teto nacional não fixado)*")
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                t_pact_ufs, t_pact_pend = st.tabs(["🗺️ Propostas dos Estados (Físico & Orçamento)", "⏳ Estados Sem Proposta Registrada"])
+
+                with t_pact_ufs:
+                    if df_propostas_ufs.empty:
+                        st.info("Nenhuma UF registrou proposta de planejamento para esta ação.")
+                    else:
+                        # Tabela analítica com foco em Metas e Recursos
+                        df_exibir_pact = df_propostas_ufs[[
+                            "UF_Acao_PNAPA", "Papel_Institucional", "Servidor", 
+                            "Meta_Indicador", "Rec_Plan_Diarias", "Rec_Plan_Passagens", 
+                            "Rec_Plan_Outras_Despesas", "Rec_Plan_Num", "Andamento"
+                        ]].copy()
+                        
+                        df_exibir_pact.columns = [
+                            "UF", "Papel", "Ponto Focal Estadual", 
+                            "Meta Proposta", "Diárias (R$)", "Passagens (R$)", 
+                            "Outras Desp. (R$)", "Total Previsto (R$)", "Situação"
+                        ]
+                        
+                        # Formatações monetárias
+                        for col_moeda in ["Diárias (R$)", "Passagens (R$)", "Outras Desp. (R$)", "Total Previsto (R$)"]:
+                            df_exibir_pact[col_moeda] = df_exibir_pact[col_moeda].apply(formatar_moeda_br)
+                        
+                        st.dataframe(df_exibir_pact.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+                with t_pact_pend:
+                    ufs_aderiram = df_propostas_ufs["UF_Acao_PNAPA"].dropna().unique().tolist() if not df_propostas_ufs.empty else []
+                    ufs_faltantes = sorted([u for u in todas_ufs_brasil if u not in ufs_aderiram])
+                    
+                    if not ufs_faltantes:
+                        st.success("🎉 Todas as 26 UFs já enviaram propostas para esta Ação!")
+                    else:
+                        st.warning(f"⚠️ **{len(ufs_faltantes)} estado(s)** ainda não cadastraram proposta:")
+                        st.write(" ".join([f"`{u}`" for u in ufs_faltantes]))
+
+# --- TELA 7: MEUS FEEDBACKS (360º) ---
 elif modo == "⭐ Meus Feedbacks (360º)":
     st.markdown("<h3 style='color: #03170a;'>⭐ Meus Feedbacks e Avaliações de Pares (360º)</h3>", unsafe_allow_html=True)
     st.markdown("Nesta área, você avalia colegas de missões concluídas (com 3 ou mais membros) e consulta os feedbacks anônimos que recebeu para o seu desenvolvimento profissional.")
@@ -5061,7 +5247,7 @@ elif modo == "⭐ Meus Feedbacks (360º)":
                 """, unsafe_allow_html=True)
 
 
-# --- TELA 7: CENTRAL DE SUGESTÕES E MELHORIAS ---
+# --- TELA 8: CENTRAL DE SUGESTÕES E MELHORIAS ---
 elif modo == "💡 Sugestões & Melhorias":
     st.markdown("<h2 style='color: #03170a;'>💡 Central de Feedback & Sugestões de Melhoria</h2>", unsafe_allow_html=True)
     st.caption("Espaço colaborativo para que testadores e usuários enviem inconsistências, ideias e solicitações.")
@@ -5267,7 +5453,7 @@ elif modo == "💡 Sugestões & Melhorias":
                                     st.error(f"Erro: {e}")
 
 
-# --- TELA 8: BASE DE CONHECIMENTO (FAQ) ---
+# --- TELA 9: BASE DE CONHECIMENTO (FAQ) ---
 elif modo == "📖 Base de Conhecimento (FAQ)":
     # CSS com escopo seguro para o FAQ (alto contraste em caixas de código, listas e textos)
     st.markdown("""
