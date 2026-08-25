@@ -4926,11 +4926,17 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         if "teto_global_dipro" not in st.session_state:
             st.session_state["teto_global_dipro"] = float(st.session_state.get("gov_params", {}).get("orcamento_global_dipro", 1500000.0))
 
+        # 🚀 DECLARAÇÃO DA LISTA DE ANOS DO CATÁLOGO (COM FALLBACK SEGURO)
+        if not df_pnapas.empty and "Ano" in df_pnapas.columns:
+            anos_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
+        else:
+            anos_disponiveis = [2027, 2026]
+
         c_topo1, c_topo2, c_topo3 = st.columns([1, 1.3, 1.3])
         with c_topo1:
             ano_pact_sel = st.selectbox("📅 Ano de Planejamento:", anos_disponiveis, key="pact_ano_sel")
         
-        df_pna_ano = df_pnapas[df_pnapas["Ano"].astype(int) == int(ano_pact_sel)].copy()
+        df_pna_ano = df_pnapas[pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel)].copy()
         
         with c_topo2:
             donos_disponiveis = ["Todos os Especialistas"] + sorted([d for d in df_pna_ano["Dono_Acao"].dropna().unique() if str(d).strip()])
