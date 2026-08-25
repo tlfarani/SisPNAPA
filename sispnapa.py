@@ -315,7 +315,8 @@ def carregar_sugestoes():
         "Titulo", "Descricao", "Autor", "UF_Autor", "Resposta_Admin"
     ]
     try:
-        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Listar"}, timeout=35)
+        # 🚀 Alterado de "Listar" para "Ler"
+        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler"}, timeout=35)
         if r.status_code in [200, 202]:
             dados = r.json()
             lista_itens = dados.get("value", dados) if isinstance(dados, dict) else dados
@@ -351,8 +352,6 @@ def carregar_sugestoes():
         
     return pd.DataFrame(columns=cols_padrao)
 
-# Execução da carga:
-df_sugestoes = carregar_sugestoes()
         
 # Função de Leitura Blindada contra Chaves Ausentes do Power Automate
 def carregar_dados_da_nuvem():
