@@ -940,31 +940,55 @@ with st.sidebar.popover("🔑 Trocar Minha Senha", use_container_width=True):
 # =========================================================================
 if perfil_usuario == "Administrador":
     with st.sidebar.popover("⚙️ Calibrar Regras & Limites (Admin)", use_container_width=True):
-        # 🎨 ESTILIZAÇÃO COM FUNDO CLARO E ALTA LEGIBILIDADE
+        # 🎨 ESTILIZAÇÃO: FUNDO VERDE CLARO + BOTÕES CLAROS DE ALTO CONTRASTE
         st.markdown("""
             <style>
             div[data-testid="stPopoverBody"] {
-                background-color: #ffffff !important;
+                background-color: #f2f8f4 !important;
                 color: #0f172a !important;
-                border: 1px solid #cbd5e1 !important;
+                border: 1px solid #bbf7d0 !important;
                 box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25) !important;
                 border-radius: 8px !important;
             }
             div[data-testid="stPopoverBody"] label, 
             div[data-testid="stPopoverBody"] p, 
             div[data-testid="stPopoverBody"] span {
-                color: #1e293b !important;
+                color: #0f291e !important;
                 font-weight: 600 !important;
             }
             div[data-testid="stPopoverBody"] [data-testid="stCaptionContainer"] {
-                color: #475569 !important;
+                color: #2d5a43 !important;
                 font-weight: normal !important;
             }
             div[data-testid="stPopoverBody"] input,
             div[data-testid="stPopoverBody"] textarea {
                 color: #0f172a !important;
-                background-color: #f8fafc !important;
+                background-color: #ffffff !important;
                 border: 1px solid #94a3b8 !important;
+            }
+            /* Botão 'Aplicar Regras' (Verde Claro Destacado) */
+            div[data-testid="stPopoverBody"] button[kind="primary"] {
+                background-color: #dcfce7 !important;
+                color: #064e3b !important;
+                border: 1px solid #86efac !important;
+                font-weight: 700 !important;
+            }
+            div[data-testid="stPopoverBody"] button[kind="primary"]:hover {
+                background-color: #bbf7d0 !important;
+                border-color: #4ade80 !important;
+                color: #022c22 !important;
+            }
+            /* Botão 'Restaurar Padrão' (Branco / Neutro Claro) */
+            div[data-testid="stPopoverBody"] button[kind="secondary"] {
+                background-color: #ffffff !important;
+                color: #1e293b !important;
+                border: 1px solid #cbd5e1 !important;
+                font-weight: 600 !important;
+            }
+            div[data-testid="stPopoverBody"] button[kind="secondary"]:hover {
+                background-color: #f1f5f9 !important;
+                border-color: #94a3b8 !important;
+                color: #0f172a !important;
             }
             </style>
         """, unsafe_allow_html=True)
@@ -1023,7 +1047,7 @@ if perfil_usuario == "Administrador":
                 time.sleep(1)
                 st.rerun()
         with col_btn_g2:
-            if st.button("🔄 Restaurar Padrão", use_container_width=True):
+            if st.button("🔄 Restaurar Padrão", type="secondary", use_container_width=True):
                 st.session_state["gov_params"] = DEFAULT_GOV_PARAMS.copy()
                 st.info("Parâmetros restaurados.")
                 time.sleep(1)
