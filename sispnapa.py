@@ -4944,7 +4944,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         with c_topo1:
             ano_pact_sel = st.selectbox("📅 Ano de Planejamento:", anos_disponiveis, key="pact_ano_sel")
 
-        # 🚀 1.1 Resgata a linha de configuração DIPRO_GLOBAL gravada no SharePoint para o ano
+        # 1.1 Resgata a linha de configuração DIPRO_GLOBAL para o ano
         linha_dipro_ano = df_pnapas[
             (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() == "DIPRO_GLOBAL") &
             (pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel))
@@ -4957,7 +4957,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
         st.session_state["teto_global_dipro"] = teto_dipro_atual
 
-        # 🚀 1.2 Filtra apenas ações operacionais (ocultando a linha de metadados DIPRO_GLOBAL)
+        # 1.2 Filtra apenas ações operacionais (ocultando a linha de metadados DIPRO_GLOBAL)
         df_pna_ano = df_pnapas[
             (pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel)) &
             (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL")
@@ -4981,12 +4981,10 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 key="pact_status_filtro"
             )
 
-        # 🚀 1.3 Popover com Gravação Persistente no SharePoint (Exclusivo Administrador)
+        # 1.3 Popover com Gravação Persistente no SharePoint (Administrador)
         if perfil_usuario == "Administrador":
             with st.popover("⚙️ Calibrar Orçamento Global Aprovado pela DIPRO", use_container_width=True):
                 st.markdown("#### 🏛️ Envelope Orçamentário da Emergência Ambiental (DIPRO)")
-                st.caption("O valor configurado aqui será gravado permanentemente na base do SharePoint para todos os usuários.")
-                
                 novo_teto_dipro = st.number_input(
                     f"Teto Orçamentário Global Autorizado pela DIPRO para {ano_pact_sel} (R$):",
                     min_value=0.0,
@@ -4998,7 +4996,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 
                 if st.button("💾 Salvar Teto Global DIPRO no SharePoint", type="primary", key="btn_salvar_teto_dipro_db"):
                     col_id_pna = "ID_PNAPA" if "ID_PNAPA" in df_pnapas.columns else "Id"
-                    
                     if not linha_dipro_ano.empty:
                         id_dipro_ref = int(float(linha_dipro_ano.iloc[0][col_id_pna]))
                         acao_flow = "Editar"
@@ -5041,26 +5038,24 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         if filtro_dono != "Todos os Especialistas":
             df_pna_ano = df_pna_ano[df_pna_ano["Dono_Acao"] == filtro_dono]
 
-        # 2. CRUZAMENTO DE DADOS COM AS AÇÕES ESTADUAIS (df_atual)
+        # 2. CRUZAMENTO SEGURO DE DADOS COM AS AÇÕES ESTADUAIS (df_atual)
         df_acoes_cadastradas = df_atual[
             (df_atual["Nível"].astype(str).str.strip() == "Ação") &
             (df_atual["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_pact_sel))
         ].copy()
 
-        # Agregação das metas e recursos demandados pelos estados
         if not df_acoes_cadastradas.empty:
             df_acoes_cadastradas["Meta_Num"] = pd.to_numeric(df_acoes_cadastradas["Meta_Indicador"], errors='coerce').fillna(0.0)
             
-            # Garante o cálculo do recurso financeiro planejado total
             r_d = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Diarias", 0), errors='coerce').fillna(0.0)
             r_p = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Passagens", 0), errors='coerce').fillna(0.0)
             r_o = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Outras_Despesas", 0), errors='coerce').fillna(0.0)
             df_acoes_cadastradas["Rec_Plan_Num"] = r_d + r_p + r_o
             
-            # Código puro para cruzamento
-            df_acoes_cadastradas["Cod_Puro"] = df_acoes_cadastradas["Número da Ação PNAPA"].astype(str).apply(lambda x: x.split('-')[0].strip().upper())
+            # 🚀 Chave normalizada para cruzamento exato
+            df_acoes_cadastradas["Num_Pna_Limpo"] = df_acoes_cadastradas["Número da Ação PNAPA"].astype(str).str.strip().str.upper()
         else:
-            df_acoes_cadastradas["Cod_Puro"] = []
+            df_acoes_cadastradas["Num_Pna_Limpo"] = []
 
         # 3. CONSOLIDAÇÃO GLOBAL DO BALANÇO ORÇAMENTÁRIO E METAS
         total_acoes_catalogo = len(df_pna_ano)
@@ -5069,16 +5064,21 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         col_orc_nac = "Orcamento_Nacional" if "Orcamento_Nacional" in df_pna_ano.columns else ""
         teto_total_distribuido_ceneac = pd.to_numeric(df_pna_ano[col_orc_nac], errors='coerce').fillna(0.0).sum() if col_orc_nac else 0.0
 
-        # Demandas estaduais filtradas
-        cods_catalogo = [str(c).split('-')[0].strip().upper() for c in df_pna_ano["Num_Acao_PNAPA"].dropna().unique()]
-        df_pactuado_filtrado = df_acoes_cadastradas[df_acoes_cadastradas["Cod_Puro"].isin(cods_catalogo)] if not df_acoes_cadastradas.empty else pd.DataFrame()
+        # Mapeamento de todas as chaves válidas do catálogo para este ano
+        todas_chaves_catalogo = set()
+        for _, r_pna in df_pna_ano.iterrows():
+            c_num = str(r_pna.get("Num_Acao_PNAPA", "")).strip().upper()
+            c_ano = str(r_pna.get("Acao_Ano", "")).strip().upper()
+            if c_num: todas_chaves_catalogo.add(c_num)
+            if c_ano: todas_chaves_catalogo.add(c_ano)
+            if c_num: todas_chaves_catalogo.add(f"{c_num}-{ano_pact_sel}")
+
+        df_pactuado_filtrado = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(todas_chaves_catalogo)] if not df_acoes_cadastradas.empty else pd.DataFrame()
         
         meta_fisica_demandada = df_pactuado_filtrado["Meta_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
         orcamento_total_demandado_ufs = df_pactuado_filtrado["Rec_Plan_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
         
         taxa_adesao_fisica = (meta_fisica_demandada / meta_fisica_global * 100.0) if meta_fisica_global > 0 else 0.0
-        
-        teto_dipro_atual = float(st.session_state.get("teto_global_dipro", 1500000.0))
         saldo_dipro_restante = teto_dipro_atual - orcamento_total_demandado_ufs
 
         st.markdown("---")
@@ -5104,7 +5104,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         
         # LINHA 2: COBERTURA FÍSICA E ADESÃO (ALTO CONTRASTE)
         c_sub1, c_sub2, c_sub3 = st.columns([1, 1.5, 1.5])
-        
         with c_sub1:
             st.markdown(
                 f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
@@ -5113,7 +5112,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 f"</div>", 
                 unsafe_allow_html=True
             )
-            
         with c_sub2:
             st.markdown(
                 f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
@@ -5123,7 +5121,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 f"</div>", 
                 unsafe_allow_html=True
             )
-            
         with c_sub3:
             ufs_part_count = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
             pct_part_uf = (ufs_part_count / 26.0 * 100.0)
@@ -5142,9 +5139,10 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         todas_ufs_brasil = [u for u in LISTA_UFS_COMPLETA if u not in ["Ceneac", "DF"]]
 
         for _, acao_row in df_pna_ano.iterrows():
-            cod_acao = str(acao_row.get("Num_Acao_PNAPA", "")).strip().upper()
-            cod_puro_ac = cod_acao.split('-')[0].strip()
-            chave_acao_ano = str(acao_row.get("Acao_Ano", f"{cod_puro_ac}-{ano_pact_sel}"))
+            cod_num = str(acao_row.get("Num_Acao_PNAPA", "")).strip().upper()
+            cod_ano = str(acao_row.get("Acao_Ano", f"{cod_num}-{ano_pact_sel}")).strip().upper()
+            chave_acao_ano = cod_ano if cod_ano else f"{cod_num}-{ano_pact_sel}"
+            
             nome_acao = str(acao_row.get("Nome_Acao_Apelido", acao_row.get("Nome_Acao_Completo", "")))
             dono_acao = str(acao_row.get("Dono_Acao", "Ceneac"))
             uf_dono = str(acao_row.get("UF_Dono", "Ceneac"))
@@ -5154,8 +5152,13 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             meta_nacional_fisica = float(pd.to_numeric(acao_row.get("Meta_Nacional", 0.0), errors='coerce') or 0.0)
             teto_nacional_orc = float(pd.to_numeric(acao_row.get(col_orc_nac, 0.0), errors='coerce') or 0.0) if col_orc_nac else 0.0
 
-            # Demandas Estaduais (Bottom-Up)
-            df_propostas_ufs = df_acoes_cadastradas[df_acoes_cadastradas["Cod_Puro"] == cod_puro_ac].copy() if not df_acoes_cadastradas.empty else pd.DataFrame()
+            # 🚀 FILTRAGEM EXATA: Apenas propostas vinculadas a ESTA AÇÃO
+            chaves_desta_acao = {cod_num, cod_ano, f"{cod_num}-{ano_pact_sel}"} - {""}
+            
+            if not df_acoes_cadastradas.empty:
+                df_propostas_ufs = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_desta_acao)].copy()
+            else:
+                df_propostas_ufs = pd.DataFrame()
             
             meta_demandada_ufs = df_propostas_ufs["Meta_Num"].sum() if not df_propostas_ufs.empty else 0.0
             orc_demandado_ufs = df_propostas_ufs["Rec_Plan_Num"].sum() if not df_propostas_ufs.empty else 0.0
@@ -5173,7 +5176,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             else:
                 badge_status = f"🔵 Superávit Físico ({pct_fisico:.0f}%)"
 
-            # Filtro de visualização (Físico e Orçamentário)
+            # Filtros de Alinhamento
             if status_pact_filtro != "Todas as Ações":
                 if "Déficit Físico" in status_pact_filtro and (pct_fisico >= 100 or meta_demandada_ufs == 0): continue
                 if "Meta Física Atingida" in status_pact_filtro and pct_fisico != 100: continue
@@ -5200,9 +5203,9 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- BARRA 1: PACTUAÇÃO FÍSICA (VERDE ESCURO SOBRE CINZA CLARO) ---
+                # --- BARRA 1: PACTUAÇÃO FÍSICA ---
                 pct_bar_fisico = min(100.0, max(0.0, pct_fisico))
-                cor_barra_fisica = "#15803d" if pct_fisico <= 100 else "#2563eb"  # Verde ou Azul (Superávit)
+                cor_barra_fisica = "#15803d" if pct_fisico <= 100 else "#2563eb"
                 
                 st.markdown(f"""
                 <div style='margin-bottom: 6px;'>
@@ -5219,11 +5222,11 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 if teto_nacional_orc > 0:
                     pct_orc = (orc_demandado_ufs / teto_nacional_orc) * 100.0
                     pct_bar_orc = min(100.0, max(0.0, pct_orc))
-                    cor_barra_orc = "#03170a" if pct_orc <= 100 else "#d97706"
+                    cor_barra_orc = "#03170a" if pct_orc <= 100 else "#b91c1c"
                     
                     st.markdown(f"""
                     <div style='margin-bottom: 6px;'>
-                        <strong>💰 Demanda Orçamentária vs Teto Nacional:</strong> 
+                        <strong>💰 Demanda Orçamentária vs Teto Ceneac:</strong> 
                         <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{pct_orc:.1f}%</span> 
                         <span style='color: #475569; font-size: 0.92em; font-weight: 500;'>({formatar_moeda_br(orc_demandado_ufs)} de {formatar_moeda_br(teto_nacional_orc)})</span>
                     </div>
@@ -5236,7 +5239,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     <div style='margin-bottom: 16px;'>
                         <strong>💰 Demanda Orçamentária Total Acumulada das UFs:</strong> 
                         <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{formatar_moeda_br(orc_demandado_ufs)}</span> 
-                        <em style='color: #64748b; font-size: 0.9em;'>(Teto nacional não fixado)</em>
+                        <em style='color: #64748b; font-size: 0.9em;'>(Teto Ceneac não fixado no catálogo)</em>
                     </div>
                     """, unsafe_allow_html=True)
 
