@@ -940,14 +940,36 @@ with st.sidebar.popover("🔑 Trocar Minha Senha", use_container_width=True):
 # =========================================================================
 if perfil_usuario == "Administrador":
     with st.sidebar.popover("⚙️ Calibrar Regras & Limites (Admin)", use_container_width=True):
-        st.markdown("#### ⚖️ Governança Operacional PNAPA")
+        # 🎨 ESTILIZAÇÃO PARA ALTO CONTRASTE E LEGIBILIDADE NO POPOVER
+        st.markdown("""
+            <style>
+            div[data-testid="stPopoverBody"] {
+                background-color: #062312 !important;
+                color: #ffffff !important;
+            }
+            div[data-testid="stPopoverBody"] label, 
+            div[data-testid="stPopoverBody"] p, 
+            div[data-testid="stPopoverBody"] span, 
+            div[data-testid="stPopoverBody"] h4, 
+            div[data-testid="stPopoverBody"] h5 {
+                color: #f8fafc !important;
+                font-weight: 500 !important;
+            }
+            div[data-testid="stPopoverBody"] small,
+            div[data-testid="stPopoverBody"] [data-testid="stCaptionContainer"] {
+                color: #86efac !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<h4 style='color: #fef08a !important; margin-bottom: 0px;'>⚖️ Governança Operacional PNAPA</h4>", unsafe_allow_html=True)
         st.caption("Ajuste em tempo real os tetos do Pré/Pós-PNAPA e equiparação das unidades nacionais.")
 
         p_atual = st.session_state["gov_params"]
 
         novo_ano_trava = st.number_input("Ano de Início da Trava Rígida:", min_value=2025, max_value=2035, value=int(p_atual["ano_inicio_trava"]), step=1)
         
-        st.markdown("##### 📅 Tetos Pré-PNAPA (Planejamento Inicial)")
+        st.markdown("<h5 style='color: #93c5fd !important; margin-top: 10px;'>📅 Tetos Pré-PNAPA (Planejamento Inicial)</h5>", unsafe_allow_html=True)
         c_g1, c_g2, c_g3 = st.columns(3)
         with c_g1:
             n_teto_tit = st.number_input("Titular/Sede:", min_value=10.0, max_value=200.0, value=float(p_atual["teto_titular_pre"]), step=5.0)
@@ -956,13 +978,13 @@ if perfil_usuario == "Administrador":
         with c_g3:
             n_teto_mem = st.number_input("Membro:", min_value=10.0, max_value=200.0, value=float(p_atual["teto_membro_pre"]), step=5.0)
 
-        st.markdown("##### 🚀 Expansão Pós-PNAPA (Execução / Ao Longo do Ano)")
+        st.markdown("<h5 style='color: #93c5fd !important; margin-top: 10px;'>🚀 Expansão Pós-PNAPA (Execução / Ao Longo do Ano)</h5>", unsafe_allow_html=True)
         n_fator_pos = st.slider("Fator Multiplicador Pós-PNAPA:", min_value=1.0, max_value=2.0, value=float(p_atual["fator_pos_pnapa"]), step=0.05, format="%.2fx")
-        st.caption(f"💡 *Tetos Pós-PNAPA resultantes:* Titular/Sede: **{n_teto_tit*n_fator_pos:.0f}d** | Substituto: **{n_teto_sub*n_fator_pos:.0f}d** | Membro: **{n_teto_mem*n_fator_pos:.0f}d**")
+        st.caption(f"💡 Tetos Pós-PNAPA resultantes: Titular/Sede: {n_teto_tit*n_fator_pos:.0f}d | Substituto: {n_teto_sub*n_fator_pos:.0f}d | Membro: {n_teto_mem*n_fator_pos:.0f}d")
 
         n_pct_ord = st.slider("Cota Máxima em Atividades Ordinárias (%):", min_value=10, max_value=100, value=int(p_atual["pct_ordinarias"]), step=5)
 
-        st.markdown("##### 👑 Limites de Liderança")
+        st.markdown("<h5 style='color: #93c5fd !important; margin-top: 10px;'>👑 Limites de Liderança</h5>", unsafe_allow_html=True)
         c_l1, c_l2 = st.columns(2)
         with c_l1:
             n_coord_tot = st.number_input("Máx Ações Totais:", min_value=1, max_value=30, value=int(p_atual["teto_coord_total"]), step=1)
@@ -971,7 +993,7 @@ if perfil_usuario == "Administrador":
 
         n_corte_n3 = st.number_input("Corte de Dias para Nível 3:", min_value=5.0, max_value=50.0, value=float(p_atual["dias_corte_n3"]), step=1.0)
 
-        st.markdown("##### 🏢 Unidades da Sede Equiparadas (Ceneac/Brasília)")
+        st.markdown("<h5 style='color: #93c5fd !important; margin-top: 10px;'>🏢 Unidades da Sede Equiparadas (Ceneac/Brasília)</h5>", unsafe_allow_html=True)
         lista_unidades_str = ", ".join(p_atual.get("unidades_sede_equiparadas", []))
         txt_unidades = st.text_area("Termos de Reconhecimento (separados por vírgula):", value=lista_unidades_str, help="Servidores lotados nessas unidades recebem automaticamente o teto de Titular/Responsável.")
 
@@ -999,11 +1021,6 @@ if perfil_usuario == "Administrador":
                 st.info("Parâmetros restaurados.")
                 time.sleep(1)
                 st.rerun()
-
-if st.sidebar.button("🚪 Sair (Logout)", use_container_width=True):
-    st.session_state.clear()
-    st.cache_data.clear()
-    st.rerun()
 
 
 # =================================================================
