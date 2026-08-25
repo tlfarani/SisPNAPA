@@ -311,6 +311,16 @@ def carregar_sugestoes():
     try:
         r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler", "Id": ""}, timeout=15)
         if r.status_code == 200:
+            dados = r@st.cache_data(ttl=300, show_spinner=False)
+def carregar_sugestoes():
+    cols_padrao = [
+        "Id", "Data_Registro", "Prioridade", "Status", "Modulo", 
+        "Titulo", "Descricao", "Autor", "UF_Autor", "Resposta_Admin"
+    ]
+    try:
+        # 🚀 Timeout estendido para 35s para absorver cold starts do Power Automate
+        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Listar"}, timeout=35)
+        if r.status_code in [200, 202]:
             dados = r.json()
             lista_itens = dados.get("value", dados) if isinstance(dados, dict) else dados
             
@@ -338,9 +348,11 @@ def carregar_sugestoes():
                 return df
         else:
             st.error(f"⚠️ O Power Automate recusou a leitura de sugestões (Status {r.status_code}): {r.text}")
+    except requests.exceptions.Timeout:
+        st.warning("⏳ O servidor do Power Automate demorou para responder (Timeout). Clique em '🔄 Atualizar Lista' para tentar novamente.")
     except Exception as e:
         st.error(f"⚠️ Erro de conexão ao carregar sugestões: {e}")
-    
+        
     return pd.DataFrame(columns=cols_padrao)
 
 # Função de Leitura Blindada contra Chaves Ausentes do Power Automate
@@ -5375,9 +5387,9 @@ elif modo == "💡 Sugestões & Melhorias":
     st.caption("Espaço colaborativo para que testadores e usuários enviem inconsistências, ideias e solicitações.")
     
     # 1. Cartões de Métricas no Topo
-    total_feedbacks = len(df_sugestoes)
-    abertos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip().isin(["Aberto", "Em Desenvolvimento"])]) if not df_sugestoes.empty else 0
-    concluidos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip() == "Concluído"]) if not df_sugestoes.empty else 0
+    total_feedbacks = len(df_sugestoes) if not df_sugestoes.empty else 0
+    abertos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip().isin(["Aberto", "Em Desenvolvimento"])]) if not df_sugestoes.empty and "Status" in df_sugestoes.columns else 0
+    concluidos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip() == "Concluído"]) if not df_sugestoes.empty and "Status" in df_sugestoes.columns else 0
     
     c_m1, c_m2, c_m3 = st.columns(3)
     c_m1.metric("📋 Total de Sugestões", f"{total_feedbacks}")
@@ -5401,6 +5413,7 @@ elif modo == "💡 Sugestões & Melhorias":
                 [
                     "📊 Visualização de Dados & Filtros", 
                     "➕ Inserção de Atividades/Ações", 
+                    "🤝 Pactuação Pré-PNAPA",
                     "🛠️ Edição Individual / em Lote", 
                     "🏢 Tabelas Auxiliares (Equipes/Ações/Unidades)", 
                     "📈 Dashboards", 
@@ -5432,7 +5445,7 @@ elif modo == "💡 Sugestões & Melhorias":
             if not sug_titulo.strip() or not sug_descricao.strip():
                 st.error("⚠️ Por favor, preencha o Título e o Detalhamento antes de enviar.")
             else:
-                id_nova_sug = int(pd.to_numeric(df_sugestoes["Id"], errors='coerce').max() + 1) if not df_sugestoes.empty else 1
+                id_nova_sug = int(pd.to_numeric(df_sugestoes["Id"], errors='coerce').max() + 1) if not df_sugestoes.empty and "Id" in df_sugestoes.columns else 1
                 data_hora_envio = datetime.now().strftime('%d/%m/%Y %H:%M')
                 
                 payload_sugestao = {
@@ -5451,9 +5464,9 @@ elif modo == "💡 Sugestões & Melhorias":
                 
                 with st.spinner("Gravando no SharePoint e indexando na planilha..."):
                     try:
-                        r = requests.post(URL_FLOW_SUGESTOES, json=payload_sugestao, timeout=20)
+                        # 🚀 Timeout estendido para 35s
+                        r = requests.post(URL_FLOW_SUGESTOES, json=payload_sugestao, timeout=35)
                         if r.status_code in [200, 202]:
-                            # 🚀 Tempo seguro para o Excel Online gravar a linha antes do reload
                             time.sleep(2.5)
                             st.cache_data.clear()
                             st.success("🎉 Sugestão registrada com sucesso! Ela já consta no quadro de acompanhamento.")
@@ -5461,6 +5474,8 @@ elif modo == "💡 Sugestões & Melhorias":
                             st.rerun()
                         else:
                             st.error(f"❌ O Power Automate rejeitou a solicitação (Status {r.status_code}).")
+                    except requests.exceptions.Timeout:
+                        st.error("⏳ A gravação demorou mais de 35 segundos. Verifique o quadro antes de reenviar para evitar duplicidade.")
                     except Exception as e:
                         st.error(f"❌ Erro de comunicação: {e}")
 
@@ -5479,7 +5494,6 @@ elif modo == "💡 Sugestões & Melhorias":
         if df_sugestoes.empty:
             st.info("ℹ️ Nenhuma sugestão carregada no momento. Caso tenha acabado de enviar, clique em '🔄 Atualizar Lista'.")
         else:
-            # Filtros visuais da tabela
             c_f_st, c_f_pr = st.columns(2)
             with c_f_st:
                 filtro_status = st.selectbox("Filtrar por Status:", ["Todos", "Aberto", "Em Desenvolvimento", "Concluído", "Descartado"], key="f_sug_status")
@@ -5487,21 +5501,21 @@ elif modo == "💡 Sugestões & Melhorias":
                 filtro_prio = st.selectbox("Filtrar por Prioridade:", ["Todas", "Alta", "Média", "Baixa"], key="f_sug_prio")
                 
             df_sug_exib = df_sugestoes.copy()
-            if filtro_status != "Todos":
+            if filtro_status != "Todos" and "Status" in df_sug_exib.columns:
                 df_sug_exib = df_sug_exib[df_sug_exib["Status"].astype(str).str.strip() == filtro_status]
-            if filtro_prio != "Todas":
+            if filtro_prio != "Todas" and "Prioridade" in df_sug_exib.columns:
                 df_sug_exib = df_sug_exib[df_sug_exib["Prioridade"].astype(str).str.strip() == filtro_prio]
                 
             cols_exib = [c for c in ["Id", "Data_Registro", "Prioridade", "Status", "Modulo", "Titulo", "Descricao", "Autor", "Resposta_Admin"] if c in df_sug_exib.columns]
             st.dataframe(df_sug_exib[cols_exib], use_container_width=True, hide_index=True)
             
-            # --- PAINEL EXCLUSIVO DO ADMINISTRADOR (ATUALIZAR STATUS E PRIORIDADE) ---
-            if perfil_usuario == "Administrador":
+            # --- PAINEL EXCLUSIVO DO ADMINISTRADOR ---
+            if perfil_usuario == "Administrador" and not df_sugestoes.empty and "Id" in df_sugestoes.columns:
                 st.markdown("---")
                 with st.expander("⚙️ **Painel de Governança (Exclusivo Administrador)**", expanded=True):
                     st.caption("Altere a prioridade real, atualize o status da demanda e dê um parecer técnico ao autor.")
                     
-                    lista_ids_sug = df_sugestoes["Id"].astype(str).tolist()
+                    lista_ids_sug = df_sugestoes["Id"].dropna().astype(str).tolist()
                     id_gestao_sel = st.selectbox("Selecione a Sugestão para Gerenciar (ID):", lista_ids_sug, key="sel_sug_admin_id")
                     
                     sug_linha_alvo = df_sugestoes[df_sugestoes["Id"].astype(str) == str(id_gestao_sel)].iloc[0]
@@ -5530,7 +5544,6 @@ elif modo == "💡 Sugestões & Melhorias":
                     c_btn_salvar, c_btn_excluir = st.columns([3, 1])
                     with c_btn_salvar:
                         if st.button("💾 Gravar Atualização no SharePoint", type="primary", key="btn_salvar_gestao_sug"):
-                            # 🚀 Envio do payload completo para evitar erro 502 de campos nulos no Excel
                             payload_edt_sug = {
                                 "Acao": "Editar",
                                 "Id": str(id_gestao_sel),
@@ -5547,7 +5560,7 @@ elif modo == "💡 Sugestões & Melhorias":
                             
                             with st.spinner("Atualizando sugestão no SharePoint..."):
                                 try:
-                                    r = requests.post(URL_FLOW_SUGESTOES, json=payload_edt_sug, timeout=20)
+                                    r = requests.post(URL_FLOW_SUGESTOES, json=payload_edt_sug, timeout=35)
                                     if r.status_code in [200, 202]:
                                         time.sleep(2)
                                         st.cache_data.clear()
@@ -5556,6 +5569,8 @@ elif modo == "💡 Sugestões & Melhorias":
                                         st.rerun()
                                     else:
                                         st.error(f"❌ Erro ao atualizar (Status {r.status_code}): {r.text}")
+                                except requests.exceptions.Timeout:
+                                    st.error("⏳ A atualização demorou mais de 35s. Atualize a lista para verificar se foi concluída.")
                                 except Exception as e:
                                     st.error(f"❌ Erro de conexão: {e}")
 
@@ -5564,13 +5579,15 @@ elif modo == "💡 Sugestões & Melhorias":
                             st.caption(f"Excluir sugestão ID {id_gestao_sel}?")
                             if st.button("Confirmar exclusão", type="primary", key="btn_del_sug_conf"):
                                 try:
-                                    r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Excluir", "Id": str(id_gestao_sel)}, timeout=20)
+                                    r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Excluir", "Id": str(id_gestao_sel)}, timeout=35)
                                     if r.status_code in [200, 202]:
                                         time.sleep(2)
                                         st.cache_data.clear()
                                         st.success("Sugestão excluída.")
                                         time.sleep(1)
                                         st.rerun()
+                                except requests.exceptions.Timeout:
+                                    st.error("⏳ Tempo limite excedido ao tentar excluir.")
                                 except Exception as e:
                                     st.error(f"Erro: {e}")
 
