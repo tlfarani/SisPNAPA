@@ -7,6 +7,7 @@ import hashlib
 import threading
 import requests
 import google.generativeai as genai
+import unicodedata
 
 st.set_page_config(page_title="SisPNAPA - Emergências Ambientais e Climáticas", layout="wide")
 
@@ -22,6 +23,27 @@ URL_FLOW_EMAIL_360 = "https://default6ae3f5e7541942a780758c1490c72b.25.environme
 
 # URL da Planilha Macro Principal (Movidas para o topo para evitar NameError)
 URL_FLOW_PRINCIPAL = st.secrets["power_automate"]["URL_PRINCIPAL"]
+
+# =================================================================
+# PARÂMETROS DINÂMICOS DE GOVERNANÇA (PRÉ vs PÓS PNAPA E EQUIPARAÇÃO SEDE)
+# =================================================================
+DEFAULT_GOV_PARAMS = {
+    "ano_inicio_trava": 2027,
+    "teto_titular_pre": 90.0,
+    "teto_substituto_pre": 60.0,
+    "teto_membro_pre": 40.0,
+    "fator_pos_pnapa": 1.50,          # +50% de expansão de capacidade na execução
+    "pct_ordinarias": 50,             # Cota máxima de ordinárias (%)
+    "teto_coord_total": 10,
+    "teto_coord_n3": 3,
+    "dias_corte_n3": 20.0,
+    "unidades_sede_equiparadas": [
+        "ceneac", "seplog", "cprev", "seprev", "coate", "secoate", "sede", "brasília", "brasilia"
+    ]
+}
+
+if "gov_params" not in st.session_state:
+    st.session_state["gov_params"] = DEFAULT_GOV_PARAMS.copy()
 
 # --- FUNÇÃO DE LOG SILENCIOSO (DECLARAR AQUI NO TOPO) ---
 def registrar_log_pergunta(usuario, uf, pergunta):
@@ -372,67 +394,105 @@ def classificar_nivel_acao(dias):
         return "Nível 3 (Intensivo)"
 
 
+def normalizar_texto(txt):
+    """
+    Remove acentos, espaços extras e padroniza para minúsculas:
+    Ex: '  SEPREV / CENEAC - Brasília ' -> 'seprev / ceneac - brasilia'
+    """
+    if txt is None or pd.isna(txt):
+        return ""
+    txt_str = str(txt).strip().lower()
+    return unicodedata.normalize('NFKD', txt_str).encode('ASCII', 'ignore').decode('utf-8')
+
 # =================================================================
-# REGRA DE GOVERNANÇA: MOTOR DO TERMÔMETRO DE SOBRECARGA E LIDERANÇA
+# REGRA DE GOVERNANÇA: MOTOR DO TERMÔMETRO DE CAPACIDADE E LIDERANÇA
 # =================================================================
 def calcular_termometro_carga(
     df, df_srv_base, nome_servidor, ano_alvo, dias_novos=0.0, 
     importancia_nova="Ordinária", funcao_campo="Apoio de Campo", 
-    nivel_registro="Atividade", id_excluir=None, num_acao_alvo=None
+    nivel_registro="Atividade", id_excluir=None, num_acao_alvo=None,
+    fase_registro="Pré-PNAPA"
 ):
     """
     Calcula capacidade operacional e limites de liderança:
-    - Trava 1 (Regra de Ouro): Máximo de 3 Ações Nível 3 (>= 20 dias)
-    - Trava 2 (Teto Global): Máximo de 10 Ações Coordenadas
-    - Trava 3 (Teto Dias): 90d (Titular) / 60d (Substituto) / 40d (Demais membros)
-    - Trava 4 (Anti-Rotina): Máximo de 50% em Atividades Ordinárias
-    - Aplicação: Bloqueio rígido (Hard Limit) apenas para Ano >= 2027.
+    - Sede Ceneac (Ceneac, Seplog, CPrev, Seprev, Coate, Secoate): Equiparado a Titular (90d / 135d).
+    - Pré-PNAPA: Trava no Teto Base (90d / 60d / 40d).
+    - Pós-PNAPA: Expansão do Teto (+50% -> 135d / 90d / 60d).
+    - Hard Limit ativo apenas para Ano >= ano_inicio_trava (2027+).
     """
-    # Tratamento do Ano Alvo
+    params = st.session_state.get("gov_params", DEFAULT_GOV_PARAMS)
+    ano_corte_trava = int(params.get("ano_inicio_trava", 2027))
+    teto_coord_total = int(params.get("teto_coord_total", 10))
+    teto_coord_n3 = int(params.get("teto_coord_n3", 3))
+    dias_corte_n3 = float(params.get("dias_corte_n3", 20.0))
+    pct_ord = float(params.get("pct_ordinarias", 50)) / 100.0
+    fator_pos = float(params.get("fator_pos_pnapa", 1.50))
+
     try:
         ano_num = int(str(ano_alvo).split('.')[0].strip())
     except Exception:
         ano_num = 2026
 
-    eh_planejamento_rigido = (ano_num >= 2027)
+    eh_planejamento_rigido = (ano_num >= ano_corte_trava)
 
-    # 1. Identificação do Cargo e Definição de Tetos
+    # 1. Identificação do Servidor, Cargo e Lotação (100% Imune a Caixa/Acentuação)
     cargo_srv = ""
+    lotacao_srv = ""
+    uf_srv = ""
+    
     if df_srv_base is not None and not df_srv_base.empty and nome_servidor:
-        match_srv = df_srv_base[df_srv_base["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower()]
+        srv_alvo_norm = normalizar_texto(nome_servidor)
+        match_srv = df_srv_base[df_srv_base["Servidor"].apply(normalizar_texto) == srv_alvo_norm]
+        
         if not match_srv.empty:
-            cargo_srv = str(match_srv.iloc[0].get("Funcao", "")).strip().lower()
+            row_s = match_srv.iloc[0]
+            cargo_srv = normalizar_texto(row_s.get("Funcao", ""))
+            val_lot = row_s.get("Lotacao", row_s.get("Lotação", ""))
+            lotacao_srv = normalizar_texto(val_lot)
+            uf_srv = normalizar_texto(row_s.get("UF_Servidor", row_s.get("UF", "")))
 
-    eh_substituto = any(termo in cargo_srv for termo in ["substituto", "substituta", "subst.", "vice"])
-    eh_titular = any(termo in cargo_srv for termo in ["responsável", "coordenador", "chefe", "ponto focal"]) and not eh_substituto
+    unidades_sede_norm = [normalizar_texto(u) for u in params.get("unidades_sede_equiparadas", []) if str(u).strip()]
 
-    if eh_titular:
+    # Verificação de equiparação da Sede Ceneac
+    pertence_sede_ceneac = False
+    if lotacao_srv:
+        pertence_sede_ceneac = any(u in lotacao_srv for u in unidades_sede_norm)
+    if not pertence_sede_ceneac:
+        pertence_sede_ceneac = any(u in cargo_srv for u in unidades_sede_norm) or (uf_srv == "df" and any(u in lotacao_srv for u in ["sede", "nacional", "brasilia"]))
+
+    eh_substituto = any(termo in cargo_srv for termo in ["substituto", "substituta", "subst", "vice"])
+    eh_titular = any(termo in cargo_srv for termo in ["responsavel", "coordenador", "chefe", "ponto focal"]) and not eh_substituto
+
+    if pertence_sede_ceneac:
+        perfil_desc = "Equipe Sede Ceneac / Nacional (Equiparado a Responsável)"
+        teto_pre = float(params.get("teto_titular_pre", 90.0))
+    elif eh_titular:
         perfil_desc = "Responsável / Coordenador Titular"
-        teto_dias = 90.0
+        teto_pre = float(params.get("teto_titular_pre", 90.0))
     elif eh_substituto:
         perfil_desc = "Coordenador / Responsável Substituto"
-        teto_dias = 60.0
+        teto_pre = float(params.get("teto_substituto_pre", 60.0))
     else:
         perfil_desc = "Membro de Equipe"
-        teto_dias = 40.0
+        teto_pre = float(params.get("teto_membro_pre", 40.0))
 
-    teto_ordinarias = teto_dias * 0.50
-    teto_coord_total = 10
-    teto_coord_n3 = 3
+    teto_pos = teto_pre * fator_pos
+    teto_dias_ativo = teto_pre if fase_registro == "Pré-PNAPA" else teto_pos
+    teto_ordinarias = teto_dias_ativo * pct_ord
 
     if df is None or df.empty or not nome_servidor:
         return {
-            "perfil_dedicacao": perfil_desc, "teto_dias": teto_dias, "teto_ordinarias": teto_ordinarias,
+            "perfil_dedicacao": perfil_desc, "teto_dias": teto_dias_ativo, "teto_pre": teto_pre, "teto_pos": teto_pos,
+            "teto_dias_ativo": teto_dias_ativo, "teto_ordinarias": teto_ordinarias,
             "dias_totais_atuais": 0.0, "dias_totais_projetados": dias_novos,
             "dias_ord_atuais": 0.0, "dias_ord_projetados": dias_novos if importancia_nova == "Ordinária" else 0.0,
             "acoes_coord_totais": 0, "acoes_coord_n3": 0, "teto_coord_total": teto_coord_total, "teto_coord_n3": teto_coord_n3,
             "status_geral": "OK", "mensagens_erro": [], "mensagens_aviso": [], "eh_planejamento_rigido": eh_planejamento_rigido
         }
 
-    # Garante compatibilidade de nome da coluna
     col_num_pna = "Número da Ação PNAPA" if "Número da Ação PNAPA" in df.columns else ("Número da Ação" if "Número da Ação" in df.columns else None)
 
-    # 2. Filtragem Histórica no Ano (desconsiderando o registro em edição)
+    # 2. Filtragem Histórica no Ano
     df_ano = df[df["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_num)].copy()
     if id_excluir is not None and not df_ano.empty and "Id" in df_ano.columns:
         df_ano = df_ano[df_ano["Id"].astype(str).str.strip() != str(id_excluir).strip()]
@@ -454,7 +514,6 @@ def calcular_termometro_carga(
         (df_ano["Nível"].astype(str).str.strip() == "Ação") &
         (df_ano["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower())
     ]
-    
     codigos_acoes = df_acoes_coord[col_num_pna].dropna().unique().tolist() if (col_num_pna and col_num_pna in df_acoes_coord.columns) else []
     
     acoes_n3_atuais = 0
@@ -462,7 +521,7 @@ def calcular_termometro_carga(
         for cod_ac in codigos_acoes:
             df_bloco = df_ano[df_ano[col_num_pna].astype(str).str.strip() == str(cod_ac).strip()]
             dias_bloco = pd.to_numeric(df_bloco["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if "Dias_Gastos_Plan" in df_bloco.columns else 0.0
-            if dias_bloco >= 20.0:
+            if dias_bloco >= dias_corte_n3:
                 acoes_n3_atuais += 1
 
     acoes_coord_totais_proj = len(codigos_acoes)
@@ -471,41 +530,40 @@ def calcular_termometro_carga(
     if nivel_registro == "Ação":
         if not num_acao_alvo or str(num_acao_alvo) not in codigos_acoes:
             acoes_coord_totais_proj += 1
-            if dias_novos >= 20.0:
+            if dias_novos >= dias_corte_n3:
                 acoes_coord_n3_proj += 1
         else:
-            if dias_novos >= 20.0:
+            if dias_novos >= dias_corte_n3:
                 acoes_coord_n3_proj += 1
 
     # 5. Avaliação de Travas e Mensagens
     mensagens_erro = []
     mensagens_aviso = []
 
-    # Validação A: Regra de Ouro (Máximo 3 Nível 3)
+    # Validação A: Regra de Ouro (Ações Nível 3)
     if acoes_coord_n3_proj > teto_coord_n3:
-        msg = f"Regra de Ouro violada: O servidor coordenará {acoes_coord_n3_proj} Ações Nível 3 (Máximo permitido: {teto_coord_n3})."
+        msg = f"Regra de Liderança: Coordenará {acoes_coord_n3_proj} Ações Nível 3 (Máximo permitido: {teto_coord_n3})."
         if eh_planejamento_rigido: mensagens_erro.append(msg)
         else: mensagens_aviso.append(msg + " (Revisar distribuição).")
 
-    # Validação B: Teto Global de Coordenação (Máximo 10)
+    # Validação B: Teto Global de Coordenações
     if acoes_coord_totais_proj > teto_coord_total:
         msg = f"Teto de Coordenações excedido: {acoes_coord_totais_proj} ações sob responsabilidade (Máximo permitido: {teto_coord_total})."
         if eh_planejamento_rigido: mensagens_erro.append(msg)
         else: mensagens_aviso.append(msg)
 
-    # Validação C: Teto de Dias Totais
-    if dias_totais_proj > teto_dias:
-        msg = f"Teto de dias anuais excedido: Projetado {dias_totais_proj:.1f} d / Limite {teto_dias:.0f} d."
+    # Validação C: Teto de Dias Anuais
+    if dias_totais_proj > teto_dias_ativo:
+        msg = f"Teto de dias ({fase_registro}) excedido: Projetado {dias_totais_proj:.1f} d / Limite {teto_dias_ativo:.0f} d."
         if eh_planejamento_rigido: mensagens_erro.append(msg)
-        else: mensagens_aviso.append(msg + " (Ano corrente em execução).")
+        else: mensagens_aviso.append(msg + f" ({fase_registro} em execução).")
 
     # Validação D: Trava Anti-Rotina (50% Ordinárias)
     if dias_ord_proj > teto_ordinarias:
-        msg = f"Cota de atividades ordinárias excedida: Projetado {dias_ord_proj:.1f} d / Máximo {teto_ordinarias:.0f} d (50%)."
+        msg = f"Cota de ordinárias ({fase_registro}) excedida: Projetado {dias_ord_proj:.1f} d / Máximo {teto_ordinarias:.0f} d ({int(pct_ord*100)}%)."
         if eh_planejamento_rigido: mensagens_erro.append(msg)
         else: mensagens_aviso.append(msg + " (Priorize ações estratégicas/prioritárias).")
 
-    # Status de Bloqueio (Só bloqueia se for 2027+ e houver erro impeditivo)
     if eh_planejamento_rigido and len(mensagens_erro) > 0:
         status_geral = "BLOQUEADO"
     elif len(mensagens_aviso) > 0 or len(mensagens_erro) > 0:
@@ -515,7 +573,10 @@ def calcular_termometro_carga(
 
     return {
         "perfil_dedicacao": perfil_desc,
-        "teto_dias": teto_dias,
+        "teto_dias": teto_dias_ativo,
+        "teto_pre": teto_pre,
+        "teto_pos": teto_pos,
+        "teto_dias_ativo": teto_dias_ativo,
         "teto_ordinarias": teto_ordinarias,
         "teto_coord_total": teto_coord_total,
         "teto_coord_n3": teto_coord_n3,
@@ -872,6 +933,72 @@ with st.sidebar.popover("🔑 Trocar Minha Senha", use_container_width=True):
                 st.success("✅ Senha atualizada! Terá efeito no próximo login.")
             else:
                 st.error("Erro ao localizar seu cadastro no banco.")
+
+
+# =========================================================================
+# ⚙️ PAINEL DE CALIBRAGEM DA GOVERNANÇA (EXCLUSIVO ADMINISTRADOR)
+# =========================================================================
+if perfil_usuario == "Administrador":
+    with st.sidebar.popover("⚙️ Calibrar Regras & Limites (Admin)", use_container_width=True):
+        st.markdown("#### ⚖️ Governança Operacional PNAPA")
+        st.caption("Ajuste em tempo real os tetos do Pré/Pós-PNAPA e equiparação das unidades nacionais.")
+
+        p_atual = st.session_state["gov_params"]
+
+        novo_ano_trava = st.number_input("Ano de Início da Trava Rígida:", min_value=2025, max_value=2035, value=int(p_atual["ano_inicio_trava"]), step=1)
+        
+        st.markdown("##### 📅 Tetos Pré-PNAPA (Planejamento Inicial)")
+        c_g1, c_g2, c_g3 = st.columns(3)
+        with c_g1:
+            n_teto_tit = st.number_input("Titular/Sede:", min_value=10.0, max_value=200.0, value=float(p_atual["teto_titular_pre"]), step=5.0)
+        with c_g2:
+            n_teto_sub = st.number_input("Substituto:", min_value=10.0, max_value=200.0, value=float(p_atual["teto_substituto_pre"]), step=5.0)
+        with c_g3:
+            n_teto_mem = st.number_input("Membro:", min_value=10.0, max_value=200.0, value=float(p_atual["teto_membro_pre"]), step=5.0)
+
+        st.markdown("##### 🚀 Expansão Pós-PNAPA (Execução / Ao Longo do Ano)")
+        n_fator_pos = st.slider("Fator Multiplicador Pós-PNAPA:", min_value=1.0, max_value=2.0, value=float(p_atual["fator_pos_pnapa"]), step=0.05, format="%.2fx")
+        st.caption(f"💡 *Tetos Pós-PNAPA resultantes:* Titular/Sede: **{n_teto_tit*n_fator_pos:.0f}d** | Substituto: **{n_teto_sub*n_fator_pos:.0f}d** | Membro: **{n_teto_mem*n_fator_pos:.0f}d**")
+
+        n_pct_ord = st.slider("Cota Máxima em Atividades Ordinárias (%):", min_value=10, max_value=100, value=int(p_atual["pct_ordinarias"]), step=5)
+
+        st.markdown("##### 👑 Limites de Liderança")
+        c_l1, c_l2 = st.columns(2)
+        with c_l1:
+            n_coord_tot = st.number_input("Máx Ações Totais:", min_value=1, max_value=30, value=int(p_atual["teto_coord_total"]), step=1)
+        with c_l2:
+            n_coord_n3 = st.number_input("Máx Ações Nível 3:", min_value=1, max_value=10, value=int(p_atual["teto_coord_n3"]), step=1)
+
+        n_corte_n3 = st.number_input("Corte de Dias para Nível 3:", min_value=5.0, max_value=50.0, value=float(p_atual["dias_corte_n3"]), step=1.0)
+
+        st.markdown("##### 🏢 Unidades da Sede Equiparadas (Ceneac/Brasília)")
+        lista_unidades_str = ", ".join(p_atual.get("unidades_sede_equiparadas", []))
+        txt_unidades = st.text_area("Termos de Reconhecimento (separados por vírgula):", value=lista_unidades_str, help="Servidores lotados nessas unidades recebem automaticamente o teto de Titular/Responsável.")
+
+        col_btn_g1, col_btn_g2 = st.columns(2)
+        with col_btn_g1:
+            if st.button("💾 Aplicar Regras", type="primary", use_container_width=True):
+                st.session_state["gov_params"] = {
+                    "ano_inicio_trava": novo_ano_trava,
+                    "teto_titular_pre": n_teto_tit,
+                    "teto_substituto_pre": n_teto_sub,
+                    "teto_membro_pre": n_teto_mem,
+                    "fator_pos_pnapa": n_fator_pos,
+                    "pct_ordinarias": n_pct_ord,
+                    "teto_coord_total": n_coord_tot,
+                    "teto_coord_n3": n_coord_n3,
+                    "dias_corte_n3": n_corte_n3,
+                    "unidades_sede_equiparadas": [u.strip().lower() for u in txt_unidades.split(",") if u.strip()]
+                }
+                st.success("Regras de governança atualizadas!")
+                time.sleep(1)
+                st.rerun()
+        with col_btn_g2:
+            if st.button("🔄 Restaurar Padrão", use_container_width=True):
+                st.session_state["gov_params"] = DEFAULT_GOV_PARAMS.copy()
+                st.info("Parâmetros restaurados.")
+                time.sleep(1)
+                st.rerun()
 
 if st.sidebar.button("🚪 Sair (Logout)", use_container_width=True):
     st.session_state.clear()
