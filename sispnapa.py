@@ -4665,16 +4665,19 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             novo_nome_comp = st.text_input("Nome Completo da Ação (Descrição Oficial):", key="cad_pna_nome_comp").strip()
             novo_nome_apelido = st.text_input("Nome Resumido / Apelido (Exibição Amigável):", key="cad_pna_nome_apelido").strip()
             
-            # 🚀 LIDERANÇA NACIONAL (DONO DA AÇÃO)
-            st.markdown("###### 👑 Liderança Nacional da Ação")
-            c_dn1, c_dn2, c_dn3 = st.columns([1, 2, 1])
+            # 🚀 LIDERANÇA NACIONAL (DONO DA AÇÃO) E TETOS
+            st.markdown("###### 👑 Liderança Nacional e Metas/Tetos Globais")
+            c_dn1, c_dn2, c_dn3, c_dn4 = st.columns([1, 1.5, 1, 1.2])
             with c_dn1:
                 novo_uf_dono = st.selectbox("UF/Órgão do Dono:", ["Ceneac"] + LISTA_UFS_COMPLETA, key="cad_pna_uf_dono")
             with c_dn2:
                 srvs_dono_disp = df_servidores[df_servidores["UF_Servidor"] == novo_uf_dono]["Servidor"].dropna().unique().tolist()
                 novo_dono_acao = st.selectbox("Servidor Especialista (Dono da Ação):", srvs_dono_disp if srvs_dono_disp else ["Guttemberg"], key="cad_pna_dono")
             with c_dn3:
-                nova_meta_nac = st.number_input("Meta Global Nacional:", min_value=0.0, value=12.0, step=1.0, key="cad_pna_meta_nac")
+                nova_meta_nac = st.number_input("Meta Global Física:", min_value=0.0, value=12.0, step=1.0, key="cad_pna_meta_nac")
+            with c_dn4:
+                # 🚀 TETO ORÇAMENTÁRIO ESTIMADO
+                novo_orc_nac = st.number_input("Teto Orçamentário (R$):", min_value=0.0, value=0.0, step=5000.0, format="%.2f", key="cad_pna_orc_nac")
 
             c_ind, c_imp = st.columns(2)
             with c_ind:
@@ -4703,7 +4706,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         "Importância": nova_importancia,
                         "UF_Dono": str(novo_uf_dono),
                         "Dono_Acao": str(novo_dono_acao),
-                        "Meta_Nacional": float(nova_meta_nac)
+                        "Meta_Nacional": float(nova_meta_nac),
+                        "Orcamento_Nacional": float(novo_orc_nac)
                     }
                     
                     with st.spinner("Gravando no catálogo do SharePoint..."):
@@ -4744,6 +4748,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 val_atual_uf_dono = str(dados_alvo_edt.get("UF_Dono", "Ceneac")).strip()
                 val_atual_dono = str(dados_alvo_edt.get("Dono_Acao", "")).strip()
                 val_atual_meta_nac = float(pd.to_numeric(dados_alvo_edt.get("Meta_Nacional", 0), errors='coerce') or 0.0)
+                val_atual_orc_nac = float(pd.to_numeric(dados_alvo_edt.get("Orcamento_Nacional", 0.0), errors='coerce') or 0.0)
 
                 st.markdown(f"#### 🗂️ Ficha da Ação: **{cod_alvo_edt}** `(ID: {id_pna_edit})`")
 
@@ -4756,9 +4761,9 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 e_comp = st.text_input("Nome Completo da Ação:", value=val_atual_comp, key=f"edt_pna_comp_{id_pna_edit}").strip()
                 e_apelido = st.text_input("Nome Resumido / Apelido:", value=val_atual_apelido, key=f"edt_pna_apelido_{id_pna_edit}").strip()
 
-                # 🚀 EDIÇÃO DA LIDERANÇA NACIONAL
-                st.markdown("###### 👑 Liderança Nacional da Ação")
-                c_edn1, c_edn2, c_edn3 = st.columns([1, 2, 1])
+                # 🚀 EDIÇÃO DA LIDERANÇA NACIONAL E TETOS
+                st.markdown("###### 👑 Liderança Nacional e Metas/Tetos Globais")
+                c_edn1, c_edn2, c_edn3, c_edn4 = st.columns([1, 1.5, 1, 1.2])
                 with c_edn1:
                     lista_ufs_dono_edit = ["Ceneac"] + LISTA_UFS_COMPLETA
                     idx_uf_dn = lista_ufs_dono_edit.index(val_atual_uf_dono) if val_atual_uf_dono in lista_ufs_dono_edit else 0
@@ -4768,7 +4773,9 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     idx_dn = srvs_dono_edit.index(val_atual_dono) if val_atual_dono in srvs_dono_edit else 0
                     e_dono = st.selectbox("Servidor Dono da Ação:", srvs_dono_edit if srvs_dono_edit else [val_atual_dono], index=idx_dn, key=f"edt_pna_dn_{id_pna_edit}")
                 with c_edn3:
-                    e_meta_nac = st.number_input("Meta Global Nacional:", min_value=0.0, value=val_atual_meta_nac, step=1.0, key=f"edt_pna_meta_nac_{id_pna_edit}")
+                    e_meta_nac = st.number_input("Meta Global Física:", min_value=0.0, value=val_atual_meta_nac, step=1.0, key=f"edt_pna_meta_nac_{id_pna_edit}")
+                with c_edn4:
+                    e_orc_nac = st.number_input("Teto Orçamentário (R$):", min_value=0.0, value=val_atual_orc_nac, step=5000.0, format="%.2f", key=f"edt_pna_orc_nac_{id_pna_edit}")
 
                 c_e_ind, c_e_imp = st.columns(2)
                 with c_e_ind:
@@ -4802,7 +4809,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             "Importância": e_imp,
                             "UF_Dono": str(e_uf_dono),
                             "Dono_Acao": str(e_dono),
-                            "Meta_Nacional": float(e_meta_nac)
+                            "Meta_Nacional": float(e_meta_nac),
+                            "Orcamento_Nacional": float(e_orc_nac)
                         }
                         
                         with st.spinner(f"1/2 Atualizando Ação '{nova_chave_acao_ano}' no Catálogo..."):
