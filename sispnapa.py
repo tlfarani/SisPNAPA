@@ -4647,7 +4647,9 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
     if df_pnapas.empty:
         st.warning("⚠️ O catálogo de Ações PNAPA está vazio no momento.")
     else:
-        st.dataframe(df_pnapas, use_container_width=True, hide_index=True)
+        # Oculta a linha técnica DIPRO_GLOBAL da exibição geral
+        df_pnapas_vis = df_pnapas[df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL"]
+        st.dataframe(df_pnapas_vis, use_container_width=True, hide_index=True)
 
     if not pode_administrar_catalogo:
         st.info("👁️ **Modo Somente Leitura:** Como Editor Regional, você pode consultar o catálogo de ações. A criação, alteração e exclusão de Ações PNAPA são operações de governança restritas ao **Administrador**.")
@@ -4932,11 +4934,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
     if df_pnapas.empty:
         st.warning("⚠️ O Catálogo de Ações PNAPA está vazio. Cadastre ações no catálogo para iniciar a pactuação.")
     else:
-        # 1. TETO GLOBAL DIPRO E FILTROS DE CABEÇALHO
-        if "teto_global_dipro" not in st.session_state:
-            st.session_state["teto_global_dipro"] = float(st.session_state.get("gov_params", {}).get("orcamento_global_dipro", 1500000.0))
-
-        # 🚀 DECLARAÇÃO DA LISTA DE ANOS DO CATÁLOGO (COM FALLBACK SEGURO)
+        # 1. RECUPERAÇÃO E FILTRAGEM DO TETO GLOBAL DIPRO (OPÇÃO 1)
         if not df_pnapas.empty and "Ano" in df_pnapas.columns:
             anos_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
         else:
@@ -4945,13 +4943,30 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         c_topo1, c_topo2, c_topo3 = st.columns([1, 1.3, 1.3])
         with c_topo1:
             ano_pact_sel = st.selectbox("📅 Ano de Planejamento:", anos_disponiveis, key="pact_ano_sel")
-        
-        df_pna_ano = df_pnapas[pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel)].copy()
-        
+
+        # 🚀 1.1 Resgata a linha de configuração DIPRO_GLOBAL gravada no SharePoint para o ano
+        linha_dipro_ano = df_pnapas[
+            (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() == "DIPRO_GLOBAL") &
+            (pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel))
+        ]
+
+        if not linha_dipro_ano.empty:
+            teto_dipro_atual = float(pd.to_numeric(linha_dipro_ano.iloc[0].get("Orcamento_Nacional", 0.0), errors='coerce') or 1500000.0)
+        else:
+            teto_dipro_atual = float(st.session_state.get("gov_params", {}).get("orcamento_global_dipro", 1500000.0))
+
+        st.session_state["teto_global_dipro"] = teto_dipro_atual
+
+        # 🚀 1.2 Filtra apenas ações operacionais (ocultando a linha de metadados DIPRO_GLOBAL)
+        df_pna_ano = df_pnapas[
+            (pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel)) &
+            (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL")
+        ].copy()
+
         with c_topo2:
             donos_disponiveis = ["Todos os Especialistas"] + sorted([d for d in df_pna_ano["Dono_Acao"].dropna().unique() if str(d).strip()])
             filtro_dono = st.selectbox("👑 Filtrar por Dono da Ação (Sede):", donos_disponiveis, key="pact_dono_sel")
-            
+
         with c_topo3:
             status_pact_filtro = st.selectbox(
                 "⚖️ Filtro de Alinhamento:", 
@@ -4966,23 +4981,62 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 key="pact_status_filtro"
             )
 
-        # Popover de Calibragem DIPRO (Exclusivo Administrador)
+        # 🚀 1.3 Popover com Gravação Persistente no SharePoint (Exclusivo Administrador)
         if perfil_usuario == "Administrador":
             with st.popover("⚙️ Calibrar Orçamento Global Aprovado pela DIPRO", use_container_width=True):
                 st.markdown("#### 🏛️ Envelope Orçamentário da Emergência Ambiental (DIPRO)")
+                st.caption("O valor configurado aqui será gravado permanentemente na base do SharePoint para todos os usuários.")
+                
                 novo_teto_dipro = st.number_input(
                     f"Teto Orçamentário Global Autorizado pela DIPRO para {ano_pact_sel} (R$):",
                     min_value=0.0,
-                    value=float(st.session_state["teto_global_dipro"]),
+                    value=float(teto_dipro_atual),
                     step=50000.0,
-                    format="%.2f"
+                    format="%.2f",
+                    key=f"input_teto_dipro_persist_{ano_pact_sel}"
                 )
-                if st.button("💾 Salvar Teto Global DIPRO", type="primary", key="btn_salvar_teto_dipro"):
-                    st.session_state["teto_global_dipro"] = novo_teto_dipro
-                    if "gov_params" in st.session_state:
-                        st.session_state["gov_params"]["orcamento_global_dipro"] = novo_teto_dipro
-                    st.success("Teto orçamentário DIPRO calibrado!")
-                    st.rerun()
+                
+                if st.button("💾 Salvar Teto Global DIPRO no SharePoint", type="primary", key="btn_salvar_teto_dipro_db"):
+                    col_id_pna = "ID_PNAPA" if "ID_PNAPA" in df_pnapas.columns else "Id"
+                    
+                    if not linha_dipro_ano.empty:
+                        id_dipro_ref = int(float(linha_dipro_ano.iloc[0][col_id_pna]))
+                        acao_flow = "Editar"
+                    else:
+                        id_dipro_ref = int(pd.to_numeric(df_pnapas[col_id_pna], errors='coerce').fillna(0).max() + 1) if not df_pnapas.empty else 1
+                        acao_flow = "Inserir"
+                        
+                    payload_dipro = {
+                        "Acao": acao_flow,
+                        "Id": str(id_dipro_ref),
+                        "ID_PNAPA": id_dipro_ref,
+                        "Ano": int(ano_pact_sel),
+                        "Num_Acao_PNAPA": "DIPRO_GLOBAL",
+                        "Acao_Ano": f"DIPRO_GLOBAL-{ano_pact_sel}",
+                        "Nome_Acao_Completo": f"Orçamento Global Autorizado DIPRO {ano_pact_sel}",
+                        "Nome_Acao_Apelido": f"Teto DIPRO {ano_pact_sel}",
+                        "Indicador": "Orçamento Global",
+                        "Importância": "Estratégica",
+                        "UF_Dono": "Ceneac",
+                        "Dono_Acao": "Diretoria DIPRO",
+                        "Meta_Nacional": 0.0,
+                        "Orcamento_Nacional": float(novo_teto_dipro)
+                    }
+                    
+                    with st.spinner("Gravando Teto Global DIPRO no SharePoint..."):
+                        try:
+                            r = requests.post(URL_FLOW_PNAPAS, json=payload_dipro, timeout=35)
+                            if r.status_code in [200, 202]:
+                                time.sleep(2)
+                                st.cache_data.clear()
+                                st.session_state["teto_global_dipro"] = novo_teto_dipro
+                                st.success(f"✅ Teto Global DIPRO para {ano_pact_sel} salvo com sucesso!")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Erro ao salvar no SharePoint (Status {r.status_code})")
+                        except Exception as e:
+                            st.error(f"❌ Erro de comunicação: {e}")
 
         if filtro_dono != "Todos os Especialistas":
             df_pna_ano = df_pna_ano[df_pna_ano["Dono_Acao"] == filtro_dono]
