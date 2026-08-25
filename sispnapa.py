@@ -429,19 +429,22 @@ def calcular_termometro_carga(
             "status_geral": "OK", "mensagens_erro": [], "mensagens_aviso": [], "eh_planejamento_rigido": eh_planejamento_rigido
         }
 
+    # Garante compatibilidade de nome da coluna
+    col_num_pna = "Número da Ação PNAPA" if "Número da Ação PNAPA" in df.columns else ("Número da Ação" if "Número da Ação" in df.columns else None)
+
     # 2. Filtragem Histórica no Ano (desconsiderando o registro em edição)
     df_ano = df[df["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_num)].copy()
-    if id_excluir is not None and not df_ano.empty:
+    if id_excluir is not None and not df_ano.empty and "Id" in df_ano.columns:
         df_ano = df_ano[df_ano["Id"].astype(str).str.strip() != str(id_excluir).strip()]
 
     df_ano_srv = df_ano[df_ano["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower()].copy()
 
     # 3. Eixo de Dias (Atividades)
     df_atvs_srv = df_ano_srv[df_ano_srv["Nível"].astype(str).str.strip() == "Atividade"]
-    dias_totais_atuais = pd.to_numeric(df_atvs_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
+    dias_totais_atuais = pd.to_numeric(df_atvs_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if "Dias_Gastos_Plan" in df_atvs_srv.columns else 0.0
     
-    df_ord_srv = df_atvs_srv[df_atvs_srv["Importância da Atividade"].astype(str).str.strip() == "Ordinária"]
-    dias_ord_atuais = pd.to_numeric(df_ord_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
+    df_ord_srv = df_atvs_srv[df_atvs_srv["Importância da Atividade"].astype(str).str.strip() == "Ordinária"] if "Importância da Atividade" in df_atvs_srv.columns else pd.DataFrame()
+    dias_ord_atuais = pd.to_numeric(df_ord_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if not df_ord_srv.empty and "Dias_Gastos_Plan" in df_ord_srv.columns else 0.0
 
     dias_totais_proj = dias_totais_atuais + (dias_novos if nivel_registro == "Atividade" else 0.0)
     dias_ord_proj = dias_ord_atuais + (dias_novos if (nivel_registro == "Atividade" and importancia_nova == "Ordinária") else 0.0)
@@ -451,14 +454,16 @@ def calcular_termometro_carga(
         (df_ano["Nível"].astype(str).str.strip() == "Ação") &
         (df_ano["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower())
     ]
-    codigos_acoes = df_acoes_coord["Número da Ação"].dropna().unique().tolist()
+    
+    codigos_acoes = df_acoes_coord[col_num_pna].dropna().unique().tolist() if (col_num_pna and col_num_pna in df_acoes_coord.columns) else []
     
     acoes_n3_atuais = 0
-    for cod_ac in codigos_acoes:
-        df_bloco = df_ano[df_ano["Número da Ação"].astype(str).str.strip() == str(cod_ac).strip()]
-        dias_bloco = pd.to_numeric(df_bloco["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
-        if dias_bloco >= 20.0:
-            acoes_n3_atuais += 1
+    if col_num_pna and col_num_pna in df_ano.columns:
+        for cod_ac in codigos_acoes:
+            df_bloco = df_ano[df_ano[col_num_pna].astype(str).str.strip() == str(cod_ac).strip()]
+            dias_bloco = pd.to_numeric(df_bloco["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if "Dias_Gastos_Plan" in df_bloco.columns else 0.0
+            if dias_bloco >= 20.0:
+                acoes_n3_atuais += 1
 
     acoes_coord_totais_proj = len(codigos_acoes)
     acoes_coord_n3_proj = acoes_n3_atuais
