@@ -4003,11 +4003,25 @@ elif modo == "🏢 Gerenciar Unidades":
             if not nova_uni:
                 st.error("⚠️ O nome da unidade é obrigatório.")
             else:
+                # 🚀 CÁLCULO SEGURO DO PRÓXIMO ID_UF
+                col_id_uf = "ID_UF" if "ID_UF" in df_lotacoes.columns else "Id"
+                if not df_lotacoes.empty and col_id_uf in df_lotacoes.columns:
+                    id_novo_uf = int(pd.to_numeric(df_lotacoes[col_id_uf], errors='coerce').fillna(0).max() + 1)
+                else:
+                    id_novo_uf = 1
+
+                payload_uni = {
+                    "Acao": "Inserir",
+                    "ID_UF": id_novo_uf,       # 👈 Chave primária enviada
+                    "UF": uf_uni_add,
+                    "Unidade": nova_uni
+                }
+
                 with st.spinner("Sincronizando nova unidade com o SharePoint..."):
-                    executar_api_unidades({"Acao": "Inserir", "UF": uf_uni_add, "Unidade": nova_uni})
+                    executar_api_unidades(payload_uni)
                     time.sleep(2)
                     st.cache_data.clear()
-                st.success(f"✅ Unidade '{nova_uni}' salva com sucesso!")
+                st.success(f"✅ Unidade '{nova_uni}' (ID: {id_novo_uf}) salva com sucesso!")
                 st.rerun()
 
     # =================================================================
@@ -4240,7 +4254,7 @@ elif modo == "👥 Gerenciar Equipes":
         unidades_lotacao_disponiveis = df_lotacoes[df_lotacoes["UF"] == uf_srv]["Unidade"].tolist()
         lot_srv = st.selectbox("Unidade de Lotação Relacionada:", unidades_lotacao_disponiveis if unidades_lotacao_disponiveis else ["Sede Superintendência"])
         
-        # 🚀 TROCA PARA SELECTBOX EM VEZ DE TEXT_INPUT
+        # 🚀 SELETOR DE FUNÇÃO CORPORATIVA
         fun_srv = st.selectbox("Função / Cargo Institucional:", LISTA_FUNCOES_SERVIDOR)
         
         col_eq1, col_eq2, col_eq3 = st.columns(3)
@@ -4250,14 +4264,37 @@ elif modo == "👥 Gerenciar Equipes":
         perf_srv = st.selectbox("Perfil de Acesso no Sistema:", LISTA_PERFIS) if perfil_usuario == "Administrador" else st.selectbox("Perfil de Acesso no Sistema:", ["Visualização", "Editor Regional"])
         tkn_srv = st.text_input("Definir Token/Senha de Acesso para o Usuário:", type="password")
         
-        if st.button("Habilitar Servidor"):
-            payload = {"Acao": "Inserir", "Servidor": n_srv, "UF_Servidor": uf_srv, "Lotacao": lot_srv, "Equipe_Emergencias": eq_emerg, "Fiscal": eq_fiscal, "AEAC": eq_aeac, "Funcao": fun_srv, "E_mail": e_srv, "Perfil": perf_srv, "Token": tkn_srv}
-            with st.spinner("Adicionando integrante da equipe..."):
-                executar_api_equipes(payload)
-                time.sleep(2)
-                st.cache_data.clear()
-            st.success(f"Servidor {n_srv} inserido com sucesso!")
-            st.rerun()
+        if st.button("Habilitar Servidor", type="primary"):
+            if not n_srv or not e_srv:
+                st.error("⚠️ O Nome e o E-mail do servidor são obrigatórios.")
+            else:
+                # 🚀 CÁLCULO SEGURO DO PRÓXIMO ID_SERV (max + 1)
+                col_id_srv = "ID_SERV" if "ID_SERV" in df_servidores.columns else "Id"
+                if not df_servidores.empty and col_id_srv in df_servidores.columns:
+                    id_novo_serv = int(pd.to_numeric(df_servidores[col_id_srv], errors='coerce').fillna(0).max() + 1)
+                else:
+                    id_novo_serv = 1
+
+                payload = {
+                    "Acao": "Inserir",
+                    "ID_SERV": id_novo_serv,   # 👈 ID gerado automaticamente
+                    "Servidor": n_srv.strip(),
+                    "UF_Servidor": uf_srv,
+                    "Lotacao": lot_srv,
+                    "Equipe_Emergencias": eq_emerg,
+                    "Fiscal": eq_fiscal,
+                    "AEAC": eq_aeac,
+                    "Funcao": fun_srv,
+                    "E_mail": e_srv.strip(),
+                    "Perfil": perf_srv,
+                    "Token": hash_senha(tkn_srv) if tkn_srv else ""
+                }
+                with st.spinner("Adicionando integrante da equipe..."):
+                    executar_api_equipes(payload)
+                    time.sleep(2)
+                    st.cache_data.clear()
+                st.success(f"✅ Servidor {n_srv} (ID: {id_novo_serv}) inserido com sucesso!")
+                st.rerun()
 
     # =================================================================
     # ABA 2: ALTERAR CADASTRO (PREENCHIMENTO AUTOMÁTICO REATIVO)
