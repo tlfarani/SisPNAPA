@@ -4922,10 +4922,11 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
     if df_pnapas.empty:
         st.warning("⚠️ O Catálogo de Ações PNAPA está vazio. Cadastre ações no catálogo para iniciar a pactuação.")
     else:
-        # 1. FILTROS DE CABEÇALHO (ANO E DONO DA AÇÃO)
-        anos_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
-        
-        c_topo1, c_topo2, c_topo3 = st.columns([1, 1.5, 1.5])
+        # 1. TETO GLOBAL DIPRO E FILTROS DE CABEÇALHO
+        if "teto_global_dipro" not in st.session_state:
+            st.session_state["teto_global_dipro"] = float(st.session_state.get("gov_params", {}).get("orcamento_global_dipro", 1500000.0))
+
+        c_topo1, c_topo2, c_topo3 = st.columns([1, 1.3, 1.3])
         with c_topo1:
             ano_pact_sel = st.selectbox("📅 Ano de Planejamento:", anos_disponiveis, key="pact_ano_sel")
         
@@ -4937,10 +4938,35 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             
         with c_topo3:
             status_pact_filtro = st.selectbox(
-                "⚖️ Filtro de Alinhamento Físico:", 
-                ["Todas as Ações", "Déficit Físico (<100%)", "Meta Atingida (100%)", "Superávit Físico (>100%)", "Sem Adesão Estadual (0%)"], 
+                "⚖️ Filtro de Alinhamento:", 
+                [
+                    "Todas as Ações", 
+                    "Déficit Físico (<100%)", 
+                    "Meta Física Atingida (100%)", 
+                    "Superávit Físico (>100%)", 
+                    "Orçamento Estourado (> Teto Ceneac)", 
+                    "Sem Adesão Estadual (0%)"
+                ], 
                 key="pact_status_filtro"
             )
+
+        # Popover de Calibragem DIPRO (Exclusivo Administrador)
+        if perfil_usuario == "Administrador":
+            with st.popover("⚙️ Calibrar Orçamento Global Aprovado pela DIPRO", use_container_width=True):
+                st.markdown("#### 🏛️ Envelope Orçamentário da Emergência Ambiental (DIPRO)")
+                novo_teto_dipro = st.number_input(
+                    f"Teto Orçamentário Global Autorizado pela DIPRO para {ano_pact_sel} (R$):",
+                    min_value=0.0,
+                    value=float(st.session_state["teto_global_dipro"]),
+                    step=50000.0,
+                    format="%.2f"
+                )
+                if st.button("💾 Salvar Teto Global DIPRO", type="primary", key="btn_salvar_teto_dipro"):
+                    st.session_state["teto_global_dipro"] = novo_teto_dipro
+                    if "gov_params" in st.session_state:
+                        st.session_state["gov_params"]["orcamento_global_dipro"] = novo_teto_dipro
+                    st.success("Teto orçamentário DIPRO calibrado!")
+                    st.rerun()
 
         if filtro_dono != "Todos os Especialistas":
             df_pna_ano = df_pna_ano[df_pna_ano["Dono_Acao"] == filtro_dono]
@@ -4966,30 +4992,52 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         else:
             df_acoes_cadastradas["Cod_Puro"] = []
 
-        # 3. CONSOLIDAÇÃO GLOBAL DOS CARDS DE TOPO
+        # 3. CONSOLIDAÇÃO GLOBAL DO BALANÇO ORÇAMENTÁRIO E METAS
         total_acoes_catalogo = len(df_pna_ano)
         meta_fisica_global = pd.to_numeric(df_pna_ano["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
         
-        # Coluna opcional de teto orçamentário no catálogo (se existir; senão assume 0)
-        col_orc_nac = "Orcamento_Nacional" if "Orcamento_Nacional" in df_pna_ano.columns else ("Teto_Orcamentario" if "Teto_Orcamentario" in df_pna_ano.columns else "")
-        orcamento_global_teto = pd.to_numeric(df_pna_ano[col_orc_nac], errors='coerce').fillna(0.0).sum() if col_orc_nac else 0.0
+        col_orc_nac = "Orcamento_Nacional" if "Orcamento_Nacional" in df_pna_ano.columns else ""
+        teto_total_distribuido_ceneac = pd.to_numeric(df_pna_ano[col_orc_nac], errors='coerce').fillna(0.0).sum() if col_orc_nac else 0.0
 
         # Demandas estaduais filtradas
         cods_catalogo = [str(c).split('-')[0].strip().upper() for c in df_pna_ano["Num_Acao_PNAPA"].dropna().unique()]
         df_pactuado_filtrado = df_acoes_cadastradas[df_acoes_cadastradas["Cod_Puro"].isin(cods_catalogo)] if not df_acoes_cadastradas.empty else pd.DataFrame()
         
         meta_fisica_demandada = df_pactuado_filtrado["Meta_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
-        orcamento_total_demandado = df_pactuado_filtrado["Rec_Plan_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
+        orcamento_total_demandado_ufs = df_pactuado_filtrado["Rec_Plan_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
         
         taxa_adesao_fisica = (meta_fisica_demandada / meta_fisica_global * 100.0) if meta_fisica_global > 0 else 0.0
-        ufs_participantes_totais = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
+        
+        teto_dipro_atual = float(st.session_state.get("teto_global_dipro", 1500000.0))
+        saldo_dipro_restante = teto_dipro_atual - orcamento_total_demandado_ufs
 
         st.markdown("---")
-        m_c1, m_c2, m_c3, m_c4 = st.columns(4)
-        m_c1.metric("🎯 Ações no Catálogo", total_acoes_catalogo)
-        m_c2.metric("📊 Cobertura Física (Metas)", f"{taxa_adesao_fisica:.1f}%", delta=f"{meta_fisica_demandada:.1f} / {meta_fisica_global:.1f}")
-        m_c3.metric("💰 Orçamento Total Demandado", formatar_moeda_br(orcamento_total_demandado))
-        m_c4.metric("🗺️ Adesão Federativa", f"{ufs_participantes_totais} / 26 UFs", delta=f"{(ufs_participantes_totais/26)*100:.0f}% adesão")
+        # LINHA 1: BALANÇO ORÇAMENTÁRIO TRIPLO (DIPRO -> CENEAC -> ESTADOS)
+        c_m1, c_m2, c_m3, c_m4 = st.columns(4)
+        c_m1.metric("🏛️ Teto Global DIPRO", formatar_moeda_br(teto_dipro_atual))
+        c_m2.metric(
+            "📋 Teto Alocado Ceneac", 
+            formatar_moeda_br(teto_total_distribuido_ceneac), 
+            delta=f"{formatar_moeda_br(teto_dipro_atual - teto_total_distribuido_ceneac)} do teto DIPRO"
+        )
+        c_m3.metric(
+            "💰 Demandado pelas UFs", 
+            formatar_moeda_br(orcamento_total_demandado_ufs), 
+            delta=f"{(orcamento_total_demandado_ufs/teto_dipro_atual*100.0 if teto_dipro_atual > 0 else 0):.1f}% da DIPRO"
+        )
+        c_m4.metric(
+            "⚖️ Saldo Restante DIPRO", 
+            formatar_moeda_br(saldo_dipro_restante), 
+            delta="Dentro do Limite" if saldo_dipro_restante >= 0 else "⚠️ Estouro de Teto",
+            delta_color="normal" if saldo_dipro_restante >= 0 else "inverse"
+        )
+        
+        # LINHA 2: COBERTURA FÍSICA E ADESÃO
+        c_sub1, c_sub2, c_sub3 = st.columns([1, 1.5, 1.5])
+        c_sub1.caption(f"🎯 **Ações Analisadas:** `{total_acoes_catalogo}`")
+        c_sub2.caption(f"📊 **Cobertura Física Nacional:** `{taxa_adesao_fisica:.1f}%` ({meta_fisica_demandada:.1f} de {meta_fisica_global:.1f})")
+        ufs_part_count = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
+        c_sub3.caption(f"🗺️ **Adesão Federativa:** `{ufs_part_count}/26 UFs` ({ufs_part_count/26*100:.0f}%)")
         st.markdown("---")
 
         # 4. CARDS POR AÇÃO COM DUPLA BARRA (FÍSICO + FINANCEIRO)
@@ -5027,11 +5075,12 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             else:
                 badge_status = f"🔵 Superávit Físico ({pct_fisico:.0f}%)"
 
-            # Filtro de visualização
+            # Filtro de visualização (Físico e Orçamentário)
             if status_pact_filtro != "Todas as Ações":
-                if "Déficit" in status_pact_filtro and (pct_fisico >= 100 or meta_demandada_ufs == 0): continue
-                if "Atingida" in status_pact_filtro and pct_fisico != 100: continue
-                if "Superávit" in status_pact_filtro and pct_fisico <= 100: continue
+                if "Déficit Físico" in status_pact_filtro and (pct_fisico >= 100 or meta_demandada_ufs == 0): continue
+                if "Meta Física Atingida" in status_pact_filtro and pct_fisico != 100: continue
+                if "Superávit Físico" in status_pact_filtro and pct_fisico <= 100: continue
+                if "Orçamento Estourado" in status_pact_filtro and (teto_nacional_orc == 0 or orc_demandado_ufs <= teto_nacional_orc): continue
                 if "Sem Adesão" in status_pact_filtro and meta_demandada_ufs > 0: continue
 
             # RENDERIZAÇÃO DO EXPANDER DA AÇÃO COM ALTO CONTRASTE
