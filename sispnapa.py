@@ -5026,12 +5026,18 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 if "Superávit" in status_pact_filtro and pct_fisico <= 100: continue
                 if "Sem Adesão" in status_pact_filtro and meta_demandada_ufs > 0: continue
 
-            # RENDERIZAÇÃO DO EXPANDER DA AÇÃO
+            # RENDERIZAÇÃO DO EXPANDER DA AÇÃO COM ALTO CONTRASTE
             with st.expander(f"📌 **{chave_acao_ano}** — {nome_acao}  |  {badge_status}  |  Demandado: {formatar_moeda_br(orc_demandado_ufs)}", expanded=False):
                 c_inf1, c_inf2, c_inf3 = st.columns([1.5, 1, 1])
                 with c_inf1:
-                    st.markdown(f"👑 **Especialista Sede (Dono):** `{dono_acao} ({uf_dono})`")
-                    st.markdown(f"📈 **Indicador Oficial:** `{indicador_acao}`")
+                    st.markdown(
+                        f"👑 **Especialista Sede (Dono):** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{dono_acao} ({uf_dono})</span>", 
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"📈 **Indicador Oficial:** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{indicador_acao}</span>", 
+                        unsafe_allow_html=True
+                    )
                 with c_inf2:
                     st.metric("Meta Física Nacional", f"{meta_nacional_fisica:.1f}")
                 with c_inf3:
@@ -5039,19 +5045,45 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- BARRA 1: PACTUAÇÃO FÍSICA ---
-                prog_fisico_val = min(1.0, meta_demandada_ufs / meta_nacional_fisica) if meta_nacional_fisica > 0 else 0.0
-                st.markdown(f"**🎯 Alinhamento de Metas Físicas:** `{pct_fisico:.1f}%` ({meta_demandada_ufs:.1f} de {meta_nacional_fisica:.1f})")
-                st.progress(prog_fisico_val)
+                # --- BARRA 1: PACTUAÇÃO FÍSICA (VERDE ESCURO SOBRE CINZA CLARO) ---
+                pct_bar_fisico = min(100.0, max(0.0, pct_fisico))
+                cor_barra_fisica = "#15803d" if pct_fisico <= 100 else "#2563eb"  # Verde ou Azul (Superávit)
+                
+                st.markdown(f"""
+                <div style='margin-bottom: 6px;'>
+                    <strong>🎯 Alinhamento de Metas Físicas:</strong> 
+                    <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{pct_fisico:.1f}%</span> 
+                    <span style='color: #475569; font-size: 0.92em; font-weight: 500;'>({meta_demandada_ufs:.1f} de {meta_nacional_fisica:.1f})</span>
+                </div>
+                <div style='width: 100%; background-color: #e2e8f0; border-radius: 8px; height: 14px; overflow: hidden; margin-bottom: 16px;'>
+                    <div style='width: {pct_bar_fisico}%; background-color: {cor_barra_fisica}; height: 100%; border-radius: 8px; transition: width 0.4s ease;'></div>
+                </div>
+                """, unsafe_allow_html=True)
 
                 # --- BARRA 2: PACTUAÇÃO FINANCEIRA ---
                 if teto_nacional_orc > 0:
                     pct_orc = (orc_demandado_ufs / teto_nacional_orc) * 100.0
-                    prog_orc_val = min(1.0, orc_demandado_ufs / teto_nacional_orc)
-                    st.markdown(f"**💰 Demanda Orçamentária vs Teto Nacional:** `{pct_orc:.1f}%` ({formatar_moeda_br(orc_demandado_ufs)} de {formatar_moeda_br(teto_nacional_orc)})")
-                    st.progress(prog_orc_val)
+                    pct_bar_orc = min(100.0, max(0.0, pct_orc))
+                    cor_barra_orc = "#03170a" if pct_orc <= 100 else "#d97706"
+                    
+                    st.markdown(f"""
+                    <div style='margin-bottom: 6px;'>
+                        <strong>💰 Demanda Orçamentária vs Teto Nacional:</strong> 
+                        <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{pct_orc:.1f}%</span> 
+                        <span style='color: #475569; font-size: 0.92em; font-weight: 500;'>({formatar_moeda_br(orc_demandado_ufs)} de {formatar_moeda_br(teto_nacional_orc)})</span>
+                    </div>
+                    <div style='width: 100%; background-color: #e2e8f0; border-radius: 8px; height: 14px; overflow: hidden; margin-bottom: 16px;'>
+                        <div style='width: {pct_bar_orc}%; background-color: {cor_barra_orc}; height: 100%; border-radius: 8px; transition: width 0.4s ease;'></div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.markdown(f"**💰 Demanda Orçamentária Total Acumulada das UFs:** `{formatar_moeda_br(orc_demandado_ufs)}` *(Teto nacional não fixado)*")
+                    st.markdown(f"""
+                    <div style='margin-bottom: 16px;'>
+                        <strong>💰 Demanda Orçamentária Total Acumulada das UFs:</strong> 
+                        <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{formatar_moeda_br(orc_demandado_ufs)}</span> 
+                        <em style='color: #64748b; font-size: 0.9em;'>(Teto nacional não fixado)</em>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 t_pact_ufs, t_pact_pend = st.tabs(["🗺️ Propostas dos Estados (Físico & Orçamento)", "⏳ Estados Sem Proposta Registrada"])
@@ -5060,7 +5092,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     if df_propostas_ufs.empty:
                         st.info("Nenhuma UF registrou proposta de planejamento para esta ação.")
                     else:
-                        # Tabela analítica com foco em Metas e Recursos
                         df_exibir_pact = df_propostas_ufs[[
                             "UF_Acao_PNAPA", "Papel_Institucional", "Servidor", 
                             "Meta_Indicador", "Rec_Plan_Diarias", "Rec_Plan_Passagens", 
@@ -5073,7 +5104,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             "Outras Desp. (R$)", "Total Previsto (R$)", "Situação"
                         ]
                         
-                        # Formatações monetárias
                         for col_moeda in ["Diárias (R$)", "Passagens (R$)", "Outras Desp. (R$)", "Total Previsto (R$)"]:
                             df_exibir_pact[col_moeda] = df_exibir_pact[col_moeda].apply(formatar_moeda_br)
                         
@@ -5087,7 +5117,8 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                         st.success("🎉 Todas as 26 UFs já enviaram propostas para esta Ação!")
                     else:
                         st.warning(f"⚠️ **{len(ufs_faltantes)} estado(s)** ainda não cadastraram proposta:")
-                        st.write(" ".join([f"`{u}`" for u in ufs_faltantes]))
+                        tags_estados = " ".join([f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.85em; margin-right: 4px;'>{u}</span>" for u in ufs_faltantes])
+                        st.markdown(tags_estados, unsafe_allow_html=True)
 
 # --- TELA 7: MEUS FEEDBACKS (360º) ---
 elif modo == "⭐ Meus Feedbacks (360º)":
