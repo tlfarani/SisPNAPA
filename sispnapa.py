@@ -405,6 +405,41 @@ def normalizar_texto(txt):
     return unicodedata.normalize('NFKD', txt_str).encode('ASCII', 'ignore').decode('utf-8')
 
 # =================================================================
+# FUNÇÃO AUXILIAR: FILTRO REATIVO DE SERVIDORES POR UF (+ SEDE/CENEAC)
+# =================================================================
+def obter_servidores_por_uf(df_srv, uf_alvo, incluir_sede=True):
+    """
+    Retorna a lista de servidores filtrada pela UF selecionada no formulário:
+    - Servidores lotados na UF alvo (ex: 'DF', 'SP', 'PA', etc.).
+    - Servidores da Sede Ceneac / Nacional (pois atuam em qualquer estado).
+    """
+    if df_srv is None or df_srv.empty or not uf_alvo:
+        return []
+    
+    uf_norm = str(uf_alvo).strip().upper()
+    
+    # 1. Servidores da UF selecionada
+    cond_uf = df_srv["UF_Servidor"].astype(str).str.strip().str.upper() == uf_norm
+    
+    # 2. Servidores da Sede Ceneac / DF
+    if incluir_sede:
+        unidades_sede = st.session_state.get("gov_params", {}).get(
+            "unidades_sede_equiparadas", 
+            ["ceneac", "seplog", "cprev", "seprev", "coate", "secoate", "sede", "brasília", "brasilia"]
+        )
+        unidades_sede_norm = [normalizar_texto(u) for u in unidades_sede]
+        
+        cond_sede = (
+            df_srv["Lotacao"].apply(lambda x: any(u in normalizar_texto(x) for u in unidades_sede_norm)) |
+            df_srv["UF_Servidor"].astype(str).str.strip().str.upper().isin(["DF", "CENEAC"])
+        )
+        df_filtrado = df_srv[cond_uf | cond_sede]
+    else:
+        df_filtrado = df_srv[cond_uf]
+        
+    return sorted(df_filtrado["Servidor"].dropna().unique().tolist())
+
+# =================================================================
 # REGRA DE GOVERNANÇA: MOTOR DO TERMÔMETRO DE CAPACIDADE E LIDERANÇA
 # =================================================================
 def calcular_termometro_carga(
