@@ -304,21 +304,17 @@ def disparar_email_360(codigo_atv, nome_atv, lista_servidores_equipe, df_serv_au
         else:
             st.toast("⚠️ Missão c/ 3 membros, mas nenhum e-mail cadastrado na base.", icon="⚠️")
 
-@st.cache_data(ttl=15, show_spinner=False)
-def carregar_sugestoes():
-    """Lê os registros da planilha Sugestoes.xlsx via Power Automate com sanitização."""
-    cols_padrao = ["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"]
-    try:
-        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler", "Id": ""}, timeout=15)
-        if r.status_code == 200:
-            dados = r@st.cache_data(ttl=300, show_spinner=False)
+
+# =================================================================
+# FUNÇÃO AUXILIAR: CARREGAR SUGESTÕES & MELHORIAS
+# =================================================================
+@st.cache_data(ttl=300, show_spinner=False)
 def carregar_sugestoes():
     cols_padrao = [
         "Id", "Data_Registro", "Prioridade", "Status", "Modulo", 
         "Titulo", "Descricao", "Autor", "UF_Autor", "Resposta_Admin"
     ]
     try:
-        # 🚀 Timeout estendido para 35s para absorver cold starts do Power Automate
         r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Listar"}, timeout=35)
         if r.status_code in [200, 202]:
             dados = r.json()
@@ -355,6 +351,9 @@ def carregar_sugestoes():
         
     return pd.DataFrame(columns=cols_padrao)
 
+# Execução da carga:
+df_sugestoes = carregar_sugestoes()
+        
 # Função de Leitura Blindada contra Chaves Ausentes do Power Automate
 def carregar_dados_da_nuvem():
     try:
