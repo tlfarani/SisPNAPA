@@ -371,6 +371,161 @@ def classificar_nivel_acao(dias):
     else:
         return "Nível 3 (Intensivo)"
 
+
+# =================================================================
+# REGRA DE GOVERNANÇA: MOTOR DO TERMÔMETRO DE SOBRECARGA E LIDERANÇA
+# =================================================================
+def calcular_termometro_carga(
+    df, df_srv_base, nome_servidor, ano_alvo, dias_novos=0.0, 
+    importancia_nova="Ordinária", funcao_campo="Apoio de Campo", 
+    nivel_registro="Atividade", id_excluir=None, num_acao_alvo=None
+):
+    """
+    Calcula capacidade operacional e limites de liderança:
+    - Trava 1 (Regra de Ouro): Máximo de 3 Ações Nível 3 (>= 20 dias)
+    - Trava 2 (Teto Global): Máximo de 10 Ações Coordenadas
+    - Trava 3 (Teto Dias): 90d (Titular) / 60d (Substituto) / 40d (Demais membros)
+    - Trava 4 (Anti-Rotina): Máximo de 50% em Atividades Ordinárias
+    - Aplicação: Bloqueio rígido (Hard Limit) apenas para Ano >= 2027.
+    """
+    # Tratamento do Ano Alvo
+    try:
+        ano_num = int(str(ano_alvo).split('.')[0].strip())
+    except Exception:
+        ano_num = 2026
+
+    eh_planejamento_rigido = (ano_num >= 2027)
+
+    # 1. Identificação do Cargo e Definição de Tetos
+    cargo_srv = ""
+    if df_srv_base is not None and not df_srv_base.empty and nome_servidor:
+        match_srv = df_srv_base[df_srv_base["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower()]
+        if not match_srv.empty:
+            cargo_srv = str(match_srv.iloc[0].get("Funcao", "")).strip().lower()
+
+    eh_substituto = any(termo in cargo_srv for termo in ["substituto", "substituta", "subst.", "vice"])
+    eh_titular = any(termo in cargo_srv for termo in ["responsável", "coordenador", "chefe", "ponto focal"]) and not eh_substituto
+
+    if eh_titular:
+        perfil_desc = "Responsável / Coordenador Titular"
+        teto_dias = 90.0
+    elif eh_substituto:
+        perfil_desc = "Coordenador / Responsável Substituto"
+        teto_dias = 60.0
+    else:
+        perfil_desc = "Membro de Equipe"
+        teto_dias = 40.0
+
+    teto_ordinarias = teto_dias * 0.50
+    teto_coord_total = 10
+    teto_coord_n3 = 3
+
+    if df is None or df.empty or not nome_servidor:
+        return {
+            "perfil_dedicacao": perfil_desc, "teto_dias": teto_dias, "teto_ordinarias": teto_ordinarias,
+            "dias_totais_atuais": 0.0, "dias_totais_projetados": dias_novos,
+            "dias_ord_atuais": 0.0, "dias_ord_projetados": dias_novos if importancia_nova == "Ordinária" else 0.0,
+            "acoes_coord_totais": 0, "acoes_coord_n3": 0, "teto_coord_total": teto_coord_total, "teto_coord_n3": teto_coord_n3,
+            "status_geral": "OK", "mensagens_erro": [], "mensagens_aviso": [], "eh_planejamento_rigido": eh_planejamento_rigido
+        }
+
+    # 2. Filtragem Histórica no Ano (desconsiderando o registro em edição)
+    df_ano = df[df["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_num)].copy()
+    if id_excluir is not None and not df_ano.empty:
+        df_ano = df_ano[df_ano["Id"].astype(str).str.strip() != str(id_excluir).strip()]
+
+    df_ano_srv = df_ano[df_ano["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower()].copy()
+
+    # 3. Eixo de Dias (Atividades)
+    df_atvs_srv = df_ano_srv[df_ano_srv["Nível"].astype(str).str.strip() == "Atividade"]
+    dias_totais_atuais = pd.to_numeric(df_atvs_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
+    
+    df_ord_srv = df_atvs_srv[df_atvs_srv["Importância da Atividade"].astype(str).str.strip() == "Ordinária"]
+    dias_ord_atuais = pd.to_numeric(df_ord_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
+
+    dias_totais_proj = dias_totais_atuais + (dias_novos if nivel_registro == "Atividade" else 0.0)
+    dias_ord_proj = dias_ord_atuais + (dias_novos if (nivel_registro == "Atividade" and importancia_nova == "Ordinária") else 0.0)
+
+    # 4. Eixo de Liderança (Ações Coordenadas & Nível 3)
+    df_acoes_coord = df_ano[
+        (df_ano["Nível"].astype(str).str.strip() == "Ação") &
+        (df_ano["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower())
+    ]
+    codigos_acoes = df_acoes_coord["Número da Ação"].dropna().unique().tolist()
+    
+    acoes_n3_atuais = 0
+    for cod_ac in codigos_acoes:
+        df_bloco = df_ano[df_ano["Número da Ação"].astype(str).str.strip() == str(cod_ac).strip()]
+        dias_bloco = pd.to_numeric(df_bloco["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
+        if dias_bloco >= 20.0:
+            acoes_n3_atuais += 1
+
+    acoes_coord_totais_proj = len(codigos_acoes)
+    acoes_coord_n3_proj = acoes_n3_atuais
+
+    if nivel_registro == "Ação":
+        if not num_acao_alvo or str(num_acao_alvo) not in codigos_acoes:
+            acoes_coord_totais_proj += 1
+            if dias_novos >= 20.0:
+                acoes_coord_n3_proj += 1
+        else:
+            if dias_novos >= 20.0:
+                acoes_coord_n3_proj += 1
+
+    # 5. Avaliação de Travas e Mensagens
+    mensagens_erro = []
+    mensagens_aviso = []
+
+    # Validação A: Regra de Ouro (Máximo 3 Nível 3)
+    if acoes_coord_n3_proj > teto_coord_n3:
+        msg = f"Regra de Ouro violada: O servidor coordenará {acoes_coord_n3_proj} Ações Nível 3 (Máximo permitido: {teto_coord_n3})."
+        if eh_planejamento_rigido: mensagens_erro.append(msg)
+        else: mensagens_aviso.append(msg + " (Revisar distribuição).")
+
+    # Validação B: Teto Global de Coordenação (Máximo 10)
+    if acoes_coord_totais_proj > teto_coord_total:
+        msg = f"Teto de Coordenações excedido: {acoes_coord_totais_proj} ações sob responsabilidade (Máximo permitido: {teto_coord_total})."
+        if eh_planejamento_rigido: mensagens_erro.append(msg)
+        else: mensagens_aviso.append(msg)
+
+    # Validação C: Teto de Dias Totais
+    if dias_totais_proj > teto_dias:
+        msg = f"Teto de dias anuais excedido: Projetado {dias_totais_proj:.1f} d / Limite {teto_dias:.0f} d."
+        if eh_planejamento_rigido: mensagens_erro.append(msg)
+        else: mensagens_aviso.append(msg + " (Ano corrente em execução).")
+
+    # Validação D: Trava Anti-Rotina (50% Ordinárias)
+    if dias_ord_proj > teto_ordinarias:
+        msg = f"Cota de atividades ordinárias excedida: Projetado {dias_ord_proj:.1f} d / Máximo {teto_ordinarias:.0f} d (50%)."
+        if eh_planejamento_rigido: mensagens_erro.append(msg)
+        else: mensagens_aviso.append(msg + " (Priorize ações estratégicas/prioritárias).")
+
+    # Status de Bloqueio (Só bloqueia se for 2027+ e houver erro impeditivo)
+    if eh_planejamento_rigido and len(mensagens_erro) > 0:
+        status_geral = "BLOQUEADO"
+    elif len(mensagens_aviso) > 0 or len(mensagens_erro) > 0:
+        status_geral = "ALERTA"
+    else:
+        status_geral = "OK"
+
+    return {
+        "perfil_dedicacao": perfil_desc,
+        "teto_dias": teto_dias,
+        "teto_ordinarias": teto_ordinarias,
+        "teto_coord_total": teto_coord_total,
+        "teto_coord_n3": teto_coord_n3,
+        "dias_totais_atuais": dias_totais_atuais,
+        "dias_totais_projetados": dias_totais_proj,
+        "dias_ord_atuais": dias_ord_atuais,
+        "dias_ord_projetados": dias_ord_proj,
+        "acoes_coord_totais": acoes_coord_totais_proj,
+        "acoes_coord_n3": acoes_coord_n3_proj,
+        "status_geral": status_geral,
+        "mensagens_erro": mensagens_erro,
+        "mensagens_aviso": mensagens_aviso,
+        "eh_planejamento_rigido": eh_planejamento_rigido
+    }
+
 # =================================================================
 # FUNÇÕES UTILITÁRIAS DE FORMATAÇÃO NO PADRÃO BRASILEIRO (BRL)
 # =================================================================
@@ -1986,6 +2141,30 @@ elif modo == "📊 Visualizar Base":
                             idx_and_ac = lista_and_ac.index(reg_ac_alvo["Andamento"]) if reg_ac_alvo.get("Andamento") in lista_and_ac else 0
                             ed_andamento_ac = st.selectbox("Andamento da Ação:", lista_and_ac, index=idx_and_ac, key=f"t1_ac_and_{id_ac_ref}")
 
+                            # 👑 PAINEL DE LIDERANÇA NA EDIÇÃO DA AÇÃO
+                            if ed_papel_inst == "Coordenação" and ed_servidor_ac:
+                                dias_acao_ed_temp = st.session_state.get(f"t1_ac_dpl_{id_ac_ref}", obter_float_limpo(reg_ac_alvo.get("Dias_Gastos_Plan")))
+                                dados_term_ac_ed = calcular_termometro_carga(
+                                    df=df_atual,
+                                    df_srv_base=df_servidores,
+                                    nome_servidor=ed_servidor_ac,
+                                    ano_alvo=val_ano_ac,
+                                    dias_novos=float(dias_acao_ed_temp),
+                                    nivel_registro="Ação",
+                                    id_excluir=id_ac_ref,
+                                    num_acao_alvo=val_num_acao_ac
+                                )
+
+                                with st.container(border=True):
+                                    st.markdown(f"**👑 Painel de Liderança Pós-Edição — {ed_servidor_ac}** *({dados_term_ac_ed['perfil_dedicacao']})*")
+                                    cl1, cl2, cl3 = st.columns(3)
+                                    cl1.metric("📌 Total Coordenadas", f"{dados_term_ac_ed['acoes_coord_totais']} / {dados_term_ac_ed['teto_coord_total']} máx")
+                                    cl2.metric("🔥 Ações Nível 3 (>=20d)", f"{dados_term_ac_ed['acoes_coord_n3']} / {dados_term_ac_ed['teto_coord_n3']} máx")
+                                    cl3.metric("📅 Teto Anual de Dias", f"{dados_term_ac_ed['teto_dias']:.0f} d")
+
+                                    for err in dados_term_ac_ed["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
+                                    for avs in dados_term_ac_ed["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
+
                         with aba2_ac:
                             st.text_input("Indicador Oficial", value=val_indicador_ac, disabled=True, key=f"t1_ac_ind_{id_ac_ref}")
                             meta_val_ac = obter_float_limpo(reg_ac_alvo.get("Meta_Indicador", 1.0))
@@ -2029,6 +2208,22 @@ elif modo == "📊 Visualizar Base":
                                 ed_just_ac = ""
 
                         if st.button("💾 Gravar Alterações da Ação", type="primary", key=f"btn_salvar_ac_{id_ac_ref}"):
+                            # 🛡️ TRAVA DO TERMÔMETRO NA GRAVAÇÃO DA AÇÃO (2027+)
+                            if ed_papel_inst == "Coordenação" and ed_servidor_ac:
+                                res_chk_ac = calcular_termometro_carga(
+                                    df=df_atual,
+                                    df_srv_base=df_servidores,
+                                    nome_servidor=ed_servidor_ac,
+                                    ano_alvo=val_ano_ac,
+                                    dias_novos=float(ed_dias_pl_ac),
+                                    nivel_registro="Ação",
+                                    id_excluir=id_ac_ref,
+                                    num_acao_alvo=val_num_acao_ac
+                                )
+                                if res_chk_ac["status_geral"] == "BLOQUEADO":
+                                    st.error("⛔ **Alteração Impedida (Governança 2027+):** O coordenador selecionado ultrapassará os limites permitidos de liderança.")
+                                    st.stop()
+
                             payload_ac = payload_gerador(
                                 val_ano_ac, val_num_acao_ac, val_nome_acao_ac, val_indicador_ac, "Ação",
                                 "", ed_andamento_ac, "", "", uf_acao_val,
@@ -2518,6 +2713,34 @@ elif modo == "📊 Visualizar Base":
                                 ed_uf_srv_at, ed_lot_at, ed_eq_at = ed_uf_acao_val, "Sede Superintendência", "Não"
                                 cad_fiscal_t1, cad_aeac_t1, cad_funcao_srv_t1 = "Não", "Não", ""
 
+                            # 🌡️ TERMÔMETRO VISUAL NA EDIÇÃO DA ATIVIDADE
+                            dias_ed_temp = st.session_state.get(f"t1_at_dpl_{id_at_ref}", obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Plan")))
+                            dados_term_at_ed = calcular_termometro_carga(
+                                df=df_atual,
+                                df_srv_base=df_servidores,
+                                nome_servidor=ed_servidor_at,
+                                ano_alvo=val_ano_at,
+                                dias_novos=float(dias_ed_temp),
+                                importancia_nova=importancia_at,
+                                funcao_campo=ed_funcao_campo,
+                                nivel_registro="Atividade",
+                                id_excluir=id_at_ref
+                            )
+
+                            with st.container(border=True):
+                                st.markdown(f"**🌡️ Capacidade Pós-Edição — {ed_servidor_at}** *({dados_term_at_ed['perfil_dedicacao']})*")
+                                pct_dias_ed = min(1.0, dados_term_at_ed["dias_totais_projetados"] / dados_term_at_ed["teto_dias"]) if dados_term_at_ed["teto_dias"] > 0 else 0
+                                
+                                col_te1, col_te2, col_te3 = st.columns(3)
+                                col_te1.metric("📅 Total Projetado", f"{dados_term_at_ed['dias_totais_projetados']:.1f} / {dados_term_at_ed['teto_dias']:.0f} d")
+                                col_te2.metric("🔄 Ativ. Ordinárias (Máx 50%)", f"{dados_term_at_ed['dias_ord_projetados']:.1f} / {dados_term_at_ed['teto_ordinarias']:.0f} d")
+                                col_te3.metric("👑 Coordenações Nível 3", f"{dados_term_at_ed['acoes_coord_n3']} / {dados_term_at_ed['teto_coord_n3']} máx")
+                                
+                                st.progress(pct_dias_ed, text=f"Consumo de Tempo: {pct_dias_ed*100:.1f}%")
+
+                                for err in dados_term_at_ed["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
+                                for avs in dados_term_at_ed["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
+
                             st.text_input("UF do Servidor (Automático)", value=ed_uf_srv_at, disabled=True, key=f"t1_at_ufsrv_{id_at_ref}")
                             st.text_input("Lotação (Automático)", value=ed_lot_at, disabled=True, key=f"t1_at_lot_{id_at_ref}")
                             st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=ed_eq_at, disabled=True, key=f"t1_at_eq_{id_at_ref}")
@@ -2582,6 +2805,23 @@ elif modo == "📊 Visualizar Base":
 
                         if st.button("💾 Gravar Alterações da Atividade", type="primary", key=f"btn_salvar_at_{id_at_ref}"):
                             bloqueio_coord = False
+                            
+                            # 🛡️ TRAVA DO TERMÔMETRO NA GRAVAÇÃO DA ATIVIDADE (2027+)
+                            res_val_atv_ed = calcular_termometro_carga(
+                                df=df_atual,
+                                df_srv_base=df_servidores,
+                                nome_servidor=ed_servidor_at,
+                                ano_alvo=val_ano_at,
+                                dias_novos=float(ed_dias_pl_at),
+                                importancia_nova=importancia_at,
+                                funcao_campo=ed_funcao_campo,
+                                nivel_registro="Atividade",
+                                id_excluir=id_at_ref
+                            )
+                            if res_val_atv_ed["status_geral"] == "BLOQUEADO":
+                                st.error("⛔ **Alteração Impedida (Governança 2027+):** Esta alteração fará o servidor ultrapassar os limites de capacidade.")
+                                st.stop()
+
                             if ed_funcao_campo == "Coordenador de Campo":
                                 coordenadores_existentes = df_atual[
                                     (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
@@ -2782,6 +3022,31 @@ elif modo == "📊 Visualizar Base":
                                         if qtd_at_sel > 1:
                                             st.error("⛔ **Conflito de Liderança:** Você não pode definir 'Coordenador de Campo' para múltiplos servidores em lote. Apenas um servidor pode coordenar a atividade.")
                                             bloqueio_lote = True
+
+                                # 🛡️ VALIDAÇÃO DE CAPACIDADE DOS SERVIDORES NO LOTE (2027+)
+                                if not bloqueio_lote and ("Dias_Gastos_Plan" in edicoes_lote or "Servidor" in edicoes_lote or "Tema da Atividade" in edicoes_lote):
+                                    srvs_checar = [edicoes_lote["Servidor"]] if "Servidor" in edicoes_lote else df_at_sel["Servidor"].dropna().unique().tolist()
+                                    ano_chk_lote = edicoes_lote.get("Ano da Ação", df_at_sel.iloc[0].get("Ano da Ação", 2026))
+
+                                    for srv_lote_alvo in srvs_checar:
+                                        dias_novos_lt = float(obter_float_limpo(edicoes_lote.get("Dias_Gastos_Plan", 0.0))) if "Dias_Gastos_Plan" in edicoes_lote else 0.0
+                                        imp_lt = edicoes_lote.get("Tema da Atividade", "Ordinária")
+                                        func_lt = edicoes_lote.get("Coordenador_Operacao", "Apoio de Campo")
+
+                                        res_lt_srv = calcular_termometro_carga(
+                                            df=df_atual,
+                                            df_srv_base=df_servidores,
+                                            nome_servidor=srv_lote_alvo,
+                                            ano_alvo=ano_chk_lote,
+                                            dias_novos=dias_novos_lt,
+                                            importancia_nova=imp_lt,
+                                            funcao_campo=func_lt,
+                                            nivel_registro="Atividade"
+                                        )
+                                        if res_lt_srv["status_geral"] == "BLOQUEADO":
+                                            st.error(f"⛔ **Lote Impedido (2027+):** O servidor **{srv_lote_alvo}** ultrapassará os limites operacionais com esta alteração.")
+                                            bloqueio_lote = True
+                                            break
 
                                 if not bloqueio_lote:
                                     if edicoes_lote.get("Andamento", "") == "Concluída":
@@ -2992,6 +3257,29 @@ elif modo == "➕ Inserir Nova Linha":
             except: idx_and = 0
             andamento = st.selectbox("Andamento da Ação", lista_andamentos_acao, index=idx_and, key="pna_sel_andamento_acao")
 
+            # 👑 PAINEL DE LIDERANÇA DO COORDENADOR DA AÇÃO
+            if papel_inst == "Coordenação" and servidor:
+                dias_acao_temp = st.session_state.get("pna_dias_pl_acao", obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
+                dados_term_ac_form = calcular_termometro_carga(
+                    df=df_atual,
+                    df_srv_base=df_servidores,
+                    nome_servidor=servidor,
+                    ano_alvo=val_ano if val_ano else 2026,
+                    dias_novos=float(dias_acao_temp),
+                    nivel_registro="Ação",
+                    num_acao_alvo=val_num_acao
+                )
+
+                with st.container(border=True):
+                    st.markdown(f"**👑 Painel de Liderança — {servidor}** *({dados_term_ac_form['perfil_dedicacao']})*")
+                    cl1, cl2, cl3 = st.columns(3)
+                    cl1.metric("📌 Total Coordenadas", f"{dados_term_ac_form['acoes_coord_totais']} / {dados_term_ac_form['teto_coord_total']} máx")
+                    cl2.metric("🔥 Ações Nível 3 (>=20d)", f"{dados_term_ac_form['acoes_coord_n3']} / {dados_term_ac_form['teto_coord_n3']} máx")
+                    cl3.metric("📅 Teto Anual de Dias", f"{dados_term_ac_form['teto_dias']:.0f} d")
+
+                    for err in dados_term_ac_form["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
+                    for avs in dados_term_ac_form["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
+
         with aba2:
             st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True)
             meta_indicador = st.number_input(f"Meta da Ação para a UF ({uf_filtro_pna}):", min_value=0.0, value=1.0, step=1.0, key="pna_meta_uf_input")
@@ -3172,6 +3460,33 @@ elif modo == "➕ Inserir Nova Linha":
                 uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Não"
                 cad_fiscal, cad_aeac, cad_funcao_srv = "Não", "Não", ""
 
+            # 🌡️ TERMÔMETRO VISUAL DE CAPACIDADE DA ATIVIDADE
+            dias_atv_temp = st.session_state.get("atv_dias_pl", obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
+            dados_term_atv_form = calcular_termometro_carga(
+                df=df_atual,
+                df_srv_base=df_servidores,
+                nome_servidor=servidor,
+                ano_alvo=val_ano if val_ano else 2026,
+                dias_novos=float(dias_atv_temp),
+                importancia_nova=importancia,
+                funcao_campo=funcao_campo,
+                nivel_registro="Atividade"
+            )
+
+            with st.container(border=True):
+                st.markdown(f"**🌡️ Termômetro de Capacidade — {servidor}** *({dados_term_atv_form['perfil_dedicacao']})*")
+                pct_dias = min(1.0, dados_term_atv_form["dias_totais_projetados"] / dados_term_atv_form["teto_dias"]) if dados_term_atv_form["teto_dias"] > 0 else 0
+                
+                col_t1, col_t2, col_t3 = st.columns(3)
+                col_t1.metric("📅 Dias Planejados", f"{dados_term_atv_form['dias_totais_projetados']:.1f} / {dados_term_atv_form['teto_dias']:.0f} d")
+                col_t2.metric("🔄 Ativ. Ordinárias (Máx 50%)", f"{dados_term_atv_form['dias_ord_projetados']:.1f} / {dados_term_atv_form['teto_ordinarias']:.0f} d")
+                col_t3.metric("👑 Coordenações Nível 3", f"{dados_term_atv_form['acoes_coord_n3']} / {dados_term_atv_form['teto_coord_n3']} máx")
+                
+                st.progress(pct_dias, text=f"Consumo de Tempo: {pct_dias*100:.1f}%")
+
+                for err in dados_term_atv_form["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
+                for avs in dados_term_atv_form["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
+
             st.text_input("UF do Servidor (Automático)", value=uf_servidor, disabled=True)
             st.text_input("Lotação (Automático)", value=lotacao, disabled=True)
             st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=equipe_emergencia, disabled=True)
@@ -3273,6 +3588,23 @@ elif modo == "➕ Inserir Nova Linha":
                     st.error(f"⛔ **Conflito de Liderança:** A atividade `{codigo_atividade}` já possui **{nome_outro_coord}** cadastrado como Coordenador de Campo. Uma mesma atividade só pode ter 1 coordenador.")
                     bloquear_envio = True
 
+        # 🛡️ TRAVA DO TERMÔMETRO NO ENVIO INDIVIDUAL (2027+)
+        if not bloquear_envio and servidor:
+            res_validacao_final = calcular_termometro_carga(
+                df=df_atual,
+                df_srv_base=df_servidores,
+                nome_servidor=servidor,
+                ano_alvo=val_ano if val_ano else 2026,
+                dias_novos=float(dias_plan),
+                importancia_nova=importancia,
+                funcao_campo=coord_op_final,
+                nivel_registro=nivel_selecionado,
+                num_acao_alvo=val_num_acao
+            )
+            if res_validacao_final["status_geral"] == "BLOQUEADO":
+                st.error("⛔ **Gravação Impedida pela Governança (2027+):** Limite de capacidade operacional ou de liderança excedido.")
+                bloquear_envio = True
+
         if not bloquear_envio:
             payload_unico = payload_gerador(
                 val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
@@ -3331,6 +3663,29 @@ elif modo == "➕ Inserir Nova Linha":
                 if not servidores_finais:
                     st.error("⚠️ Selecione pelo menos um servidor na lista acima.")
                 else:
+                    # 🛡️ VALIDAÇÃO DE CAPACIDADE DE CADA SERVIDOR DO LOTE (2027+)
+                    bloqueio_lote = False
+                    dias_lote_check = dias_plan if espelhar_crono else 0.0
+
+                    for srv_lote_chk in servidores_finais:
+                        func_chk = funcao_campo if srv_lote_chk == servidor else "Apoio de Campo"
+                        res_chk_lt = calcular_termometro_carga(
+                            df=df_atual,
+                            df_srv_base=df_servidores,
+                            nome_servidor=srv_lote_chk,
+                            ano_alvo=val_ano if val_ano else 2026,
+                            dias_novos=float(dias_lote_check),
+                            importancia_nova=importancia,
+                            funcao_campo=func_chk,
+                            nivel_registro="Atividade"
+                        )
+                        if res_chk_lt["status_geral"] == "BLOQUEADO":
+                            st.error(f"⛔ **Lote Impedido (2027+):** O servidor **{srv_lote_chk}** excederá os limites de capacidade.")
+                            bloqueio_lote = True
+
+                    if bloqueio_lote:
+                        st.stop()
+
                     payloads_lote = []
                     id_base_calculado = int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1) if not df_atual.empty else 1
                     
