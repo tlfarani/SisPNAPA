@@ -3378,10 +3378,7 @@ elif modo == "➕ Inserir Nova Linha":
             dono_nacional = str(dados_aux_linha.get("Dono_Acao", "Ceneac")).strip()
             uf_dono_nac = str(dados_aux_linha.get("UF_Dono", "Ceneac")).strip()
             meta_nac_info = dados_aux_linha.get("Meta_Nacional", "")
-
-            if perfil_usuario == "Administrador":
-                uf_filtro_pna = st.session_state.get("form_uf_acao_sel", uf_filtro_pna)
-
+            
             ponto_focal_estado, papel_estado_acao = obter_ponto_focal_acao(df_atual, val_num_acao, uf_filtro_pna)
 
             st.info(f"👑 **Liderança Nacional:** `{dono_nacional} ({uf_dono_nac})` | **Meta Global:** `{meta_nac_info}`  \n📍 **Governança em {uf_filtro_pna}:** Papel: `{papel_estado_acao}` | Ponto Focal Estadual: `{ponto_focal_estado if ponto_focal_estado else 'Não Definido'}`")
@@ -3424,13 +3421,32 @@ elif modo == "➕ Inserir Nova Linha":
             with c_pap1:
                 papel_inst = st.selectbox("Papel da UF nesta Ação:", LISTA_PAPEIS_INSTITUCIONAIS, key="pna_papel_acao")
             with c_pap2:
-                srvs_uf_pna = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_pna]["Servidor"].dropna().unique().tolist()
+                # 🚀 LISTAGEM REATIVA: Servidores da UF + Equipe Sede Ceneac/DF
+                srvs_uf_pna = obter_servidores_por_uf(df_servidores, uf_filtro_pna)
                 if papel_inst == "Coordenação":
-                    servidor = st.selectbox(f"Ponto Focal / Coordenador da Ação na UF ({uf_filtro_pna}):", srvs_uf_pna if srvs_uf_pna else [email_logado], key="pna_focal_acao")
-                    uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Sim"
+                    servidor = st.selectbox(
+                        f"Ponto Focal / Coordenador da Ação na UF ({uf_filtro_pna}):", 
+                        srvs_uf_pna if srvs_uf_pna else [email_logado], 
+                        key=f"pna_focal_acao_{uf_filtro_pna}"
+                    )
+                    
+                    # 🚀 Resgata os dados cadastrais reais do coordenador
+                    match_srv_coord = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
+                    if not match_srv_coord.empty:
+                        d_coord = match_srv_coord.iloc[0]
+                        uf_servidor = str(d_coord.get("UF_Servidor", uf_filtro_pna))
+                        lotacao = str(d_coord.get("Lotacao", "Sede Superintendência"))
+                        equipe_emergencia = str(d_coord.get("Equipe_Emergencias", "Sim"))
+                        cad_fiscal = str(d_coord.get("Fiscal", "Não"))
+                        cad_aeac = str(d_coord.get("AEAC", "Não"))
+                        cad_funcao_srv = str(d_coord.get("Funcao", ""))
+                    else:
+                        uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Sim"
+                        cad_fiscal, cad_aeac, cad_funcao_srv = "Não", "Não", ""
                 else:
                     st.info(f"ℹ️ **Atuação em Apoio:** A UF ({uf_filtro_pna}) não indicará Coordenador Estadual.")
                     servidor, uf_servidor, lotacao, equipe_emergencia = "", "", "", "Não"
+                    cad_fiscal, cad_aeac, cad_funcao_srv = "Não", "Não", ""
 
             lista_andamentos_acao = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
             try: idx_and = lista_andamentos_acao.index(registro_selecionado["Andamento"]) if registro_selecionado is not None else 0
@@ -3464,12 +3480,10 @@ elif modo == "➕ Inserir Nova Linha":
             st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True)
             meta_indicador = st.number_input(f"Meta da Ação para a UF ({uf_filtro_pna}):", min_value=0.0, value=1.0, step=1.0, key="pna_meta_uf_input")
             
-            if perfil_usuario == "Administrador":
-                idx_uf_ac = LISTA_UFS_COMPLETA.index(uf_filtro_pna) if uf_filtro_pna in LISTA_UFS_COMPLETA else 0
-                uf_acao = st.selectbox("UF da Ação PNAPA", LISTA_UFS_COMPLETA, index=idx_uf_ac, key="form_uf_acao_sel")
-            else:
-                uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_filtro_pna), disabled=True)
-                
+            # 🚀 Herda a UF selecionada no topo como fonte única da verdade
+            uf_acao = uf_filtro_pna
+            st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_acao), disabled=True)
+            
             st.text_input("Importância da Atividade (Herdada do Catálogo)", value=importancia, disabled=True)
             
             tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="pna_sel_tema_acao")
@@ -3598,12 +3612,10 @@ elif modo == "➕ Inserir Nova Linha":
             resultado_indicador = st.text_input("Resultado do Indicador (Aferição Real):", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "", key="atv_res_ind")
             doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI):", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "", key="atv_doc_sei")
             
-            if perfil_usuario == "Administrador":
-                idx_uf_at = LISTA_UFS_COMPLETA.index(uf_filtro_pna) if uf_filtro_pna in LISTA_UFS_COMPLETA else 0
-                uf_acao = st.selectbox("UF da Ação PNAPA", LISTA_UFS_COMPLETA, index=idx_uf_at, key="form_uf_acao_sel")
-            else:
-                uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_filtro_pna), disabled=True)
-                
+            # 🚀 Herda a UF selecionada no topo como fonte única da verdade
+            uf_acao = uf_filtro_pna
+            st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_acao), disabled=True)
+            
             st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
             
             tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="atv_sel_tema")
@@ -3614,21 +3626,28 @@ elif modo == "➕ Inserir Nova Linha":
         with aba3:
             st.markdown("##### 👥 Recursos Humanos & Liderança da Operação")
             
-            df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_pna]
-            lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist()) if not df_servidores_filtrados.empty else [email_logado]
+            # 🚀 LISTAGEM REATIVA: Servidores da UF + Equipe Sede Ceneac/DF
+            lista_nomes_servidores = obter_servidores_por_uf(df_servidores, uf_filtro_pna)
+            if not lista_nomes_servidores:
+                lista_nomes_servidores = [email_logado]
             
             c_rh1, c_rh2 = st.columns(2)
             with c_rh1:
-                servidor = st.selectbox(f"Servidor Integrante / Responsável ({uf_filtro_pna}):", lista_nomes_servidores, key=f"atv_sel_servidor_{val_num_acao}")
+                servidor = st.selectbox(
+                    f"Servidor Integrante / Responsável ({uf_filtro_pna}):", 
+                    lista_nomes_servidores, 
+                    key=f"atv_sel_servidor_{val_num_acao}_{uf_filtro_pna}"
+                )
 
             with c_rh2:
                 eh_ponto_focal = bool(ponto_focal_estado and str(servidor).strip().lower() == str(ponto_focal_estado).strip().lower())
                 idx_funcao_sugerida = 0 if eh_ponto_focal else 1
                 funcao_campo = st.selectbox("Função na Atividade de Campo:", LISTA_FUNCOES_CAMPO, index=idx_funcao_sugerida, key=f"atv_funcao_campo_{val_num_acao}_{servidor}_{codigo_atividade}")
 
-            # 🚀 RESGATA DADOS COMPLEMENTARES DO SERVIDOR (INCLUINDO FISCAL, AEAC, FUNCAO)
-            if not df_servidores_filtrados.empty and servidor in df_servidores_filtrados["Servidor"].values:
-                dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
+            # 🚀 RESGATA DADOS REAIS DO SERVIDOR (Busca direta em toda a base auxiliar)
+            match_srv_atv = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
+            if not match_srv_atv.empty:
+                dados_serv_linha = match_srv_atv.iloc[0]
                 uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_pna))
                 lotacao = str(dados_serv_linha.get("Lotacao", "Sede Superintendência"))
                 equipe_emergencia = str(dados_serv_linha.get("Equipe_Emergencias", "Não"))
