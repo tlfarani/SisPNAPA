@@ -2901,21 +2901,30 @@ elif modo == "📊 Visualizar Base":
                             ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo["Periculosidade/Insalubridade"]) if reg_at_alvo.get("Periculosidade/Insalubridade") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
 
                         with aba3_at:
-                            # 🚀 LISTAGEM ESTRITA PELA UF DA ATIVIDADE
+                            # 1. LISTAGEM ESTRITA DE SERVIDORES DA NOVA UF
                             lista_nomes_servidores = obter_servidores_por_uf(df_servidores, ed_uf_acao_val)
                             
                             srv_atual_at = str(reg_at_alvo.get("Servidor", "")).strip()
-                            if srv_atual_at and srv_atual_at not in lista_nomes_servidores:
-                                lista_nomes_servidores.append(srv_atual_at)
-                                lista_nomes_servidores = sorted(lista_nomes_servidores)
+                            
+                            # Seleciona o servidor atual se ele pertencer à UF escolhida; senão, reseta para o 1º da lista
+                            if srv_atual_at in lista_nomes_servidores:
+                                idx_srv_at = lista_nomes_servidores.index(srv_atual_at)
+                            else:
+                                idx_srv_at = 0
                                 
                             if not lista_nomes_servidores:
                                 lista_nomes_servidores = [email_logado]
+                                idx_srv_at = 0
                             
                             c_at_rh1, c_at_rh2 = st.columns(2)
                             with c_at_rh1:
-                                idx_srv_at = lista_nomes_servidores.index(srv_atual_at) if srv_atual_at in lista_nomes_servidores else 0
-                                ed_servidor_at = st.selectbox("Servidor Integrante / Responsável:", lista_nomes_servidores, index=idx_srv_at, key=f"t1_at_srv_{id_at_ref}")
+                                # 🚀 Chave dinâmica vinculada à UF (recarrega limpo ao trocar de estado)
+                                ed_servidor_at = st.selectbox(
+                                    f"Servidor Integrante / Responsável ({ed_uf_acao_val}):", 
+                                    lista_nomes_servidores, 
+                                    index=idx_srv_at, 
+                                    key=f"t1_at_srv_{id_at_ref}_{ed_uf_acao_val}"
+                                )
                             with c_at_rh2:
                                 func_salva_at = str(reg_at_alvo.get("Coordenador_Operacao", "")).strip()
                                 if func_salva_at in LISTA_FUNCOES_CAMPO:
@@ -2923,9 +2932,14 @@ elif modo == "📊 Visualizar Base":
                                 else:
                                     eh_focal_at = bool(ponto_focal_estado_at and str(ed_servidor_at).strip().lower() == str(ponto_focal_estado_at).strip().lower())
                                     idx_func_at = 0 if eh_focal_at else 1
-                                ed_funcao_campo = st.selectbox("Função na Atividade de Campo:", LISTA_FUNCOES_CAMPO, index=idx_func_at, key=f"t1_at_func_{id_at_ref}_{ed_servidor_at}")
+                                ed_funcao_campo = st.selectbox(
+                                    "Função na Atividade de Campo:", 
+                                    LISTA_FUNCOES_CAMPO, 
+                                    index=idx_func_at, 
+                                    key=f"t1_at_func_{id_at_ref}_{ed_uf_acao_val}_{ed_servidor_at}"
+                                )
 
-                            # 🚀 RESGATE REAL DOS DADOS DO SERVIDOR NA BASE COMPLETA
+                            # 🚀 2. RESGATE DINÂMICO DOS DADOS REAIS DO SERVIDOR
                             match_srv_at_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
                             if not match_srv_at_t1.empty:
                                 dados_s_linha = match_srv_at_t1.iloc[0]
@@ -2967,18 +2981,19 @@ elif modo == "📊 Visualizar Base":
                                 for err in dados_term_at_ed["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
                                 for avs in dados_term_at_ed["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
 
-                            st.text_input("UF do Servidor (Automático)", value=ed_uf_srv_at, disabled=True, key=f"t1_at_ufsrv_{id_at_ref}")
-                            st.text_input("Lotação (Automático)", value=ed_lot_at, disabled=True, key=f"t1_at_lot_{id_at_ref}")
-                            st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=ed_eq_at, disabled=True, key=f"t1_at_eq_{id_at_ref}")
+                            # 🚀 3. CAMPOS AUTOMÁTICOS SEM KEY FIXA (Renderizam o valor real a cada alteração)
+                            st.text_input("UF do Servidor (Automático)", value=ed_uf_srv_at, disabled=True)
+                            st.text_input("Lotação (Automático)", value=ed_lot_at, disabled=True)
+                            st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=ed_eq_at, disabled=True)
                             ed_pcdp_at = st.text_input("Número da PCDP:", value=str(reg_at_alvo.get("Número da PCDP", "")), key=f"t1_at_pcdp_{id_at_ref}")
                             
                             st.markdown("<p style='font-weight:bold; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
-                            st.text_input("País", value="Brasil", disabled=True, key=f"t1_at_pais_{id_at_ref}")
+                            st.text_input("País", value="Brasil", disabled=True)
                             uf_oc_atual = str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "SP"))
                             idx_uf_oc_at = LISTA_UFS_COMPLETA.index(uf_oc_atual) if uf_oc_atual in LISTA_UFS_COMPLETA else 0
-                            ed_uf_oc_at = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação:", LISTA_UFS_COMPLETA, index=idx_uf_oc_at, key=f"t1_at_ufoc_{id_at_ref}")
+                            ed_uf_oc_at = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação:", LISTA_UFS_COMPLETA, index=idx_uf_oc_at, key=f"t1_at_ufoc_{id_at_ref}_{ed_uf_acao_val}")
                             ed_est_loc_at = MAPEAMENTO_ESTADOS_COMPLETO.get(ed_uf_oc_at, "")
-                            st.text_input("Estado_Local_Acao (Automático)", value=ed_est_loc_at, disabled=True, key=f"t1_at_est_{id_at_ref}")
+                            st.text_input("Estado_Local_Acao (Automático)", value=ed_est_loc_at, disabled=True)
                             
                             mun_lista_at = obter_municipios_ibge(ed_uf_oc_at)
                             mun_atual_at = str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
