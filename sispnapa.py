@@ -4363,8 +4363,7 @@ elif modo == "👥 Gerenciar Equipes":
     st.markdown("---")
     ts_add, ts_edit, ts_del = st.tabs(["➕ Cadastrar Servidor", "📝 Alterar Cadastro", "🗑️ Remover Acesso"])
     LISTA_PERFIS = ["Visualização", "Editor Regional", "Administrador"]
-    LISTA_UFS_COMPLETA = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Ceneac"]
-    
+        
     # 🚀 NOVA LISTA RESTRITA DE FUNÇÕES
     LISTA_FUNCOES_SERVIDOR = [
         "",
