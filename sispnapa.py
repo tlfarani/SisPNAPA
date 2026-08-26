@@ -77,7 +77,7 @@ LISTA_TEMAS = ["Dutos", "Emergências Climáticas", "Fauna", "Ferrovias", "Nucle
 LISTA_OBJETIVOS = ["Atendimento a Acidentes", "Prevenção e Gestão de Riscos", "Preparação"]
 LISTA_TIPOS_ATIVIDADE = ["Capacitação", "Coleta de Amostras", "Desenvolvimento de Ferramentas", "Documentos de Análise", "Elaboração de Normativas", "Fiscalização", "Operação", "Outros tipos", "Reunião", "Simulados", "Vistoria"]
 LISTA_PERIGOS = ["Não se Aplica", "Periculosidade", "Insalubridade"]
-LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Não se aplica", "Outras fontes"]
+LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Ceneac", "Não se aplica", "Outras fontes"]
 LISTA_IMPORTANCIA = ["Ordinária", "Prioritária", "Estratégica"]
 LISTA_PAPEIS_INSTITUCIONAIS = ["Coordenação", "Apoio"]
 LISTA_FUNCOES_CAMPO = ["Coordenador de Campo", "Apoio de Campo"]
@@ -690,6 +690,27 @@ def obter_ponto_focal_acao(df, cod_acao, uf_alvo):
     return "", "Não Cadastrado"
 
 df_lotacoes, df_servidores, df_pnapas = carregar_bases_vias_power_automate()
+
+# 🚀 Catálogo Operacional (Imune a qualquer linha técnica como DIPRO_GLOBAL em dropdowns)
+df_pnapas_op = df_pnapas[
+    ~df_pnapas["Num_Acao_PNAPA"].astype(str).str.upper().str.contains("DIPRO") &
+    ~df_pnapas["Acao_Ano"].astype(str).str.upper().str.contains("DIPRO")
+].copy() if not df_pnapas.empty else pd.DataFrame()
+
+# 🛡️ SANITIZAÇÃO DE TIPOS NO CATÁLOGO DE AÇÕES PNAPA
+if not df_pnapas.empty:
+    if "Ano" in df_pnapas.columns:
+        df_pnapas["Ano_Num"] = pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int)
+    else:
+        df_pnapas["Ano_Num"] = 0
+    if "Orcamento_Nacional" not in df_pnapas.columns:
+        df_pnapas["Orcamento_Nacional"] = 0.0
+    else:
+        df_pnapas["Orcamento_Nacional"] = pd.to_numeric(df_pnapas["Orcamento_Nacional"], errors='coerce').fillna(0.0)
+    if "Meta_Nacional" not in df_pnapas.columns:
+        df_pnapas["Meta_Nacional"] = 0.0
+    else:
+        df_pnapas["Meta_Nacional"] = pd.to_numeric(df_pnapas["Meta_Nacional"], errors='coerce').fillna(0.0)
 
 df_sugestoes = carregar_sugestoes()
 
@@ -2044,7 +2065,10 @@ elif modo == "📊 Visualizar Base":
         # SUBPÁGINA 1: AÇÕES ESTADUAIS
         # =====================================================================
         with tab_sub_acoes:
-            df_base_acoes = df_trabalho[df_trabalho["Nível"].astype(str).str.strip() == "Ação"].copy()
+            df_base_acoes = df_trabalho[
+                (df_trabalho["Nível"].astype(str).str.strip() == "Ação") &
+                (df_trabalho["Número da Ação PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL")
+            ].copy()
             st.caption(f"🎯 Total de Ações Estaduais cadastradas: **{len(df_base_acoes)}** registros.")
             
             if df_base_acoes.empty:
@@ -2328,42 +2352,52 @@ elif modo == "📊 Visualizar Base":
                             st.text_input("Número da Ação PNAPA", value=val_num_acao_ac, disabled=True, key=f"t1_ac_num_{id_ac_ref}")
                             st.text_input("Nome da Ação PNAPA", value=val_nome_acao_ac, disabled=True, key=f"t1_ac_nome_{id_ac_ref}")
                             
-                            c_ac_p1, c_ac_p2 = st.columns(2)
-                            with c_ac_p1:
+                            # 🚀 UF e Papel movidos para o topo da Aba 1 para atualizar a equipe instantaneamente
+                            c_ac_uf, c_ac_pap = st.columns(2)
+                            with c_ac_uf:
+                                if perfil_usuario == "Administrador":
+                                    uf_atual_salva = str(reg_ac_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
+                                    idx_uf_ac = LISTA_UFS_COMPLETA.index(uf_atual_salva) if uf_atual_salva in LISTA_UFS_COMPLETA else 0
+                                    uf_acao_val = st.selectbox("UF da Ação PNAPA:", LISTA_UFS_COMPLETA, index=idx_uf_ac, key=f"t1_ac_uf_sel_{id_ac_ref}")
+                                else:
+                                    uf_acao_val = str(reg_ac_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
+                                    st.text_input("UF da Ação PNAPA:", value=uf_acao_val, disabled=True, key=f"t1_ac_uf_dis_{id_ac_ref}")
+
+                            with c_ac_pap:
                                 val_papel_atual = str(reg_ac_alvo.get("Papel_Institucional", "Coordenação")).strip()
                                 idx_pap = LISTA_PAPEIS_INSTITUCIONAIS.index(val_papel_atual) if val_papel_atual in LISTA_PAPEIS_INSTITUCIONAIS else 0
                                 ed_papel_inst = st.selectbox("Papel da UF nesta Ação:", LISTA_PAPEIS_INSTITUCIONAIS, index=idx_pap, key=f"t1_ac_papel_{id_ac_ref}")
-                            with c_ac_p2:
-                                uf_alvo_ac = str(reg_ac_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
-                                # 🚀 LISTAGEM ESTRITA PELA UF DA AÇÃO
-                                srvs_uf_lista = obter_servidores_por_uf(df_servidores, uf_alvo_ac)
-                                
-                                val_foc_atual = str(reg_ac_alvo.get("Servidor", "")).strip()
-                                if val_foc_atual and val_foc_atual not in srvs_uf_lista:
-                                    srvs_uf_lista.append(val_foc_atual)
-                                    srvs_uf_lista = sorted(srvs_uf_lista)
 
-                                if ed_papel_inst == "Coordenação":
-                                    idx_foc = srvs_uf_lista.index(val_foc_atual) if val_foc_atual in srvs_uf_lista else 0
-                                    ed_servidor_ac = st.selectbox(
-                                        f"Ponto Focal da Ação em {uf_alvo_ac}:", 
-                                        srvs_uf_lista if srvs_uf_lista else [val_foc_atual], 
-                                        index=idx_foc, 
-                                        key=f"t1_ac_focal_{id_ac_ref}"
-                                    )
-                                    
-                                    # 🚀 Resgate real dos dados do coordenador
-                                    match_srv_coord_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_ac).strip()]
-                                    if not match_srv_coord_t1.empty:
-                                        d_coord_t1 = match_srv_coord_t1.iloc[0]
-                                        ed_uf_srv_ac = str(d_coord_t1.get("UF_Servidor", uf_alvo_ac))
-                                        ed_lot_ac = str(d_coord_t1.get("Lotacao", "Sede Superintendência"))
-                                        ed_eq_ac = str(d_coord_t1.get("Equipe_Emergencias", "Sim"))
-                                    else:
-                                        ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = uf_alvo_ac, "Sede Superintendência", "Sim"
+                            if ed_papel_inst == "Coordenação":
+                                # 🚀 Puxa a lista de servidores atualizada baseada no "uf_acao_val" acima
+                                srvs_uf_lista = obter_servidores_por_uf(df_servidores, uf_acao_val)
+                                val_foc_atual = str(reg_ac_alvo.get("Servidor", "")).strip()
+                                
+                                # Mantém o servidor atual selecionado APENAS se a UF não foi alterada
+                                if uf_acao_val == str(reg_ac_alvo.get("UF_Acao_PNAPA", "")).strip() and val_foc_atual in srvs_uf_lista:
+                                    idx_foc = srvs_uf_lista.index(val_foc_atual)
                                 else:
-                                    st.info(f"ℹ️ Atuação em Apoio: Sem coordenador estadual.")
-                                    ed_servidor_ac, ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = "", "", "", "Não"
+                                    idx_foc = 0
+                                
+                                ed_servidor_ac = st.selectbox(
+                                    f"Ponto Focal da Ação em {uf_acao_val}:", 
+                                    srvs_uf_lista if srvs_uf_lista else [email_logado], 
+                                    index=idx_foc, 
+                                    # 🚀 Chave amarrada à UF força o reset visual do componente quando a UF muda
+                                    key=f"t1_ac_focal_{id_ac_ref}_{uf_acao_val}"
+                                )
+                                
+                                match_srv_coord_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_ac).strip()]
+                                if not match_srv_coord_t1.empty:
+                                    d_coord_t1 = match_srv_coord_t1.iloc[0]
+                                    ed_uf_srv_ac = str(d_coord_t1.get("UF_Servidor", uf_acao_val))
+                                    ed_lot_ac = str(d_coord_t1.get("Lotacao", "Sede Superintendência"))
+                                    ed_eq_ac = str(d_coord_t1.get("Equipe_Emergencias", "Sim"))
+                                else:
+                                    ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = uf_acao_val, "Sede Superintendência", "Sim"
+                            else:
+                                st.info("ℹ️ Atuação em Apoio: Sem coordenador estadual.")
+                                ed_servidor_ac, ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = "", "", "", "Não"
 
                             lista_and_ac = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
                             idx_and_ac = lista_and_ac.index(reg_ac_alvo["Andamento"]) if reg_ac_alvo.get("Andamento") in lista_and_ac else 0
@@ -2396,20 +2430,13 @@ elif modo == "📊 Visualizar Base":
                         with aba2_ac:
                             st.text_input("Indicador Oficial", value=val_indicador_ac, disabled=True, key=f"t1_ac_ind_{id_ac_ref}")
                             meta_val_ac = obter_float_limpo(reg_ac_alvo.get("Meta_Indicador", 1.0))
-                            ed_meta_ac = st.number_input(f"Meta da Ação para a UF ({uf_alvo_ac}):", min_value=0.0, value=meta_val_ac, step=1.0, key=f"t1_ac_meta_{id_ac_ref}")
+                            ed_meta_ac = st.number_input(f"Meta da Ação para a UF ({uf_acao_val}):", min_value=0.0, value=meta_val_ac, step=1.0, key=f"t1_ac_meta_{id_ac_ref}")
                             
-                            # 🚀 UF DA AÇÃO EDITÁVEL PARA O ADMINISTRADOR
-                            if perfil_usuario == "Administrador":
-                                idx_uf_ac_sel = LISTA_UFS_COMPLETA.index(uf_alvo_ac) if uf_alvo_ac in LISTA_UFS_COMPLETA else 0
-                                uf_acao_val = st.selectbox("UF da Ação PNAPA:", LISTA_UFS_COMPLETA, index=idx_uf_ac_sel, key=f"t1_ac_uf_sel_{id_ac_ref}")
-                            else:
-                                uf_acao_val = st.text_input("UF da Ação", value=uf_alvo_ac, disabled=True, key=f"t1_ac_uf_{id_ac_ref}")
-                                
                             st.text_input("Importância", value=importancia_ac, disabled=True, key=f"t1_ac_imp_{id_ac_ref}")
                             ed_tema_ac = st.selectbox("Tema da Atividade:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_ac_alvo["Tema da Atividade"]) if reg_ac_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_ac_tema_{id_ac_ref}")
                             ed_obj_ac = st.selectbox("Objetivo:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(reg_ac_alvo["Objetivo da Atividade"]) if reg_ac_alvo.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key=f"t1_ac_obj_{id_ac_ref}")
                             ed_tipo_ac = st.selectbox("Tipo:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_ac_alvo["Tipo de Atividade"]) if reg_ac_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_ac_tipo_{id_ac_ref}")
-
+                                                  
                         with aba4_ac:
                             val_dti_ac = converter_para_data_segura(reg_ac_alvo.get("Data de Início"))
                             val_dtf_ac = converter_para_data_segura(reg_ac_alvo.get("Data de Término"))
@@ -2801,7 +2828,8 @@ elif modo == "📊 Visualizar Base":
                         
                         with aba1_at:
                             st.markdown("##### 🗂️ Ação PNAPA Vinculada (Pai)")
-                            lista_opcoes_vinc = sorted((df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas.empty else []
+                            df_pna_vinc_pool = df_pnapas[df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL"].copy()
+                            lista_opcoes_vinc = sorted((df_pnapas_op["Acao_Ano"].astype(str) + " - " + df_pnapas_op["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas_op.empty else []
                             cod_atual_salvo = str(reg_at_alvo.get("Número da Ação PNAPA", "")).strip()
                             
                             idx_pna_atual = 0
@@ -3121,7 +3149,8 @@ elif modo == "📊 Visualizar Base":
                         with l_aba1:
                             st.markdown("##### 🗂️ Ação PNAPA Vinculada (Pai)")
                             if st.checkbox("Alterar Ação PNAPA Vinculada?", key="chk_acao_lt"):
-                                lista_opcoes_vinc_lt = sorted((df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas.empty else []
+                                df_pna_vinc_pool = df_pnapas[df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL"].copy()
+                                lista_opcoes_vinc_lt = sorted((df_pnapas_op["Acao_Ano"].astype(str) + " - " + df_pnapas_op["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas_op.empty else []
                                 sel_acao_pai_lt = st.selectbox("Selecione a Nova Ação PNAPA:", lista_opcoes_vinc_lt if lista_opcoes_vinc_lt else ["Nenhuma Ação Cadastrada"], key="in_acao_lt")
                                 if lista_opcoes_vinc_lt:
                                     cod_novo_pai_lt = sel_acao_pai_lt.split(" - ")[0].strip()
@@ -3420,14 +3449,19 @@ elif modo == "➕ Inserir Nova Linha":
         st.text_input("UF da Ação/Atividade (Sua UF):", value=uf_filtro_pna, disabled=True)
 
     st.markdown("#### 🔗 Vinculação Automática com o Catálogo de Ações PNAPA")
-    if not df_pnapas.empty:
-        anos_aux_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
-        ano_padrao_form = int(registro_selecionado["Ano da Ação"]) if registro_selecionado is not None and pd.notna(registro_selecionado["Ano da Ação"]) else anos_aux_disponiveis[0]
+    
+    if not df_pnapas_op.empty:
+        anos_aux_disponiveis = sorted([int(a) for a in pd.to_numeric(df_pnapas_op["Ano"], errors='coerce').dropna().unique() if int(a) > 0], reverse=True)
+        if not anos_aux_disponiveis:
+            anos_aux_disponiveis = [2027, 2026]
+            
+        ano_padrao_form = int(pd.to_numeric(registro_selecionado.get("Ano da Ação"), errors='coerce') or anos_aux_disponiveis[0]) if registro_selecionado is not None else anos_aux_disponiveis[0]
         try: idx_ano_form = anos_aux_disponiveis.index(ano_padrao_form)
         except ValueError: idx_ano_form = 0
             
         ano_vinculo = st.selectbox("Selecione o Ano para filtrar as Ações:", anos_aux_disponiveis, index=idx_ano_form, key="form_pna_vinculo_ano")
-        df_pnapas_ano = df_pnapas[df_pnapas["Ano"].astype(int) == ano_vinculo]
+        
+        df_pnapas_ano = df_pnapas_op[pd.to_numeric(df_pnapas_op["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_vinculo)]
         
         if not df_pnapas_ano.empty:
             lista_opcoes_vinc = (df_pnapas_ano["Acao_Ano"].astype(str) + " - " + df_pnapas_ano["Nome_Acao_Apelido"].astype(str)).tolist()
@@ -3443,7 +3477,7 @@ elif modo == "➕ Inserir Nova Linha":
             acao_ano_detectado = opcao_vinc_sel.split(" - ")[0]
             dados_aux_linha = df_pnapas_ano[df_pnapas_ano["Acao_Ano"].astype(str) == acao_ano_detectado].iloc[0]
             
-            val_ano = int(dados_aux_linha["Ano"])
+            val_ano = int(pd.to_numeric(dados_aux_linha["Ano"], errors='coerce') or ano_vinculo)
             val_num_acao = str(dados_aux_linha.get("Acao_Ano", dados_aux_linha["Num_Acao_PNAPA"]))
             cod_prefixo_puro = val_num_acao.split("-")[0].strip()
             apelido_ins = str(dados_aux_linha.get("Nome_Acao_Apelido", ""))
@@ -3451,7 +3485,7 @@ elif modo == "➕ Inserir Nova Linha":
             val_indicador = str(dados_aux_linha["Indicador"])
             importancia = str(dados_aux_linha.get("Importância", "Ordinária")).strip()
             dono_nacional = str(dados_aux_linha.get("Dono_Acao", "Ceneac")).strip()
-            uf_dono_nac = str(dados_aux_linha.get("UF_Dono", "Ceneac")).strip()
+            uf_dono_nac = str(dados_aux_linha.get("UF_Dono", "DF")).strip()
             meta_nac_info = dados_aux_linha.get("Meta_Nacional", "")
             
             ponto_focal_estado, papel_estado_acao = obter_ponto_focal_acao(df_atual, val_num_acao, uf_filtro_pna)
@@ -4329,7 +4363,8 @@ elif modo == "👥 Gerenciar Equipes":
     st.markdown("---")
     ts_add, ts_edit, ts_del = st.tabs(["➕ Cadastrar Servidor", "📝 Alterar Cadastro", "🗑️ Remover Acesso"])
     LISTA_PERFIS = ["Visualização", "Editor Regional", "Administrador"]
-        
+    LISTA_UFS_COMPLETA = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Ceneac"]
+    
     # 🚀 NOVA LISTA RESTRITA DE FUNÇÕES
     LISTA_FUNCOES_SERVIDOR = [
         "",
@@ -4680,8 +4715,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             st.markdown("###### 👑 Liderança Nacional e Metas/Tetos Globais")
             c_dn1, c_dn2, c_dn3, c_dn4 = st.columns([1, 1.5, 1, 1.2])
             with c_dn1:
-                idx_uf_dono_df = LISTA_UFS_COMPLETA.index("DF") if "DF" in LISTA_UFS_COMPLETA else 0
-                novo_uf_dono = st.selectbox("UF do Dono:", LISTA_UFS_COMPLETA, index=idx_uf_dono_df, key="cad_pna_uf_dono")
+                novo_uf_dono = st.selectbox("UF/Órgão do Dono:", ["Ceneac"] + LISTA_UFS_COMPLETA, key="cad_pna_uf_dono")
             with c_dn2:
                 srvs_dono_disp = df_servidores[df_servidores["UF_Servidor"] == novo_uf_dono]["Servidor"].dropna().unique().tolist()
                 novo_dono_acao = st.selectbox("Servidor Especialista (Dono da Ação):", srvs_dono_disp if srvs_dono_disp else ["Guttemberg"], key="cad_pna_dono")
@@ -4741,23 +4775,37 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
         # =================================================================
         with tab_edt_pna:
             st.markdown("##### 📝 Atualizar Dados de Ação PNAPA")
-            if not df_pnapas.empty:
-                lista_acoes_edt = sorted((df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist())
+            df_pna_edt_pool = df_pnapas[
+                ~df_pnapas["Num_Acao_PNAPA"].astype(str).str.upper().str.contains("DIPRO") &
+                ~df_pnapas["Acao_Ano"].astype(str).str.upper().str.contains("DIPRO")
+            ].copy()
+            
+            if not df_pna_edt_pool.empty:
+                anos_disp_edt = ["Todos"] + sorted([str(int(a)) for a in pd.to_numeric(df_pna_edt_pool["Ano"], errors='coerce').dropna().unique() if int(a) > 0], reverse=True)
+                c_fano_edt, _ = st.columns([1, 2])
+                with c_fano_edt:
+                    f_ano_pna_edt = st.selectbox("Filtrar Ações por Ano:", anos_disp_edt, key="f_ano_pna_edt")
+                
+                df_pna_edt_filtrado = df_pna_edt_pool.copy()
+                if f_ano_pna_edt != "Todos":
+                    df_pna_edt_filtrado = df_pna_edt_filtrado[pd.to_numeric(df_pna_edt_filtrado["Ano"], errors='coerce').fillna(0).astype(int) == int(f_ano_pna_edt)]
+                
+                lista_acoes_edt = sorted((df_pna_edt_filtrado["Acao_Ano"].astype(str) + " - " + df_pna_edt_filtrado["Nome_Acao_Apelido"].astype(str)).tolist())
                 acao_edt_sel = st.selectbox("Selecione a Ação para visualizar/alterar:", lista_acoes_edt, key="edt_pna_sel")
                 
                 cod_alvo_edt = acao_edt_sel.split(" - ")[0].strip()
-                dados_alvo_edt = df_pnapas[df_pnapas["Acao_Ano"].astype(str) == cod_alvo_edt].iloc[0]
+                dados_alvo_edt = df_pna_edt_filtrado[df_pna_edt_filtrado["Acao_Ano"].astype(str) == cod_alvo_edt].iloc[0]
                 
                 id_col_nome = "ID_PNAPA" if "ID_PNAPA" in dados_alvo_edt else "Id"
                 id_pna_edit = int(float(dados_alvo_edt[id_col_nome]))
                 
-                val_atual_ano = int(dados_alvo_edt.get("Ano", 2026))
+                val_atual_ano = int(pd.to_numeric(dados_alvo_edt.get("Ano"), errors='coerce') or 2026)
                 val_atual_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip().upper()
                 val_atual_comp = str(dados_alvo_edt.get("Nome_Acao_Completo", "")).strip()
                 val_atual_apelido = str(dados_alvo_edt.get("Nome_Acao_Apelido", "")).strip()
                 val_atual_ind = str(dados_alvo_edt.get("Indicador", "")).strip()
                 val_atual_imp = str(dados_alvo_edt.get("Importância", "Ordinária")).strip()
-                val_atual_uf_dono = str(dados_alvo_edt.get("UF_Dono", "Ceneac")).strip()
+                val_atual_uf_dono = str(dados_alvo_edt.get("UF_Dono", "DF")).strip()
                 val_atual_dono = str(dados_alvo_edt.get("Dono_Acao", "")).strip()
                 val_atual_meta_nac = float(pd.to_numeric(dados_alvo_edt.get("Meta_Nacional", 0), errors='coerce') or 0.0)
                 val_atual_orc_nac = float(pd.to_numeric(dados_alvo_edt.get("Orcamento_Nacional", 0.0), errors='coerce') or 0.0)
@@ -4773,13 +4821,12 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 e_comp = st.text_input("Nome Completo da Ação:", value=val_atual_comp, key=f"edt_pna_comp_{id_pna_edit}").strip()
                 e_apelido = st.text_input("Nome Resumido / Apelido:", value=val_atual_apelido, key=f"edt_pna_apelido_{id_pna_edit}").strip()
 
-                # 🚀 EDIÇÃO DA LIDERANÇA NACIONAL E TETOS
                 st.markdown("###### 👑 Liderança Nacional e Metas/Tetos Globais")
                 c_edn1, c_edn2, c_edn3, c_edn4 = st.columns([1, 1.5, 1, 1.2])
                 with c_edn1:
                     lista_ufs_dono_edit = LISTA_UFS_COMPLETA
                     idx_uf_dn = lista_ufs_dono_edit.index(val_atual_uf_dono) if val_atual_uf_dono in lista_ufs_dono_edit else (lista_ufs_dono_edit.index("DF") if "DF" in lista_ufs_dono_edit else 0)
-                    e_uf_dono = st.selectbox("UF/Órgão do Dono:", lista_ufs_dono_edit, index=idx_uf_dn, key=f"edt_pna_uf_dn_{id_pna_edit}")
+                    e_uf_dono = st.selectbox("UF do Dono:", lista_ufs_dono_edit, index=idx_uf_dn, key=f"edt_pna_uf_dn_{id_pna_edit}")
                 with c_edn2:
                     srvs_dono_edit = df_servidores[df_servidores["UF_Servidor"] == e_uf_dono]["Servidor"].dropna().unique().tolist()
                     idx_dn = srvs_dono_edit.index(val_atual_dono) if val_atual_dono in srvs_dono_edit else 0
@@ -4885,12 +4932,16 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
         # =================================================================
         with tab_exc_pna:
             st.markdown("##### 🗑️ Exclusão de Ação PNAPA")
-            if not df_pnapas.empty:
-                lista_acoes_del = sorted((df_pnapas["Acao_Ano"].astype(str) + " - " + df_pnapas["Nome_Acao_Apelido"].astype(str)).tolist())
+            df_pna_del_pool = df_pnapas[
+                ~df_pnapas["Num_Acao_PNAPA"].astype(str).str.upper().str.contains("DIPRO") &
+                ~df_pnapas["Acao_Ano"].astype(str).str.upper().str.contains("DIPRO")
+            ].copy()
+            if not df_pna_del_pool.empty:
+                lista_acoes_del = sorted((df_pna_del_pool["Acao_Ano"].astype(str) + " - " + df_pna_del_pool["Nome_Acao_Apelido"].astype(str)).tolist())
                 acao_del_sel = st.selectbox("Selecione a Ação para EXCLUIR:", lista_acoes_del, key="del_pna_sel")
                 
                 cod_alvo_del = acao_del_sel.split(" - ")[0].strip()
-                dados_alvo_del = df_pnapas[df_pnapas["Acao_Ano"].astype(str) == cod_alvo_del].iloc[0]
+                dados_alvo_del = df_pna_del_pool[df_pna_del_pool["Acao_Ano"].astype(str) == cod_alvo_del].iloc[0]
                 id_col_del = "ID_PNAPA" if "ID_PNAPA" in dados_alvo_del else "Id"
                 id_pna_del = int(float(dados_alvo_del[id_col_del]))
                 
@@ -5014,7 +5065,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                         "Nome_Acao_Apelido": f"Teto DIPRO {ano_pact_sel}",
                         "Indicador": "Orçamento Global",
                         "Importância": "Estratégica",
-                        "UF_Dono": "DF",
+                        "UF_Dono": "Ceneac",
                         "Dono_Acao": "Diretoria DIPRO",
                         "Meta_Nacional": 0.0,
                         "Orcamento_Nacional": float(novo_teto_dipro)
@@ -5123,11 +5174,11 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             )
         with c_sub3:
             ufs_part_count = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
-            pct_part_uf = (ufs_part_count / 27.0 * 100.0)
+            pct_part_uf = (ufs_part_count / 26.0 * 100.0)
             st.markdown(
                 f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
                 f"🗺️ <strong>Adesão Federativa:</strong> "
-                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{ufs_part_count}/27 UFs</span> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{ufs_part_count}/26 UFs</span> "
                 f"<span style='color: #64748b; font-weight: 500;'>({pct_part_uf:.0f}%)</span>"
                 f"</div>", 
                 unsafe_allow_html=True
@@ -5136,7 +5187,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         st.markdown("---")
 
         # 4. CARDS POR AÇÃO COM DUPLA BARRA (FÍSICO + FINANCEIRO)
-        todas_ufs_brasil = sorted(LISTA_UFS_COMPLETA)
+        todas_ufs_brasil = [u for u in LISTA_UFS_COMPLETA if u not in ["Ceneac", "DF"]]
 
         for _, acao_row in df_pna_ano.iterrows():
             cod_num = str(acao_row.get("Num_Acao_PNAPA", "")).strip().upper()
@@ -5272,7 +5323,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     ufs_faltantes = sorted([u for u in todas_ufs_brasil if u not in ufs_aderiram])
                     
                     if not ufs_faltantes:
-                        st.success("🎉 Todas as 27 UFs já enviaram propostas para esta Ação!")
+                        st.success("🎉 Todas as 26 UFs já enviaram propostas para esta Ação!")
                     else:
                         st.warning(f"⚠️ **{len(ufs_faltantes)} estado(s)** ainda não cadastraram proposta:")
                         tags_estados = " ".join([f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.85em; margin-right: 4px;'>{u}</span>" for u in ufs_faltantes])
