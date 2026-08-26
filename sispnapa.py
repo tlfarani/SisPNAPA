@@ -1466,7 +1466,7 @@ if modo == "📈 Dashboards Executivos":
         ])
 
         # ---------------------------------------------------------------------
-        # ABA 1: VISÃO EXECUTIVA E CONSOLIDAÇÃO DO PNAPA
+        # ABA 1: VISÃO EXECUTIVA E CONSOLIDAÇÃO DO PNAPA (COM EXPURGO BOTTOM-UP)
         # ---------------------------------------------------------------------
         with tab_exec:
             st.markdown("### Visão Geral do Portfólio")
@@ -1481,9 +1481,12 @@ if modo == "📈 Dashboards Executivos":
                 horizontal=True
             )
 
+            # 🚀 BASE ATIVA: Expurga ações canceladas com justificativa (não penalizam o denominador)
+            df_acoes_calc = df_filt_acao[df_filt_acao["Status de Execução"] != "Cancelada (Justificada)"].copy()
+
             # 1. Definição de Parâmetros e Limiares
             if "Metas Físicas" in visao_consolidacao:
-                st.caption("Consolidação baseada no atingimento de **80% ou mais** da meta dos indicadores (considera apenas atividades concluídas).")
+                st.caption("Consolidação baseada no atingimento de **80% ou mais** da meta dos indicadores (considera apenas atividades concluídas; expurga canceladas justificadas).")
                 atv_base = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
                 col_meta = "Meta_Indicador"
                 col_res = "Resultado_Indicador"
@@ -1492,7 +1495,7 @@ if modo == "📈 Dashboards Executivos":
                 card_atingidas_label = "🏆 Ações c/ Meta Atingida (Nac.)"
                 limiar_execucao = 0.8
             elif "Orçamento" in visao_consolidacao:
-                st.caption("Consolidação baseada na execução de **50% ou mais** do orçamento planejado (considera os gastos de todas as atividades do período).")
+                st.caption("Consolidação baseada na execução de **50% ou mais** do orçamento planejado (considera os gastos de todas as atividades do período; expurga canceladas justificadas).")
                 atv_base = df_filt_atv 
                 col_meta = "Rec_Plan_Total"
                 col_res = "Rec_Exec_Total"
@@ -1501,7 +1504,7 @@ if modo == "📈 Dashboards Executivos":
                 card_atingidas_label = "💳 Ações Executadas (Nac. ≥ 50%)"
                 limiar_execucao = 0.5
             else:
-                st.caption("Consolidação baseada na execução de **50% ou mais** dos dias planejados (considera o esforço de todas as atividades do período).")
+                st.caption("Consolidação baseada na execução de **50% ou mais** dos dias planejados (considera o esforço de todas as atividades do período; expurga canceladas justificadas).")
                 atv_base = df_filt_atv 
                 col_meta = "Dias_Gastos_Plan"
                 col_res = "Dias_Gastos_Exec"
@@ -1510,9 +1513,10 @@ if modo == "📈 Dashboards Executivos":
                 card_atingidas_label = "⏳ Ações Executadas (Nac. ≥ 50%)"
                 limiar_execucao = 0.5
 
-            # 2. Processamento e Cálculo
-            if not df_filt_acao.empty:
-                meta_uf = df_filt_acao.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_meta].sum().reset_index()
+            # 2. Processamento e Cálculo Bottom-Up
+            if not df_acoes_calc.empty:
+                # Agrupamento Estadual (apenas ações ativas da UF)
+                meta_uf = df_acoes_calc.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_meta].sum().reset_index()
                 res_uf = atv_base.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"])[col_res].sum().reset_index()
                 
                 df_uf_calc = pd.merge(meta_uf, res_uf, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left").fillna(0)
@@ -1535,7 +1539,8 @@ if modo == "📈 Dashboards Executivos":
                 tab1_uf = tab1_uf[tab1_uf["UF / Nível"].astype(str).str.strip() != ""]
                 tab1_uf[nome_col_pct] = (tab1_uf["Acoes_Executadas"] / tab1_uf["Acoes_Planejadas"]) * 100
                 
-                meta_nac = df_filt_acao.groupby("Número da Ação PNAPA")[col_meta].sum().reset_index()
+                # Agrupamento Nacional (apenas ações ativas no país)
+                meta_nac = df_acoes_calc.groupby("Número da Ação PNAPA")[col_meta].sum().reset_index()
                 res_nac = atv_base.groupby("Número da Ação PNAPA")[col_res].sum().reset_index()
                 
                 df_nac_calc = pd.merge(meta_nac, res_nac, on="Número da Ação PNAPA", how="left").fillna(0)
@@ -1549,9 +1554,9 @@ if modo == "📈 Dashboards Executivos":
                 total_nac_plan, total_nac_exec, pct_nac_exec = 0, 0, 0
                 df_nac_calc, tab1_uf = pd.DataFrame(), pd.DataFrame()
 
-            # 3. Totais Financeiros e de Dias
-            rec_plan_total = pd.to_numeric(df_filt_acao["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
-            dias_plan_total = pd.to_numeric(df_filt_acao["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
+            # 3. Totais Financeiros e de Dias (Base Ativa)
+            rec_plan_total = pd.to_numeric(df_acoes_calc["Rec_Plan_Total"], errors='coerce').fillna(0).sum()
+            dias_plan_total = pd.to_numeric(df_acoes_calc["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum()
             
             rec_exec_total = pd.to_numeric(df_filt_atv["Rec_Exec_Total"], errors='coerce').fillna(0).sum()
             dias_exec_total = pd.to_numeric(df_filt_atv["Dias_Gastos_Exec"], errors='coerce').fillna(0).sum()
@@ -1573,7 +1578,7 @@ if modo == "📈 Dashboards Executivos":
             st.markdown("---")
             st.markdown("### 🏆 Status de Execução Geral do PNAPA (Por UF e Nacional)")
 
-            if not df_filt_acao.empty:
+            if not df_acoes_calc.empty:
                 linha_nacional = pd.DataFrame([{
                     "UF / Nível": "🇧🇷 NACIONAL (Consolidado Global)",
                     nome_col_pct: pct_nac_exec,
@@ -1601,7 +1606,7 @@ if modo == "📈 Dashboards Executivos":
                 
                 # --- Tabela 2: Por Ação Nacional Formatada no Padrão BR ---
                 st.markdown("<br>#### 🎯 Status de Execução Geral do PNAPA (Por Ação Nacional)", unsafe_allow_html=True)
-                nomes_acoes = df_filt_acao[["Número da Ação PNAPA", "Nome da Ação PNAPA"]].drop_duplicates("Número da Ação PNAPA")
+                nomes_acoes = df_acoes_calc[["Número da Ação PNAPA", "Nome da Ação PNAPA"]].drop_duplicates("Número da Ação PNAPA")
                 tab2_acao = pd.merge(df_nac_calc, nomes_acoes, on="Número da Ação PNAPA", how="left")
                 
                 tab2_acao["Ação PNAPA"] = tab2_acao["Número da Ação PNAPA"] + " - " + tab2_acao["Nome da Ação PNAPA"]
@@ -1640,34 +1645,32 @@ if modo == "📈 Dashboards Executivos":
                 st.dataframe(t2_styled, use_container_width=True, hide_index=True)
 
                 # --- Tabela 3: Pendências Críticas de Ações ---
-                st.markdown("<br>#### 🚨 Pendências de Justificativa nas Ações (Mural de Atenção)", unsafe_allow_html=True)
-                st.caption("Filtro automático das Ações não executadas/canceladas cujo prazo venceu sem inserção de justificativa.")
+            st.markdown("<br>#### 🚨 Pendências de Justificativa nas Ações (Mural de Atenção)", unsafe_allow_html=True)
+            st.caption("Filtro automático das Ações não executadas/canceladas cujo prazo venceu sem inserção de justificativa.")
+            
+            # 🚀 Mantém df_filt_acao bruto para capturar as irregularidades sem justificativa
+            tab3_acao = df_filt_acao.copy()
+            if not tab3_acao.empty:
+                tab3_acao = tab3_acao[tab3_acao["Status de Execução"].isin(["Não Executada - Sem Justificativa", "Cancelada - Sem Justificativa"])]
                 
-                tab3_acao = df_filt_acao.copy()
                 if not tab3_acao.empty:
-                    tab3_acao = tab3_acao[tab3_acao["Status de Execução"].isin(["Não Executada - Sem Justificativa", "Cancelada - Sem Justificativa"])]
+                    tab3_acao["Ação PNAPA"] = tab3_acao["Número da Ação PNAPA"] + " - " + tab3_acao["Nome da Ação PNAPA"]
+                    tab3_acao.rename(columns={"UF_Acao_PNAPA": "UF", "Justificativa_Acao_PNAPA": "Justificativa"}, inplace=True)
+                    tab3_acao = tab3_acao[["UF", "Ação PNAPA", "Status de Execução", "Justificativa"]]
+                    tab3_acao = tab3_acao.sort_values(by=["UF", "Ação PNAPA"])
                     
-                    if not tab3_acao.empty:
-                        tab3_acao["Ação PNAPA"] = tab3_acao["Número da Ação PNAPA"] + " - " + tab3_acao["Nome da Ação PNAPA"]
-                        tab3_acao.rename(columns={"UF_Acao_PNAPA": "UF", "Justificativa_Acao_PNAPA": "Justificativa"}, inplace=True)
-                        tab3_acao = tab3_acao[["UF", "Ação PNAPA", "Status de Execução", "Justificativa"]]
-                        tab3_acao = tab3_acao.sort_values(by=["UF", "Ação PNAPA"])
+                    def cor_status_acao(val):
+                        if pd.isna(val) or not isinstance(val, str): return ''
+                        return 'background-color: #fca5a5; color: black; font-weight: bold;'
                         
-                        def cor_status_acao(val):
-                            if pd.isna(val) or not isinstance(val, str): return ''
-                            return 'background-color: #fca5a5; color: black; font-weight: bold;'
-                            
-                        try:
-                            t3_styled = tab3_acao.style.applymap(cor_status_acao, subset=['Status de Execução'])
-                        except AttributeError:
-                            t3_styled = tab3_acao.style.map(cor_status_acao, subset=['Status de Execução'])
-                            
-                        st.dataframe(t3_styled, use_container_width=True, hide_index=True)
-                    else:
-                        st.success("🎉 Excelente! Nenhuma pendência de justificativa encontrada nos filtros selecionados.")
+                    try:
+                        t3_styled = tab3_acao.style.applymap(cor_status_acao, subset=['Status de Execução'])
+                    except AttributeError:
+                        t3_styled = tab3_acao.style.map(cor_status_acao, subset=['Status de Execução'])
+                        
+                    st.dataframe(t3_styled, use_container_width=True, hide_index=True)
                 else:
-                    st.info("Nenhuma Ação encontrada para o filtro selecionado.")
-
+                    st.success("🎉 Excelente! Nenhuma pendência de justificativa encontrada nos filtros selecionados.")
             else:
                 st.info("Nenhuma Ação encontrada para o filtro selecionado.")
 
