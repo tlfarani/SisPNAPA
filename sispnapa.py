@@ -1318,7 +1318,7 @@ if modo == "📈 Dashboards Executivos":
                     f_ano = st.selectbox("Ano da Ação:", anos_disp, index=idx_ano, key="fd_ano")
                     filtros_d["ano"] = ("Ano da Ação", f_ano)
 
-                    df_p_data# 🚀 CÁLCULO SEGURO DO INTERVALO DE DATAS (ANO CIVIL COMPLETO)
+                    # 🚀 CÁLCULO SEGURO DO INTERVALO DE DATAS (ANO CIVIL COMPLETO)
                     if f_ano != "Todos" and str(f_ano).isdigit():
                         ano_int = int(f_ano)
                         min_dt_val = date(ano_int, 1, 1)
