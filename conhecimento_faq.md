@@ -1,38 +1,3 @@
-Markdown
-
-# Base de Conhecimento & FAQ Oficial — SisPNAPA
-
----
-
-## 1. Acesso, Perfis e Segurança da Informação
-
-### 1.1 Como realizar o primeiro acesso ao sistema?
-O acesso ao SisPNAPA é individual e restrito aos servidores autorizados:
-* **Login:** Insira seu e-mail institucional completo (ex: `nome.sobrenome@ibama.gov.br`).
-* **Senha Provisória Padrão:** Digite **`pnapa123`**.
-* **Troca Obrigatória:** Logo após o primeiro login, desça até o rodapé da barra lateral esquerda e clique em **🔑 Trocar Minha Senha**. Defina uma senha pessoal de sua preferência.
-
-### 1.2 Como funciona a segurança das senhas?
-O sistema adota padrões criptográficos de segurança. As senhas nunca são salvas em texto puro: elas passam por um algoritmo de dispersão unidirecional (**SHA-256**) antes de serem armazenadas no banco de dados. Nem os administradores do sistema têm acesso à visualização da sua senha.
-
-### 1.3 Quais são os perfis de acesso (RBAC) e suas permissões?
-O SisPNAPA utiliza controle de acesso baseado em funções (Role-Based Access Control):
-* **👑 Administrador (Nacional / Suporte):** Acesso irrestrito a todas as Unidades Federativas (UFs), permissão para alterar o Catálogo Nacional de Ações do Ceneac, gerenciar todos os usuários, auditar logs e redefinir senhas.
-* **✏️ Editor Regional (Liderança / Equipe da UF):** Autonomia total para cadastrar, editar e excluir Ações e Atividades vinculadas exclusivamente à sua própria UF. Pode gerenciar a lista de servidores da sua equipe local. Não visualiza opções de edição de outros estados.
-* **👁️ Visualização (Consulta / Auditoria):** Acesso de somente leitura. Pode explorar os Dashboards Executivos e a Central de Visualização, mas os formulários de inserção e edição ficam bloqueados.
-
-### 1.4 Regra de Isolamento por UF
-Para garantir a governança e integridade das informações, os Editores Regionais operam em um ambiente isolado: os formulários de inserção e as opções de edição em lote filtram automaticamente a base, garantindo que nenhum estado sobrescreva dados de outra regional acidentalmente.
-
----
-
-## 2. Hierarquia de Dados: Ação Nacional x Ação Estadual x Atividades de Campo
-
-O SisPNAPA organiza o planejamento e a execução das emergências ambientais em uma estrutura piramidal de 3 níveis relacionais:
-Aqui está o detalhamento completo das Seções 1, 2 e 3 estruturado em formato Markdown profissional para você compor o arquivo conhecimento_faq.md:
-
-
-Markdown
 # Base de Conhecimento & FAQ Oficial — SisPNAPA
 
 ---
@@ -260,7 +225,6 @@ Para gerir grandes volumes de dados sem perda de desempenho, o SisPNAPA disponib
 * **Verificação Prévia de Equipa:** Antes de iniciar a inserção em lote de uma atividade, assegure-se de que todos os membros da missão já constam da aba *Gerenciar Equipes*. Caso falte algum servidor, cadastre-o previamente para evitar a necessidade de recriar o lote.
 * **Atenção ao Conflito de Filtros:** Se uma atividade recém-cadastrada não surgir de imediato no ecrã, verifique se não existem filtros ativos de *Status* ou *Intervalo de Datas* que estejam a ocultar o novo registo.
 
-Markdown
 ## 8. Dashboards Executivos e Consolidação Nacional
 
 O módulo **📈 Dashboards Executivos** consolida em tempo real o desempenho físico, orçamentário e operacional do SisPNAPA. A primeira aba (**Visão Executiva Geral**) apresenta o panorama estratégico do plano por meio de duas tabelas estruturantes:
