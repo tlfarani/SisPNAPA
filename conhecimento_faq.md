@@ -68,8 +68,8 @@ O SisPNAPA organiza o planejamento e a execução das emergências ambientais em
 * Registra os servidores escalados, esforço em dias, diárias pagas, custos de passagens e o número do processo SEI comprobatório.
 
 ### 2.4 Como funciona o Código Inteligente da Atividade?
-As atividades recebem um código padronizado gerado automaticamente via expressões regulares:
-$$\text{Formato: } \mathbf{[Código\_Ação]-[Ano]-[UF]-ATV[Sequencial]}$$
+As atividades recebem um código padronizado gerado automaticamente:
+> **Formato:** `[Código_Ação]-[Ano]-[UF]-ATV[Sequencial]`
 * *Exemplo:* A terceira missão da ação `CEN001` no estado de São Paulo em 2027 recebe automaticamente o identificador **`CEN001-2027-SP-ATV03`**.
 
 ---
@@ -162,7 +162,7 @@ O painel monitora o equilíbrio orçamentário em três camadas hierárquicas:
 
 * **Persistência do Teto DIPRO (`DIPRO_GLOBAL`):** O valor aprovado pela Diretoria de Proteção Ambiental é calibrado pelo Administrador e gravado no SharePoint sob a chave técnica `DIPRO_GLOBAL-[Ano]`. Esse registro permanece isolado dos formulários operacionais.
 * **Saldo Restante DIPRO:** Apura em tempo real se as demandas dos 27 estados cabem no orçamento global:
-$$\text{Saldo Restante} = \text{Teto Global DIPRO} - \sum \text{Recursos Demandados pelas UFs}$$
+> **Saldo Restante** = `Teto Global DIPRO` − `Soma dos Recursos Demandados pelas UFs`
 
 ### 5.2 Semáforo de Alinhamento das Metas Físicas
 Cada Ação Nacional confronta a **Meta Nacional (Top-Down)** com o **Somatório das Metas Propostas pelas UFs (Bottom-Up)**:
@@ -176,7 +176,7 @@ Cada Ação Nacional confronta a **Meta Nacional (Top-Down)** com o **Somatório
 
 ### 5.3 Raio-X Federativo e Identificação de UFs Pendentes
 Dentro de cada ação, a aba **`⏳ Estados Sem Proposta Registrada`** cruza a base de **27 UFs** e isola instantaneamente as siglas das Superintendências que ainda não enviaram planejamento. O indicador superior exibe a adesão real:
-$$\text{Taxa de Adesão Federativa} = \left( \frac{\text{UFs com Proposta}}{\mathbf{27}} \right) \times 100$$
+> **Taxa de Adesão Federativa** = `(UFs com Proposta / 27) × 100%`
 
 ---
 
@@ -200,8 +200,8 @@ Dedicada à gestão micro das missões:
 
 ### 7.1 Como o SisPNAPA calcula o cumprimento de uma Ação Estadual?
 O sistema avalia o atingimento da meta da Ação Estadual (Nível 2) a partir do somatório das entregas registradas nas Atividades de Campo (Nível 3) concluídas:
-* **Ações com Indicador Numérico:** Ação cumprida quando o somatório das atividades com documento atinge **$\ge 80\%$ da Meta Planejada da UF**.
-* **Ações Qualitativas / Continuadas (Meta = 0):** Ação cumprida se houver esforço comprovado ($\text{Dias\_Gastos\_Exec} > 0$) e ao menos uma atividade finalizada com processo SEI.
+* **Ações com Indicador Numérico:** Ação cumprida quando o somatório das atividades com documento atinge **≥ 80% da Meta Planejada da UF**.
+* **Ações Qualitativas / Continuadas (Meta = 0):** Ação cumprida se houver esforço comprovado (`Dias_Gastos_Exec > 0`) e ao menos uma atividade finalizada com processo SEI.
 
 ### 7.2 A Obrigatoriedade do Processo SEI (`Doc_Probatorio_Exec`)
 Nenhuma atividade é homologada sem a inserção do número de processo ou documento probatório no SEI (Relatório de Viagem, Informação Técnica, Termo de Vistoria):
@@ -212,7 +212,7 @@ Nenhuma atividade é homologada sem a inserção do número de processo ou docum
 | Status de Execução | Marcador | Regra de Enquadramento Operacional |
 | :--- | :---: | :--- |
 | **Planejada** | ⚪ | Ação ativa dentro do cronograma vigente, aguardando execução ou lançamento das missões. |
-| **Executada** | 🟢 | Meta física atingida ($\ge 80\%$ da meta da UF ou esforço comprovado em ações qualitativas), com atividades concluídas e SEI registrado. |
+| **Executada** | 🟢 | Meta física atingida (≥ 80% da meta da UF ou esforço comprovado em ações qualitativas), com atividades concluídas e SEI registrado. |
 | **Não Executada - Sem Justificativa** | 🔴 | Prazo cronológico encerrado sem alcance da meta mínima de 80% e sem justificativa técnica. |
 | **Cancelada - Sem Justificativa** | 🔴 | Ação assinalada como cancelada, porém com o campo de justificativa em branco. |
 | **Cancelada (Justificada)** | 🟡 | Ação cancelada pela gestão regional contendo fundamentação técnica registrada. |
@@ -277,21 +277,22 @@ Permite cadastrar missões conjuntas rapidamente:
 O módulo **`📈 Dashboards Executivos`** consolida o desempenho físico e financeiro do PNAPA em tempo real.
 
 ### 11.1 Tabela 1: Status de Execução Geral do PNAPA (Por UF e Nacional)
-Avalia a taxa de sucesso das 27 UFs e do país com base na quantidade de ações que atingiram a régua de **$\ge 80\%$ de cumprimento físico**:
+Avalia a taxa de sucesso das 27 UFs e do país com base na quantidade de ações que atingiram a régua de **≥ 80% de cumprimento físico**:
 
-$$\% \text{ de Ações Executadas da UF} = \left( \frac{\text{Ações com Meta Atingida na UF}}{\text{Total de Ações Planejadas pela UF}} \right) \times 100$$
+> **% de Ações Executadas da UF** = `(Ações com Meta Atingida na UF / Total de Ações Planejadas pela UF) × 100%`
 
-* **Consolidado Global (🇧🇷 NACIONAL):** Não é uma média simples das UFs. Uma ação nacional só pontua como cumprida se a soma das entregas de todos os estados atingir $\ge 80\%$ da meta nacional somada:
-$$\% \text{ Executadas Nacional} = \left( \frac{\text{Ações Nacionais com Meta Global } \ge 80\%}{\text{Total de Ações Nacionais no País}} \right) \times 100$$
+* **Consolidado Global (NACIONAL):** Não é uma média simples das UFs. Uma ação nacional só pontua como cumprida se a soma das entregas de todos os estados atingir ≥ 80% da meta nacional somada:
+
+> **% de Ações Executadas Nacional** = `(Ações Nacionais com Meta Global ≥ 80% / Total de Ações Nacionais no País) × 100%`
 
 ### 11.2 Régua Semafórica da Tabela 2 (Por Ação)
 
 | Faixa Percentual | Cor de Fundo | Significado Operacional |
 | :--- | :---: | :--- |
-| **$\ge 100\%$** | 🔵 **Azul** | **Meta Totalmente Cumprida / Superada** |
-| **$80,0\%$ a $99,9\%$** | 🟢 **Verde** | **Meta Atingida (Faixa de Conformidade PNAPA)** |
-| **$50,0\%$ a $79,9\%$** | 🟡 **Amarelo** | **Execução Parcial / Atenção** |
-| **$< 50,0\%$** | 🔴 **Vermelho** | **Execução Crítica / Insuficiente** |
+| **≥ 100%** | 🔵 **Azul** | **Meta Totalmente Cumprida / Superada** |
+| **80,0% a 99,9%** | 🟢 **Verde** | **Meta Atingida (Faixa de Conformidade PNAPA)** |
+| **50,0% a 79,9%** | 🟡 **Amarelo** | **Execução Parcial / Atenção** |
+| **< 50,0%** | 🔴 **Vermelho** | **Execução Crítica / Insuficiente** |
 
 ---
 
