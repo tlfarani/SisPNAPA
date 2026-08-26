@@ -2352,7 +2352,7 @@ elif modo == "📊 Visualizar Base":
                             st.text_input("Número da Ação PNAPA", value=val_num_acao_ac, disabled=True, key=f"t1_ac_num_{id_ac_ref}")
                             st.text_input("Nome da Ação PNAPA", value=val_nome_acao_ac, disabled=True, key=f"t1_ac_nome_{id_ac_ref}")
                             
-                            # 🚀 UF, Papel e Ponto Focal juntos na Aba 1 com reatividade instantânea
+                            # 🚀 UF e Papel movidos para o topo da Aba 1 para atualizar a equipe instantaneamente
                             c_ac_uf, c_ac_pap = st.columns(2)
                             with c_ac_uf:
                                 if perfil_usuario == "Administrador":
@@ -2361,7 +2361,7 @@ elif modo == "📊 Visualizar Base":
                                     uf_acao_val = st.selectbox("UF da Ação PNAPA:", LISTA_UFS_COMPLETA, index=idx_uf_ac, key=f"t1_ac_uf_sel_{id_ac_ref}")
                                 else:
                                     uf_acao_val = str(reg_ac_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
-                                    st.text_input("UF da Ação PNAPA (Travada):", value=uf_acao_val, disabled=True, key=f"t1_ac_uf_dis_{id_ac_ref}")
+                                    st.text_input("UF da Ação PNAPA:", value=uf_acao_val, disabled=True, key=f"t1_ac_uf_dis_{id_ac_ref}")
 
                             with c_ac_pap:
                                 val_papel_atual = str(reg_ac_alvo.get("Papel_Institucional", "Coordenação")).strip()
@@ -2369,19 +2369,21 @@ elif modo == "📊 Visualizar Base":
                                 ed_papel_inst = st.selectbox("Papel da UF nesta Ação:", LISTA_PAPEIS_INSTITUCIONAIS, index=idx_pap, key=f"t1_ac_papel_{id_ac_ref}")
 
                             if ed_papel_inst == "Coordenação":
+                                # 🚀 Puxa a lista de servidores atualizada baseada no "uf_acao_val" acima
                                 srvs_uf_lista = obter_servidores_por_uf(df_servidores, uf_acao_val)
                                 val_foc_atual = str(reg_ac_alvo.get("Servidor", "")).strip()
                                 
-                                # Se a UF for a mesma cadastrada e o servidor existir na base, mantém; caso contrário, reseta para o 1º da nova UF
+                                # Mantém o servidor atual selecionado APENAS se a UF não foi alterada
                                 if uf_acao_val == str(reg_ac_alvo.get("UF_Acao_PNAPA", "")).strip() and val_foc_atual in srvs_uf_lista:
                                     idx_foc = srvs_uf_lista.index(val_foc_atual)
                                 else:
                                     idx_foc = 0
-                                    
+                                
                                 ed_servidor_ac = st.selectbox(
-                                    f"Ponto Focal / Coordenador da Ação ({uf_acao_val}):", 
+                                    f"Ponto Focal da Ação em {uf_acao_val}:", 
                                     srvs_uf_lista if srvs_uf_lista else [email_logado], 
                                     index=idx_foc, 
+                                    # 🚀 Chave amarrada à UF força o reset visual do componente quando a UF muda
                                     key=f"t1_ac_focal_{id_ac_ref}_{uf_acao_val}"
                                 )
                                 
@@ -2394,14 +2396,14 @@ elif modo == "📊 Visualizar Base":
                                 else:
                                     ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = uf_acao_val, "Sede Superintendência", "Sim"
                             else:
-                                st.info(f"ℹ️ Atuação em Apoio: Sem Coordenador Estadual em {uf_acao_val}.")
+                                st.info("ℹ️ Atuação em Apoio: Sem coordenador estadual.")
                                 ed_servidor_ac, ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = "", "", "", "Não"
 
                             lista_and_ac = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
                             idx_and_ac = lista_and_ac.index(reg_ac_alvo["Andamento"]) if reg_ac_alvo.get("Andamento") in lista_and_ac else 0
                             ed_andamento_ac = st.selectbox("Andamento da Ação:", lista_and_ac, index=idx_and_ac, key=f"t1_ac_and_{id_ac_ref}")
 
-                            # Painel de Liderança do Coordenador
+                            # 👑 PAINEL DE LIDERANÇA NA EDIÇÃO DA AÇÃO
                             if ed_papel_inst == "Coordenação" and ed_servidor_ac:
                                 dias_acao_ed_temp = st.session_state.get(f"t1_ac_dpl_{id_ac_ref}", obter_float_limpo(reg_ac_alvo.get("Dias_Gastos_Plan")))
                                 dados_term_ac_ed = calcular_termometro_carga(
