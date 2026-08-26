@@ -4778,7 +4778,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 c_edn1, c_edn2, c_edn3, c_edn4 = st.columns([1, 1.5, 1, 1.2])
                 with c_edn1:
                     lista_ufs_dono_edit = LISTA_UFS_COMPLETA
-                    idx_uf_dn = lista_ufs_dono_edit.index(val_atual_uf_dono) if val_atual_uf_dono in lista_ufs_dono_edit else (lista_ufs_dono_edit.index("DF") if "DF" in lista_ufs_dono_edit else 0
+                    idx_uf_dn = lista_ufs_dono_edit.index(val_atual_uf_dono) if val_atual_uf_dono in lista_ufs_dono_edit else (lista_ufs_dono_edit.index("DF") if "DF" in lista_ufs_dono_edit else 0)
                     e_uf_dono = st.selectbox("UF/Órgão do Dono:", lista_ufs_dono_edit, index=idx_uf_dn, key=f"edt_pna_uf_dn_{id_pna_edit}")
                 with c_edn2:
                     srvs_dono_edit = df_servidores[df_servidores["UF_Servidor"] == e_uf_dono]["Servidor"].dropna().unique().tolist()
