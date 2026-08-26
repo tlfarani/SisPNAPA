@@ -77,7 +77,7 @@ LISTA_TEMAS = ["Dutos", "Emergências Climáticas", "Fauna", "Ferrovias", "Nucle
 LISTA_OBJETIVOS = ["Atendimento a Acidentes", "Prevenção e Gestão de Riscos", "Preparação"]
 LISTA_TIPOS_ATIVIDADE = ["Capacitação", "Coleta de Amostras", "Desenvolvimento de Ferramentas", "Documentos de Análise", "Elaboração de Normativas", "Fiscalização", "Operação", "Outros tipos", "Reunião", "Simulados", "Vistoria"]
 LISTA_PERIGOS = ["Não se Aplica", "Periculosidade", "Insalubridade"]
-LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Ceneac", "Não se aplica", "Outras fontes"]
+LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Não se aplica", "Outras fontes"]
 LISTA_IMPORTANCIA = ["Ordinária", "Prioritária", "Estratégica"]
 LISTA_PAPEIS_INSTITUCIONAIS = ["Coordenação", "Apoio"]
 LISTA_FUNCOES_CAMPO = ["Coordenador de Campo", "Apoio de Campo"]
@@ -4329,8 +4329,7 @@ elif modo == "👥 Gerenciar Equipes":
     st.markdown("---")
     ts_add, ts_edit, ts_del = st.tabs(["➕ Cadastrar Servidor", "📝 Alterar Cadastro", "🗑️ Remover Acesso"])
     LISTA_PERFIS = ["Visualização", "Editor Regional", "Administrador"]
-    LISTA_UFS_COMPLETA = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Ceneac"]
-    
+        
     # 🚀 NOVA LISTA RESTRITA DE FUNÇÕES
     LISTA_FUNCOES_SERVIDOR = [
         "",
@@ -4681,7 +4680,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             st.markdown("###### 👑 Liderança Nacional e Metas/Tetos Globais")
             c_dn1, c_dn2, c_dn3, c_dn4 = st.columns([1, 1.5, 1, 1.2])
             with c_dn1:
-                novo_uf_dono = st.selectbox("UF/Órgão do Dono:", ["Ceneac"] + LISTA_UFS_COMPLETA, key="cad_pna_uf_dono")
+                idx_uf_dono_df = LISTA_UFS_COMPLETA.index("DF") if "DF" in LISTA_UFS_COMPLETA else 0
+                novo_uf_dono = st.selectbox("UF do Dono:", LISTA_UFS_COMPLETA, index=idx_uf_dono_df, key="cad_pna_uf_dono")
             with c_dn2:
                 srvs_dono_disp = df_servidores[df_servidores["UF_Servidor"] == novo_uf_dono]["Servidor"].dropna().unique().tolist()
                 novo_dono_acao = st.selectbox("Servidor Especialista (Dono da Ação):", srvs_dono_disp if srvs_dono_disp else ["Guttemberg"], key="cad_pna_dono")
@@ -4777,8 +4777,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 st.markdown("###### 👑 Liderança Nacional e Metas/Tetos Globais")
                 c_edn1, c_edn2, c_edn3, c_edn4 = st.columns([1, 1.5, 1, 1.2])
                 with c_edn1:
-                    lista_ufs_dono_edit = ["Ceneac"] + LISTA_UFS_COMPLETA
-                    idx_uf_dn = lista_ufs_dono_edit.index(val_atual_uf_dono) if val_atual_uf_dono in lista_ufs_dono_edit else 0
+                    lista_ufs_dono_edit = LISTA_UFS_COMPLETA
+                    idx_uf_dn = lista_ufs_dono_edit.index(val_atual_uf_dono) if val_atual_uf_dono in lista_ufs_dono_edit else (lista_ufs_dono_edit.index("DF") if "DF" in lista_ufs_dono_edit else 0
                     e_uf_dono = st.selectbox("UF/Órgão do Dono:", lista_ufs_dono_edit, index=idx_uf_dn, key=f"edt_pna_uf_dn_{id_pna_edit}")
                 with c_edn2:
                     srvs_dono_edit = df_servidores[df_servidores["UF_Servidor"] == e_uf_dono]["Servidor"].dropna().unique().tolist()
@@ -5014,7 +5014,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                         "Nome_Acao_Apelido": f"Teto DIPRO {ano_pact_sel}",
                         "Indicador": "Orçamento Global",
                         "Importância": "Estratégica",
-                        "UF_Dono": "Ceneac",
+                        "UF_Dono": "DF",
                         "Dono_Acao": "Diretoria DIPRO",
                         "Meta_Nacional": 0.0,
                         "Orcamento_Nacional": float(novo_teto_dipro)
@@ -5123,11 +5123,11 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             )
         with c_sub3:
             ufs_part_count = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
-            pct_part_uf = (ufs_part_count / 26.0 * 100.0)
+            pct_part_uf = (ufs_part_count / 27.0 * 100.0)
             st.markdown(
                 f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
                 f"🗺️ <strong>Adesão Federativa:</strong> "
-                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{ufs_part_count}/26 UFs</span> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{ufs_part_count}/27 UFs</span> "
                 f"<span style='color: #64748b; font-weight: 500;'>({pct_part_uf:.0f}%)</span>"
                 f"</div>", 
                 unsafe_allow_html=True
@@ -5136,7 +5136,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         st.markdown("---")
 
         # 4. CARDS POR AÇÃO COM DUPLA BARRA (FÍSICO + FINANCEIRO)
-        todas_ufs_brasil = [u for u in LISTA_UFS_COMPLETA if u not in ["Ceneac", "DF"]]
+        todas_ufs_brasil = sorted(LISTA_UFS_COMPLETA)
 
         for _, acao_row in df_pna_ano.iterrows():
             cod_num = str(acao_row.get("Num_Acao_PNAPA", "")).strip().upper()
@@ -5272,7 +5272,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     ufs_faltantes = sorted([u for u in todas_ufs_brasil if u not in ufs_aderiram])
                     
                     if not ufs_faltantes:
-                        st.success("🎉 Todas as 26 UFs já enviaram propostas para esta Ação!")
+                        st.success("🎉 Todas as 27 UFs já enviaram propostas para esta Ação!")
                     else:
                         st.warning(f"⚠️ **{len(ufs_faltantes)} estado(s)** ainda não cadastraram proposta:")
                         tags_estados = " ".join([f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.85em; margin-right: 4px;'>{u}</span>" for u in ufs_faltantes])
