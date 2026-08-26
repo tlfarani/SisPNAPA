@@ -1318,17 +1318,33 @@ if modo == "📈 Dashboards Executivos":
                     f_ano = st.selectbox("Ano da Ação:", anos_disp, index=idx_ano, key="fd_ano")
                     filtros_d["ano"] = ("Ano da Ação", f_ano)
 
-                    df_p_data = aplicar_filtros_dash(df_dash_atv, filtros_d, "data")
-                    dts_validas = df_p_data["Data_Inicio_DT"].dropna()
-                    
-                    min_dt_val = dts_validas.min().date() if not dts_validas.empty else date(2025, 1, 1)
-                    max_dt_val = dts_validas.max().date() if not dts_validas.empty else date(2026, 12, 31)
-                    if min_dt_val >= max_dt_val: max_dt_val = min_dt_val + pd.Timedelta(days=1)
+                    df_p_data# 🚀 CÁLCULO SEGURO DO INTERVALO DE DATAS (ANO CIVIL COMPLETO)
+                    if f_ano != "Todos" and str(f_ano).isdigit():
+                        ano_int = int(f_ano)
+                        min_dt_val = date(ano_int, 1, 1)
+                        max_dt_val = date(ano_int, 12, 31)
+                    else:
+                        dts_atvs = df_dash_atv["Data_Inicio_DT"].dropna() if "Data_Inicio_DT" in df_dash_atv.columns else pd.Series()
+                        dts_acoes = df_dash_acao["Data_Inicio_DT"].dropna() if "Data_Inicio_DT" in df_dash_acao.columns else pd.Series()
+                        todas_dts = pd.concat([dts_atvs, dts_acoes]).dropna()
+                        
+                        if not todas_dts.empty:
+                            min_ano_base = int(todas_dts.min().year)
+                            max_ano_base = int(todas_dts.max().year)
+                            min_dt_val = date(min_ano_base, 1, 1)
+                            max_dt_val = date(max_ano_base, 12, 31)
+                        else:
+                            min_dt_val = date(2025, 1, 1)
+                            max_dt_val = date(2027, 12, 31)
+
+                    if min_dt_val >= max_dt_val: 
+                        max_dt_val = min_dt_val + pd.Timedelta(days=1)
                     
                     val_atual = st.session_state.get("valor_slider_data", (min_dt_val, max_dt_val))
                     v_start = max(min_dt_val, min(val_atual[0], max_dt_val))
                     v_end = max(min_dt_val, min(val_atual[1], max_dt_val))
-                    if v_start > v_end: v_start = min_dt_val
+                    if v_start > v_end: 
+                        v_start = min_dt_val
 
                     f_dt = st.slider("Data de Início:", min_value=min_dt_val, max_value=max_dt_val, value=(v_start, v_end), format="DD/MM/YYYY")
                     st.session_state["valor_slider_data"] = f_dt
