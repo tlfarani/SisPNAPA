@@ -7,6 +7,7 @@ import hashlib
 import threading
 import requests
 import google.generativeai as genai
+import unicodedata
 
 st.set_page_config(page_title="SisPNAPA - Emergências Ambientais e Climáticas", layout="wide")
 
@@ -22,6 +23,27 @@ URL_FLOW_EMAIL_360 = "https://default6ae3f5e7541942a780758c1490c72b.25.environme
 
 # URL da Planilha Macro Principal (Movidas para o topo para evitar NameError)
 URL_FLOW_PRINCIPAL = st.secrets["power_automate"]["URL_PRINCIPAL"]
+
+# =================================================================
+# PARÂMETROS DINÂMICOS DE GOVERNANÇA (PRÉ vs PÓS PNAPA E EQUIPARAÇÃO SEDE)
+# =================================================================
+DEFAULT_GOV_PARAMS = {
+    "ano_inicio_trava": 2027,
+    "teto_titular_pre": 90.0,
+    "teto_substituto_pre": 60.0,
+    "teto_membro_pre": 40.0,
+    "fator_pos_pnapa": 1.50,          # +50% de expansão de capacidade na execução
+    "pct_ordinarias": 50,             # Cota máxima de ordinárias (%)
+    "teto_coord_total": 10,
+    "teto_coord_n3": 3,
+    "dias_corte_n3": 20.0,
+    "unidades_sede_equiparadas": [
+        "ceneac", "seplog", "cprev", "seprev", "coate", "secoate", "sede", "brasília", "brasilia"
+    ]
+}
+
+if "gov_params" not in st.session_state:
+    st.session_state["gov_params"] = DEFAULT_GOV_PARAMS.copy()
 
 # --- FUNÇÃO DE LOG SILENCIOSO (DECLARAR AQUI NO TOPO) ---
 def registrar_log_pergunta(usuario, uf, pergunta):
@@ -282,13 +304,20 @@ def disparar_email_360(codigo_atv, nome_atv, lista_servidores_equipe, df_serv_au
         else:
             st.toast("⚠️ Missão c/ 3 membros, mas nenhum e-mail cadastrado na base.", icon="⚠️")
 
-@st.cache_data(ttl=15, show_spinner=False)
+
+# =================================================================
+# FUNÇÃO AUXILIAR: CARREGAR SUGESTÕES & MELHORIAS
+# =================================================================
+@st.cache_data(ttl=300, show_spinner=False)
 def carregar_sugestoes():
-    """Lê os registros da planilha Sugestoes.xlsx via Power Automate com sanitização."""
-    cols_padrao = ["Id", "Data_Registro", "Autor", "UF_Autor", "Modulo", "Titulo", "Descricao", "Prioridade", "Status", "Resposta_Admin"]
+    cols_padrao = [
+        "Id", "Data_Registro", "Prioridade", "Status", "Modulo", 
+        "Titulo", "Descricao", "Autor", "UF_Autor", "Resposta_Admin"
+    ]
     try:
-        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler", "Id": ""}, timeout=15)
-        if r.status_code == 200:
+        # 🚀 Alterado de "Listar" para "Ler"
+        r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Ler"}, timeout=35)
+        if r.status_code in [200, 202]:
             dados = r.json()
             lista_itens = dados.get("value", dados) if isinstance(dados, dict) else dados
             
@@ -316,11 +345,14 @@ def carregar_sugestoes():
                 return df
         else:
             st.error(f"⚠️ O Power Automate recusou a leitura de sugestões (Status {r.status_code}): {r.text}")
+    except requests.exceptions.Timeout:
+        st.warning("⏳ O servidor do Power Automate demorou para responder (Timeout). Clique em '🔄 Atualizar Lista' para tentar novamente.")
     except Exception as e:
         st.error(f"⚠️ Erro de conexão ao carregar sugestões: {e}")
-    
+        
     return pd.DataFrame(columns=cols_padrao)
 
+        
 # Função de Leitura Blindada contra Chaves Ausentes do Power Automate
 def carregar_dados_da_nuvem():
     try:
@@ -370,6 +402,222 @@ def classificar_nivel_acao(dias):
         return "Nível 2 (Médio)"
     else:
         return "Nível 3 (Intensivo)"
+
+
+def normalizar_texto(txt):
+    """
+    Remove acentos, espaços extras e padroniza para minúsculas:
+    Ex: '  SEPREV / CENEAC - Brasília ' -> 'seprev / ceneac - brasilia'
+    """
+    if txt is None or pd.isna(txt):
+        return ""
+    txt_str = str(txt).strip().lower()
+    return unicodedata.normalize('NFKD', txt_str).encode('ASCII', 'ignore').decode('utf-8')
+
+# =================================================================
+# FUNÇÃO AUXILIAR: FILTRO ESTRITO DE SERVIDORES POR UF
+# =================================================================
+def obter_servidores_por_uf(df_srv, uf_alvo):
+    """
+    Retorna estritamente a lista de servidores lotados na UF selecionada:
+    - Editor Regional: Vê apenas servidores da sua UF.
+    - Administrador: Vê apenas servidores da UF que escolheu no filtro do topo.
+    """
+    if df_srv is None or df_srv.empty or not uf_alvo:
+        return []
+    
+    uf_norm = str(uf_alvo).strip().upper()
+    df_filtrado = df_srv[df_srv["UF_Servidor"].astype(str).str.strip().str.upper() == uf_norm]
+    
+    return sorted(df_filtrado["Servidor"].dropna().unique().tolist())
+
+# =================================================================
+# REGRA DE GOVERNANÇA: MOTOR DO TERMÔMETRO DE CAPACIDADE E LIDERANÇA
+# =================================================================
+def calcular_termometro_carga(
+    df, df_srv_base, nome_servidor, ano_alvo, dias_novos=0.0, 
+    importancia_nova="Ordinária", funcao_campo="Apoio de Campo", 
+    nivel_registro="Atividade", id_excluir=None, num_acao_alvo=None,
+    fase_registro="Pré-PNAPA"
+):
+    """
+    Calcula capacidade operacional e limites de liderança:
+    - Sede Ceneac (Ceneac, Seplog, CPrev, Seprev, Coate, Secoate): Equiparado a Titular (90d / 135d).
+    - Pré-PNAPA: Trava no Teto Base (90d / 60d / 40d).
+    - Pós-PNAPA: Expansão do Teto (+50% -> 135d / 90d / 60d).
+    - Hard Limit ativo apenas para Ano >= ano_inicio_trava (2027+).
+    """
+    params = st.session_state.get("gov_params", DEFAULT_GOV_PARAMS)
+    ano_corte_trava = int(params.get("ano_inicio_trava", 2027))
+    teto_coord_total = int(params.get("teto_coord_total", 10))
+    teto_coord_n3 = int(params.get("teto_coord_n3", 3))
+    dias_corte_n3 = float(params.get("dias_corte_n3", 20.0))
+    pct_ord = float(params.get("pct_ordinarias", 50)) / 100.0
+    fator_pos = float(params.get("fator_pos_pnapa", 1.50))
+
+    try:
+        ano_num = int(str(ano_alvo).split('.')[0].strip())
+    except Exception:
+        ano_num = 2026
+
+    eh_planejamento_rigido = (ano_num >= ano_corte_trava)
+
+    # 1. Identificação do Servidor, Cargo e Lotação (100% Imune a Caixa/Acentuação)
+    cargo_srv = ""
+    lotacao_srv = ""
+    uf_srv = ""
+    
+    if df_srv_base is not None and not df_srv_base.empty and nome_servidor:
+        srv_alvo_norm = normalizar_texto(nome_servidor)
+        match_srv = df_srv_base[df_srv_base["Servidor"].apply(normalizar_texto) == srv_alvo_norm]
+        
+        if not match_srv.empty:
+            row_s = match_srv.iloc[0]
+            cargo_srv = normalizar_texto(row_s.get("Funcao", ""))
+            val_lot = row_s.get("Lotacao", row_s.get("Lotação", ""))
+            lotacao_srv = normalizar_texto(val_lot)
+            uf_srv = normalizar_texto(row_s.get("UF_Servidor", row_s.get("UF", "")))
+
+    unidades_sede_norm = [normalizar_texto(u) for u in params.get("unidades_sede_equiparadas", []) if str(u).strip()]
+
+    # Verificação de equiparação da Sede Ceneac
+    pertence_sede_ceneac = False
+    if lotacao_srv:
+        pertence_sede_ceneac = any(u in lotacao_srv for u in unidades_sede_norm)
+    if not pertence_sede_ceneac:
+        pertence_sede_ceneac = any(u in cargo_srv for u in unidades_sede_norm) or (uf_srv == "df" and any(u in lotacao_srv for u in ["sede", "nacional", "brasilia"]))
+
+    eh_substituto = any(termo in cargo_srv for termo in ["substituto", "substituta", "subst", "vice"])
+    eh_titular = any(termo in cargo_srv for termo in ["responsavel", "coordenador", "chefe", "ponto focal"]) and not eh_substituto
+
+    if pertence_sede_ceneac:
+        perfil_desc = "Equipe Sede Ceneac / Nacional (Equiparado a Responsável)"
+        teto_pre = float(params.get("teto_titular_pre", 90.0))
+    elif eh_titular:
+        perfil_desc = "Responsável / Coordenador Titular"
+        teto_pre = float(params.get("teto_titular_pre", 90.0))
+    elif eh_substituto:
+        perfil_desc = "Coordenador / Responsável Substituto"
+        teto_pre = float(params.get("teto_substituto_pre", 60.0))
+    else:
+        perfil_desc = "Membro de Equipe"
+        teto_pre = float(params.get("teto_membro_pre", 40.0))
+
+    teto_pos = teto_pre * fator_pos
+    teto_dias_ativo = teto_pre if fase_registro == "Pré-PNAPA" else teto_pos
+    teto_ordinarias = teto_dias_ativo * pct_ord
+
+    if df is None or df.empty or not nome_servidor:
+        return {
+            "perfil_dedicacao": perfil_desc, "teto_dias": teto_dias_ativo, "teto_pre": teto_pre, "teto_pos": teto_pos,
+            "teto_dias_ativo": teto_dias_ativo, "teto_ordinarias": teto_ordinarias,
+            "dias_totais_atuais": 0.0, "dias_totais_projetados": dias_novos,
+            "dias_ord_atuais": 0.0, "dias_ord_projetados": dias_novos if importancia_nova == "Ordinária" else 0.0,
+            "acoes_coord_totais": 0, "acoes_coord_n3": 0, "teto_coord_total": teto_coord_total, "teto_coord_n3": teto_coord_n3,
+            "status_geral": "OK", "mensagens_erro": [], "mensagens_aviso": [], "eh_planejamento_rigido": eh_planejamento_rigido
+        }
+
+    col_num_pna = "Número da Ação PNAPA" if "Número da Ação PNAPA" in df.columns else ("Número da Ação" if "Número da Ação" in df.columns else None)
+
+    # 2. Filtragem Histórica no Ano
+    df_ano = df[df["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_num)].copy()
+    if id_excluir is not None and not df_ano.empty and "Id" in df_ano.columns:
+        df_ano = df_ano[df_ano["Id"].astype(str).str.strip() != str(id_excluir).strip()]
+
+    df_ano_srv = df_ano[df_ano["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower()].copy()
+
+    # 3. Eixo de Dias (Atividades)
+    df_atvs_srv = df_ano_srv[df_ano_srv["Nível"].astype(str).str.strip() == "Atividade"]
+    dias_totais_atuais = pd.to_numeric(df_atvs_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if "Dias_Gastos_Plan" in df_atvs_srv.columns else 0.0
+    
+    df_ord_srv = df_atvs_srv[df_atvs_srv["Importância da Atividade"].astype(str).str.strip() == "Ordinária"] if "Importância da Atividade" in df_atvs_srv.columns else pd.DataFrame()
+    dias_ord_atuais = pd.to_numeric(df_ord_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if not df_ord_srv.empty and "Dias_Gastos_Plan" in df_ord_srv.columns else 0.0
+
+    dias_totais_proj = dias_totais_atuais + (dias_novos if nivel_registro == "Atividade" else 0.0)
+    dias_ord_proj = dias_ord_atuais + (dias_novos if (nivel_registro == "Atividade" and importancia_nova == "Ordinária") else 0.0)
+
+    # 4. Eixo de Liderança (Ações Coordenadas & Nível 3)
+    df_acoes_coord = df_ano[
+        (df_ano["Nível"].astype(str).str.strip() == "Ação") &
+        (df_ano["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower())
+    ]
+    codigos_acoes = df_acoes_coord[col_num_pna].dropna().unique().tolist() if (col_num_pna and col_num_pna in df_acoes_coord.columns) else []
+    
+    acoes_n3_atuais = 0
+    if col_num_pna and col_num_pna in df_ano.columns:
+        for cod_ac in codigos_acoes:
+            df_bloco = df_ano[df_ano[col_num_pna].astype(str).str.strip() == str(cod_ac).strip()]
+            dias_bloco = pd.to_numeric(df_bloco["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if "Dias_Gastos_Plan" in df_bloco.columns else 0.0
+            if dias_bloco >= dias_corte_n3:
+                acoes_n3_atuais += 1
+
+    acoes_coord_totais_proj = len(codigos_acoes)
+    acoes_coord_n3_proj = acoes_n3_atuais
+
+    if nivel_registro == "Ação":
+        if not num_acao_alvo or str(num_acao_alvo) not in codigos_acoes:
+            acoes_coord_totais_proj += 1
+            if dias_novos >= dias_corte_n3:
+                acoes_coord_n3_proj += 1
+        else:
+            if dias_novos >= dias_corte_n3:
+                acoes_coord_n3_proj += 1
+
+    # 5. Avaliação de Travas e Mensagens
+    mensagens_erro = []
+    mensagens_aviso = []
+
+    # Validação A: Regra de Ouro (Ações Nível 3)
+    if acoes_coord_n3_proj > teto_coord_n3:
+        msg = f"Regra de Liderança: Coordenará {acoes_coord_n3_proj} Ações Nível 3 (Máximo permitido: {teto_coord_n3})."
+        if eh_planejamento_rigido: mensagens_erro.append(msg)
+        else: mensagens_aviso.append(msg + " (Revisar distribuição).")
+
+    # Validação B: Teto Global de Coordenações
+    if acoes_coord_totais_proj > teto_coord_total:
+        msg = f"Teto de Coordenações excedido: {acoes_coord_totais_proj} ações sob responsabilidade (Máximo permitido: {teto_coord_total})."
+        if eh_planejamento_rigido: mensagens_erro.append(msg)
+        else: mensagens_aviso.append(msg)
+
+    # Validação C: Teto de Dias Anuais
+    if dias_totais_proj > teto_dias_ativo:
+        msg = f"Teto de dias ({fase_registro}) excedido: Projetado {dias_totais_proj:.1f} d / Limite {teto_dias_ativo:.0f} d."
+        if eh_planejamento_rigido: mensagens_erro.append(msg)
+        else: mensagens_aviso.append(msg + f" ({fase_registro} em execução).")
+
+    # Validação D: Trava Anti-Rotina (50% Ordinárias)
+    if dias_ord_proj > teto_ordinarias:
+        msg = f"Cota de ordinárias ({fase_registro}) excedida: Projetado {dias_ord_proj:.1f} d / Máximo {teto_ordinarias:.0f} d ({int(pct_ord*100)}%)."
+        if eh_planejamento_rigido: mensagens_erro.append(msg)
+        else: mensagens_aviso.append(msg + " (Priorize ações estratégicas/prioritárias).")
+
+    if eh_planejamento_rigido and len(mensagens_erro) > 0:
+        status_geral = "BLOQUEADO"
+    elif len(mensagens_aviso) > 0 or len(mensagens_erro) > 0:
+        status_geral = "ALERTA"
+    else:
+        status_geral = "OK"
+
+    return {
+        "perfil_dedicacao": perfil_desc,
+        "teto_dias": teto_dias_ativo,
+        "teto_pre": teto_pre,
+        "teto_pos": teto_pos,
+        "teto_dias_ativo": teto_dias_ativo,
+        "teto_ordinarias": teto_ordinarias,
+        "teto_coord_total": teto_coord_total,
+        "teto_coord_n3": teto_coord_n3,
+        "dias_totais_atuais": dias_totais_atuais,
+        "dias_totais_projetados": dias_totais_proj,
+        "dias_ord_atuais": dias_ord_atuais,
+        "dias_ord_projetados": dias_ord_proj,
+        "acoes_coord_totais": acoes_coord_totais_proj,
+        "acoes_coord_n3": acoes_coord_n3_proj,
+        "status_geral": status_geral,
+        "mensagens_erro": mensagens_erro,
+        "mensagens_aviso": mensagens_aviso,
+        "eh_planejamento_rigido": eh_planejamento_rigido
+    }
 
 # =================================================================
 # FUNÇÕES UTILITÁRIAS DE FORMATAÇÃO NO PADRÃO BRASILEIRO (BRL)
@@ -651,7 +899,8 @@ else:
 # Montagem Dinâmica do Menu Lateral
 opcoes_menu = [
     "📈 Dashboards Executivos", 
-    "📊 Visualizar Base"
+    "📊 Visualizar Base",
+    "🤝 Pactuação Pré-PNAPA" 
 ]
 
 if acesso_liberado:
@@ -713,10 +962,124 @@ with st.sidebar.popover("🔑 Trocar Minha Senha", use_container_width=True):
             else:
                 st.error("Erro ao localizar seu cadastro no banco.")
 
-if st.sidebar.button("🚪 Sair (Logout)", use_container_width=True):
-    st.session_state.clear()
-    st.cache_data.clear()
-    st.rerun()
+
+# =========================================================================
+# ⚙️ PAINEL DE CALIBRAGEM DA GOVERNANÇA (EXCLUSIVO ADMINISTRADOR)
+# =========================================================================
+if perfil_usuario == "Administrador":
+    with st.sidebar.popover("⚙️ Calibrar Regras & Limites (Admin)", use_container_width=True):
+        # 🎨 ESTILIZAÇÃO: FUNDO VERDE CLARO + BOTÕES CLAROS DE ALTO CONTRASTE
+        st.markdown("""
+            <style>
+            div[data-testid="stPopoverBody"] {
+                background-color: #f2f8f4 !important;
+                color: #0f172a !important;
+                border: 1px solid #bbf7d0 !important;
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25) !important;
+                border-radius: 8px !important;
+            }
+            div[data-testid="stPopoverBody"] label, 
+            div[data-testid="stPopoverBody"] p, 
+            div[data-testid="stPopoverBody"] span {
+                color: #0f291e !important;
+                font-weight: 600 !important;
+            }
+            div[data-testid="stPopoverBody"] [data-testid="stCaptionContainer"] {
+                color: #2d5a43 !important;
+                font-weight: normal !important;
+            }
+            div[data-testid="stPopoverBody"] input,
+            div[data-testid="stPopoverBody"] textarea {
+                color: #0f172a !important;
+                background-color: #ffffff !important;
+                border: 1px solid #94a3b8 !important;
+            }
+            /* Botão 'Aplicar Regras' (Verde Claro Destacado) */
+            div[data-testid="stPopoverBody"] button[kind="primary"] {
+                background-color: #dcfce7 !important;
+                color: #064e3b !important;
+                border: 1px solid #86efac !important;
+                font-weight: 700 !important;
+            }
+            div[data-testid="stPopoverBody"] button[kind="primary"]:hover {
+                background-color: #bbf7d0 !important;
+                border-color: #4ade80 !important;
+                color: #022c22 !important;
+            }
+            /* Botão 'Restaurar Padrão' (Branco / Neutro Claro) */
+            div[data-testid="stPopoverBody"] button[kind="secondary"] {
+                background-color: #ffffff !important;
+                color: #1e293b !important;
+                border: 1px solid #cbd5e1 !important;
+                font-weight: 600 !important;
+            }
+            div[data-testid="stPopoverBody"] button[kind="secondary"]:hover {
+                background-color: #f1f5f9 !important;
+                border-color: #94a3b8 !important;
+                color: #0f172a !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<h4 style='color: #03170a !important; margin-bottom: 2px; font-weight: 700;'>⚖️ Governança Operacional PNAPA</h4>", unsafe_allow_html=True)
+        st.caption("Ajuste em tempo real os tetos do Pré/Pós-PNAPA e equiparação das unidades nacionais.")
+
+        p_atual = st.session_state["gov_params"]
+
+        novo_ano_trava = st.number_input("Ano de Início da Trava Rígida:", min_value=2025, max_value=2035, value=int(p_atual["ano_inicio_trava"]), step=1)
+        
+        st.markdown("<h5 style='color: #04431b !important; margin-top: 12px; margin-bottom: 4px; font-weight: 700;'>📅 Tetos Pré-PNAPA (Planejamento Inicial)</h5>", unsafe_allow_html=True)
+        c_g1, c_g2, c_g3 = st.columns(3)
+        with c_g1:
+            n_teto_tit = st.number_input("Titular/Sede:", min_value=10.0, max_value=200.0, value=float(p_atual["teto_titular_pre"]), step=5.0)
+        with c_g2:
+            n_teto_sub = st.number_input("Substituto:", min_value=10.0, max_value=200.0, value=float(p_atual["teto_substituto_pre"]), step=5.0)
+        with c_g3:
+            n_teto_mem = st.number_input("Membro:", min_value=10.0, max_value=200.0, value=float(p_atual["teto_membro_pre"]), step=5.0)
+
+        st.markdown("<h5 style='color: #04431b !important; margin-top: 12px; margin-bottom: 4px; font-weight: 700;'>🚀 Expansão Pós-PNAPA (Execução / Ao Longo do Ano)</h5>", unsafe_allow_html=True)
+        n_fator_pos = st.slider("Fator Multiplicador Pós-PNAPA:", min_value=1.0, max_value=2.0, value=float(p_atual["fator_pos_pnapa"]), step=0.05, format="%.2fx")
+        st.caption(f"💡 Tetos Pós-PNAPA resultantes: Titular/Sede: {n_teto_tit*n_fator_pos:.0f}d | Substituto: {n_teto_sub*n_fator_pos:.0f}d | Membro: {n_teto_mem*n_fator_pos:.0f}d")
+
+        n_pct_ord = st.slider("Cota Máxima em Atividades Ordinárias (%):", min_value=10, max_value=100, value=int(p_atual["pct_ordinarias"]), step=5)
+
+        st.markdown("<h5 style='color: #04431b !important; margin-top: 12px; margin-bottom: 4px; font-weight: 700;'>👑 Limites de Liderança</h5>", unsafe_allow_html=True)
+        c_l1, c_l2 = st.columns(2)
+        with c_l1:
+            n_coord_tot = st.number_input("Máx Ações Totais:", min_value=1, max_value=30, value=int(p_atual["teto_coord_total"]), step=1)
+        with c_l2:
+            n_coord_n3 = st.number_input("Máx Ações Nível 3:", min_value=1, max_value=10, value=int(p_atual["teto_coord_n3"]), step=1)
+
+        n_corte_n3 = st.number_input("Corte de Dias para Nível 3:", min_value=5.0, max_value=50.0, value=float(p_atual["dias_corte_n3"]), step=1.0)
+
+        st.markdown("<h5 style='color: #04431b !important; margin-top: 12px; margin-bottom: 4px; font-weight: 700;'>🏢 Unidades da Sede Equiparadas (Ceneac/Brasília)</h5>", unsafe_allow_html=True)
+        lista_unidades_str = ", ".join(p_atual.get("unidades_sede_equiparadas", []))
+        txt_unidades = st.text_area("Termos de Reconhecimento (separados por vírgula):", value=lista_unidades_str, help="Servidores lotados nessas unidades recebem automaticamente o teto de Titular/Responsável.")
+
+        col_btn_g1, col_btn_g2 = st.columns(2)
+        with col_btn_g1:
+            if st.button("💾 Aplicar Regras", type="primary", use_container_width=True):
+                st.session_state["gov_params"] = {
+                    "ano_inicio_trava": novo_ano_trava,
+                    "teto_titular_pre": n_teto_tit,
+                    "teto_substituto_pre": n_teto_sub,
+                    "teto_membro_pre": n_teto_mem,
+                    "fator_pos_pnapa": n_fator_pos,
+                    "pct_ordinarias": n_pct_ord,
+                    "teto_coord_total": n_coord_tot,
+                    "teto_coord_n3": n_coord_n3,
+                    "dias_corte_n3": n_corte_n3,
+                    "unidades_sede_equiparadas": [u.strip().lower() for u in txt_unidades.split(",") if u.strip()]
+                }
+                st.success("Regras de governança atualizadas!")
+                time.sleep(1)
+                st.rerun()
+        with col_btn_g2:
+            if st.button("🔄 Restaurar Padrão", type="secondary", use_container_width=True):
+                st.session_state["gov_params"] = DEFAULT_GOV_PARAMS.copy()
+                st.info("Parâmetros restaurados.")
+                time.sleep(1)
+                st.rerun()
 
 
 # =================================================================
@@ -1972,12 +2335,32 @@ elif modo == "📊 Visualizar Base":
                                 ed_papel_inst = st.selectbox("Papel da UF nesta Ação:", LISTA_PAPEIS_INSTITUCIONAIS, index=idx_pap, key=f"t1_ac_papel_{id_ac_ref}")
                             with c_ac_p2:
                                 uf_alvo_ac = str(reg_ac_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
-                                srvs_uf_lista = df_servidores[df_servidores["UF_Servidor"] == uf_alvo_ac]["Servidor"].dropna().unique().tolist()
+                                # 🚀 LISTAGEM ESTRITA PELA UF DA AÇÃO
+                                srvs_uf_lista = obter_servidores_por_uf(df_servidores, uf_alvo_ac)
+                                
+                                val_foc_atual = str(reg_ac_alvo.get("Servidor", "")).strip()
+                                if val_foc_atual and val_foc_atual not in srvs_uf_lista:
+                                    srvs_uf_lista.append(val_foc_atual)
+                                    srvs_uf_lista = sorted(srvs_uf_lista)
+
                                 if ed_papel_inst == "Coordenação":
-                                    val_foc_atual = str(reg_ac_alvo.get("Servidor", "")).strip()
                                     idx_foc = srvs_uf_lista.index(val_foc_atual) if val_foc_atual in srvs_uf_lista else 0
-                                    ed_servidor_ac = st.selectbox(f"Ponto Focal da Ação em {uf_alvo_ac}:", srvs_uf_lista if srvs_uf_lista else [val_foc_atual], index=idx_foc, key=f"t1_ac_focal_{id_ac_ref}")
-                                    ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = uf_alvo_ac, "Sede Superintendência", "Sim"
+                                    ed_servidor_ac = st.selectbox(
+                                        f"Ponto Focal da Ação em {uf_alvo_ac}:", 
+                                        srvs_uf_lista if srvs_uf_lista else [val_foc_atual], 
+                                        index=idx_foc, 
+                                        key=f"t1_ac_focal_{id_ac_ref}"
+                                    )
+                                    
+                                    # 🚀 Resgate real dos dados do coordenador
+                                    match_srv_coord_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_ac).strip()]
+                                    if not match_srv_coord_t1.empty:
+                                        d_coord_t1 = match_srv_coord_t1.iloc[0]
+                                        ed_uf_srv_ac = str(d_coord_t1.get("UF_Servidor", uf_alvo_ac))
+                                        ed_lot_ac = str(d_coord_t1.get("Lotacao", "Sede Superintendência"))
+                                        ed_eq_ac = str(d_coord_t1.get("Equipe_Emergencias", "Sim"))
+                                    else:
+                                        ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = uf_alvo_ac, "Sede Superintendência", "Sim"
                                 else:
                                     st.info(f"ℹ️ Atuação em Apoio: Sem coordenador estadual.")
                                     ed_servidor_ac, ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = "", "", "", "Não"
@@ -1985,6 +2368,30 @@ elif modo == "📊 Visualizar Base":
                             lista_and_ac = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
                             idx_and_ac = lista_and_ac.index(reg_ac_alvo["Andamento"]) if reg_ac_alvo.get("Andamento") in lista_and_ac else 0
                             ed_andamento_ac = st.selectbox("Andamento da Ação:", lista_and_ac, index=idx_and_ac, key=f"t1_ac_and_{id_ac_ref}")
+
+                            # 👑 PAINEL DE LIDERANÇA NA EDIÇÃO DA AÇÃO
+                            if ed_papel_inst == "Coordenação" and ed_servidor_ac:
+                                dias_acao_ed_temp = st.session_state.get(f"t1_ac_dpl_{id_ac_ref}", obter_float_limpo(reg_ac_alvo.get("Dias_Gastos_Plan")))
+                                dados_term_ac_ed = calcular_termometro_carga(
+                                    df=df_atual,
+                                    df_srv_base=df_servidores,
+                                    nome_servidor=ed_servidor_ac,
+                                    ano_alvo=val_ano_ac,
+                                    dias_novos=float(dias_acao_ed_temp),
+                                    nivel_registro="Ação",
+                                    id_excluir=id_ac_ref,
+                                    num_acao_alvo=val_num_acao_ac
+                                )
+
+                                with st.container(border=True):
+                                    st.markdown(f"**👑 Painel de Liderança Pós-Edição — {ed_servidor_ac}** *({dados_term_ac_ed['perfil_dedicacao']})*")
+                                    cl1, cl2, cl3 = st.columns(3)
+                                    cl1.metric("📌 Total Coordenadas", f"{dados_term_ac_ed['acoes_coord_totais']} / {dados_term_ac_ed['teto_coord_total']} máx")
+                                    cl2.metric("🔥 Ações Nível 3 (>=20d)", f"{dados_term_ac_ed['acoes_coord_n3']} / {dados_term_ac_ed['teto_coord_n3']} máx")
+                                    cl3.metric("📅 Teto Anual de Dias", f"{dados_term_ac_ed['teto_dias']:.0f} d")
+
+                                    for err in dados_term_ac_ed["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
+                                    for avs in dados_term_ac_ed["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
 
                         with aba2_ac:
                             st.text_input("Indicador Oficial", value=val_indicador_ac, disabled=True, key=f"t1_ac_ind_{id_ac_ref}")
@@ -2029,6 +2436,22 @@ elif modo == "📊 Visualizar Base":
                                 ed_just_ac = ""
 
                         if st.button("💾 Gravar Alterações da Ação", type="primary", key=f"btn_salvar_ac_{id_ac_ref}"):
+                            # 🛡️ TRAVA DO TERMÔMETRO NA GRAVAÇÃO DA AÇÃO (2027+)
+                            if ed_papel_inst == "Coordenação" and ed_servidor_ac:
+                                res_chk_ac = calcular_termometro_carga(
+                                    df=df_atual,
+                                    df_srv_base=df_servidores,
+                                    nome_servidor=ed_servidor_ac,
+                                    ano_alvo=val_ano_ac,
+                                    dias_novos=float(ed_dias_pl_ac),
+                                    nivel_registro="Ação",
+                                    id_excluir=id_ac_ref,
+                                    num_acao_alvo=val_num_acao_ac
+                                )
+                                if res_chk_ac["status_geral"] == "BLOQUEADO":
+                                    st.error("⛔ **Alteração Impedida (Governança 2027+):** O coordenador selecionado ultrapassará os limites permitidos de liderança.")
+                                    st.stop()
+
                             payload_ac = payload_gerador(
                                 val_ano_ac, val_num_acao_ac, val_nome_acao_ac, val_indicador_ac, "Ação",
                                 "", ed_andamento_ac, "", "", uf_acao_val,
@@ -2489,14 +2912,30 @@ elif modo == "📊 Visualizar Base":
                             ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo["Periculosidade/Insalubridade"]) if reg_at_alvo.get("Periculosidade/Insalubridade") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
 
                         with aba3_at:
-                            df_srv_at = df_servidores[df_servidores["UF_Servidor"] == ed_uf_acao_val]
-                            lista_nomes_servidores = sorted(df_srv_at["Servidor"].dropna().unique().tolist()) if not df_srv_at.empty else [email_logado]
+                            # 1. LISTAGEM ESTRITA DE SERVIDORES DA NOVA UF
+                            lista_nomes_servidores = obter_servidores_por_uf(df_servidores, ed_uf_acao_val)
+                            
+                            srv_atual_at = str(reg_at_alvo.get("Servidor", "")).strip()
+                            
+                            # Seleciona o servidor atual se ele pertencer à UF escolhida; senão, reseta para o 1º da lista
+                            if srv_atual_at in lista_nomes_servidores:
+                                idx_srv_at = lista_nomes_servidores.index(srv_atual_at)
+                            else:
+                                idx_srv_at = 0
+                                
+                            if not lista_nomes_servidores:
+                                lista_nomes_servidores = [email_logado]
+                                idx_srv_at = 0
                             
                             c_at_rh1, c_at_rh2 = st.columns(2)
                             with c_at_rh1:
-                                srv_atual_at = str(reg_at_alvo.get("Servidor", "")).strip()
-                                idx_srv_at = lista_nomes_servidores.index(srv_atual_at) if srv_atual_at in lista_nomes_servidores else 0
-                                ed_servidor_at = st.selectbox("Servidor Integrante / Responsável:", lista_nomes_servidores, index=idx_srv_at, key=f"t1_at_srv_{id_at_ref}")
+                                # 🚀 Chave dinâmica vinculada à UF (recarrega limpo ao trocar de estado)
+                                ed_servidor_at = st.selectbox(
+                                    f"Servidor Integrante / Responsável ({ed_uf_acao_val}):", 
+                                    lista_nomes_servidores, 
+                                    index=idx_srv_at, 
+                                    key=f"t1_at_srv_{id_at_ref}_{ed_uf_acao_val}"
+                                )
                             with c_at_rh2:
                                 func_salva_at = str(reg_at_alvo.get("Coordenador_Operacao", "")).strip()
                                 if func_salva_at in LISTA_FUNCOES_CAMPO:
@@ -2504,10 +2943,17 @@ elif modo == "📊 Visualizar Base":
                                 else:
                                     eh_focal_at = bool(ponto_focal_estado_at and str(ed_servidor_at).strip().lower() == str(ponto_focal_estado_at).strip().lower())
                                     idx_func_at = 0 if eh_focal_at else 1
-                                ed_funcao_campo = st.selectbox("Função na Atividade de Campo:", LISTA_FUNCOES_CAMPO, index=idx_func_at, key=f"t1_at_func_{id_at_ref}_{ed_servidor_at}")
+                                ed_funcao_campo = st.selectbox(
+                                    "Função na Atividade de Campo:", 
+                                    LISTA_FUNCOES_CAMPO, 
+                                    index=idx_func_at, 
+                                    key=f"t1_at_func_{id_at_ref}_{ed_uf_acao_val}_{ed_servidor_at}"
+                                )
 
-                            if not df_srv_at.empty and ed_servidor_at in df_srv_at["Servidor"].values:
-                                dados_s_linha = df_srv_at[df_srv_at["Servidor"] == ed_servidor_at].iloc[0]
+                            # 🚀 2. RESGATE DINÂMICO DOS DADOS REAIS DO SERVIDOR
+                            match_srv_at_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
+                            if not match_srv_at_t1.empty:
+                                dados_s_linha = match_srv_at_t1.iloc[0]
                                 ed_uf_srv_at = str(dados_s_linha.get("UF_Servidor", ed_uf_acao_val))
                                 ed_lot_at = str(dados_s_linha.get("Lotacao", "Sede Superintendência"))
                                 ed_eq_at = str(dados_s_linha.get("Equipe_Emergencias", "Não"))
@@ -2518,18 +2964,47 @@ elif modo == "📊 Visualizar Base":
                                 ed_uf_srv_at, ed_lot_at, ed_eq_at = ed_uf_acao_val, "Sede Superintendência", "Não"
                                 cad_fiscal_t1, cad_aeac_t1, cad_funcao_srv_t1 = "Não", "Não", ""
 
-                            st.text_input("UF do Servidor (Automático)", value=ed_uf_srv_at, disabled=True, key=f"t1_at_ufsrv_{id_at_ref}")
-                            st.text_input("Lotação (Automático)", value=ed_lot_at, disabled=True, key=f"t1_at_lot_{id_at_ref}")
-                            st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=ed_eq_at, disabled=True, key=f"t1_at_eq_{id_at_ref}")
+                            # 🌡️ TERMÔMETRO VISUAL NA EDIÇÃO DA ATIVIDADE
+                            dias_ed_temp = st.session_state.get(f"t1_at_dpl_{id_at_ref}", obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Plan")))
+                            dados_term_at_ed = calcular_termometro_carga(
+                                df=df_atual,
+                                df_srv_base=df_servidores,
+                                nome_servidor=ed_servidor_at,
+                                ano_alvo=val_ano_at,
+                                dias_novos=float(dias_ed_temp),
+                                importancia_nova=importancia_at,
+                                funcao_campo=ed_funcao_campo,
+                                nivel_registro="Atividade",
+                                id_excluir=id_at_ref
+                            )
+
+                            with st.container(border=True):
+                                st.markdown(f"**🌡️ Capacidade Pós-Edição — {ed_servidor_at}** *({dados_term_at_ed['perfil_dedicacao']})*")
+                                pct_dias_ed = min(1.0, dados_term_at_ed["dias_totais_projetados"] / dados_term_at_ed["teto_dias"]) if dados_term_at_ed["teto_dias"] > 0 else 0
+                                
+                                col_te1, col_te2, col_te3 = st.columns(3)
+                                col_te1.metric("📅 Total Projetado", f"{dados_term_at_ed['dias_totais_projetados']:.1f} / {dados_term_at_ed['teto_dias']:.0f} d")
+                                col_te2.metric("🔄 Ativ. Ordinárias (Máx 50%)", f"{dados_term_at_ed['dias_ord_projetados']:.1f} / {dados_term_at_ed['teto_ordinarias']:.0f} d")
+                                col_te3.metric("👑 Coordenações Nível 3", f"{dados_term_at_ed['acoes_coord_n3']} / {dados_term_at_ed['teto_coord_n3']} máx")
+                                
+                                st.progress(pct_dias_ed, text=f"Consumo de Tempo: {pct_dias_ed*100:.1f}%")
+
+                                for err in dados_term_at_ed["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
+                                for avs in dados_term_at_ed["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
+
+                            # 🚀 3. CAMPOS AUTOMÁTICOS SEM KEY FIXA (Renderizam o valor real a cada alteração)
+                            st.text_input("UF do Servidor (Automático)", value=ed_uf_srv_at, disabled=True)
+                            st.text_input("Lotação (Automático)", value=ed_lot_at, disabled=True)
+                            st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=ed_eq_at, disabled=True)
                             ed_pcdp_at = st.text_input("Número da PCDP:", value=str(reg_at_alvo.get("Número da PCDP", "")), key=f"t1_at_pcdp_{id_at_ref}")
                             
                             st.markdown("<p style='font-weight:bold; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
-                            st.text_input("País", value="Brasil", disabled=True, key=f"t1_at_pais_{id_at_ref}")
+                            st.text_input("País", value="Brasil", disabled=True)
                             uf_oc_atual = str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "SP"))
                             idx_uf_oc_at = LISTA_UFS_COMPLETA.index(uf_oc_atual) if uf_oc_atual in LISTA_UFS_COMPLETA else 0
-                            ed_uf_oc_at = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação:", LISTA_UFS_COMPLETA, index=idx_uf_oc_at, key=f"t1_at_ufoc_{id_at_ref}")
+                            ed_uf_oc_at = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação:", LISTA_UFS_COMPLETA, index=idx_uf_oc_at, key=f"t1_at_ufoc_{id_at_ref}_{ed_uf_acao_val}")
                             ed_est_loc_at = MAPEAMENTO_ESTADOS_COMPLETO.get(ed_uf_oc_at, "")
-                            st.text_input("Estado_Local_Acao (Automático)", value=ed_est_loc_at, disabled=True, key=f"t1_at_est_{id_at_ref}")
+                            st.text_input("Estado_Local_Acao (Automático)", value=ed_est_loc_at, disabled=True)
                             
                             mun_lista_at = obter_municipios_ibge(ed_uf_oc_at)
                             mun_atual_at = str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
@@ -2582,6 +3057,23 @@ elif modo == "📊 Visualizar Base":
 
                         if st.button("💾 Gravar Alterações da Atividade", type="primary", key=f"btn_salvar_at_{id_at_ref}"):
                             bloqueio_coord = False
+                            
+                            # 🛡️ TRAVA DO TERMÔMETRO NA GRAVAÇÃO DA ATIVIDADE (2027+)
+                            res_val_atv_ed = calcular_termometro_carga(
+                                df=df_atual,
+                                df_srv_base=df_servidores,
+                                nome_servidor=ed_servidor_at,
+                                ano_alvo=val_ano_at,
+                                dias_novos=float(ed_dias_pl_at),
+                                importancia_nova=importancia_at,
+                                funcao_campo=ed_funcao_campo,
+                                nivel_registro="Atividade",
+                                id_excluir=id_at_ref
+                            )
+                            if res_val_atv_ed["status_geral"] == "BLOQUEADO":
+                                st.error("⛔ **Alteração Impedida (Governança 2027+):** Esta alteração fará o servidor ultrapassar os limites de capacidade.")
+                                st.stop()
+
                             if ed_funcao_campo == "Coordenador de Campo":
                                 coordenadores_existentes = df_atual[
                                     (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
@@ -2714,8 +3206,11 @@ elif modo == "📊 Visualizar Base":
                         with l_aba3:
                             st.caption("Atenção: Alterar dados de Recursos Humanos aplicará o mesmo valor a todas as linhas selecionadas.")
                             if st.checkbox("Alterar Servidor Integrante / Responsável?", key="chk_srv_lt"):
-                                lista_todos_srvs = sorted(df_servidores["Servidor"].dropna().unique().tolist())
-                                edicoes_lote["Servidor"] = st.selectbox("Novo Servidor:", lista_todos_srvs, key="in_srv_lt")
+                                uf_alvo_lote = edicoes_lote.get("UF_Acao_PNAPA", str(df_at_sel.iloc[0].get("UF_Acao_PNAPA", uf_usuario)).strip())
+                                lista_srvs_lote_uf = obter_servidores_por_uf(df_servidores, uf_alvo_lote)
+                                if not lista_srvs_lote_uf:
+                                    lista_srvs_lote_uf = sorted(df_servidores["Servidor"].dropna().unique().tolist())
+                                edicoes_lote["Servidor"] = st.selectbox(f"Novo Servidor ({uf_alvo_lote}):", lista_srvs_lote_uf, key="in_srv_lt")
                             if st.checkbox("Alterar Função na Atividade de Campo?", key="chk_func_lt"):
                                 edicoes_lote["Coordenador_Operacao"] = st.selectbox("Nova Função:", LISTA_FUNCOES_CAMPO, key="in_func_lt")
                             if st.checkbox("Alterar Número da PCDP?", key="chk_pcdp_lt"):
@@ -2782,6 +3277,31 @@ elif modo == "📊 Visualizar Base":
                                         if qtd_at_sel > 1:
                                             st.error("⛔ **Conflito de Liderança:** Você não pode definir 'Coordenador de Campo' para múltiplos servidores em lote. Apenas um servidor pode coordenar a atividade.")
                                             bloqueio_lote = True
+
+                                # 🛡️ VALIDAÇÃO DE CAPACIDADE DOS SERVIDORES NO LOTE (2027+)
+                                if not bloqueio_lote and ("Dias_Gastos_Plan" in edicoes_lote or "Servidor" in edicoes_lote or "Tema da Atividade" in edicoes_lote):
+                                    srvs_checar = [edicoes_lote["Servidor"]] if "Servidor" in edicoes_lote else df_at_sel["Servidor"].dropna().unique().tolist()
+                                    ano_chk_lote = edicoes_lote.get("Ano da Ação", df_at_sel.iloc[0].get("Ano da Ação", 2026))
+
+                                    for srv_lote_alvo in srvs_checar:
+                                        dias_novos_lt = float(obter_float_limpo(edicoes_lote.get("Dias_Gastos_Plan", 0.0))) if "Dias_Gastos_Plan" in edicoes_lote else 0.0
+                                        imp_lt = edicoes_lote.get("Tema da Atividade", "Ordinária")
+                                        func_lt = edicoes_lote.get("Coordenador_Operacao", "Apoio de Campo")
+
+                                        res_lt_srv = calcular_termometro_carga(
+                                            df=df_atual,
+                                            df_srv_base=df_servidores,
+                                            nome_servidor=srv_lote_alvo,
+                                            ano_alvo=ano_chk_lote,
+                                            dias_novos=dias_novos_lt,
+                                            importancia_nova=imp_lt,
+                                            funcao_campo=func_lt,
+                                            nivel_registro="Atividade"
+                                        )
+                                        if res_lt_srv["status_geral"] == "BLOQUEADO":
+                                            st.error(f"⛔ **Lote Impedido (2027+):** O servidor **{srv_lote_alvo}** ultrapassará os limites operacionais com esta alteração.")
+                                            bloqueio_lote = True
+                                            break
 
                                 if not bloqueio_lote:
                                     if edicoes_lote.get("Andamento", "") == "Concluída":
@@ -2933,10 +3453,7 @@ elif modo == "➕ Inserir Nova Linha":
             dono_nacional = str(dados_aux_linha.get("Dono_Acao", "Ceneac")).strip()
             uf_dono_nac = str(dados_aux_linha.get("UF_Dono", "Ceneac")).strip()
             meta_nac_info = dados_aux_linha.get("Meta_Nacional", "")
-
-            if perfil_usuario == "Administrador":
-                uf_filtro_pna = st.session_state.get("form_uf_acao_sel", uf_filtro_pna)
-
+            
             ponto_focal_estado, papel_estado_acao = obter_ponto_focal_acao(df_atual, val_num_acao, uf_filtro_pna)
 
             st.info(f"👑 **Liderança Nacional:** `{dono_nacional} ({uf_dono_nac})` | **Meta Global:** `{meta_nac_info}`  \n📍 **Governança em {uf_filtro_pna}:** Papel: `{papel_estado_acao}` | Ponto Focal Estadual: `{ponto_focal_estado if ponto_focal_estado else 'Não Definido'}`")
@@ -2979,29 +3496,69 @@ elif modo == "➕ Inserir Nova Linha":
             with c_pap1:
                 papel_inst = st.selectbox("Papel da UF nesta Ação:", LISTA_PAPEIS_INSTITUCIONAIS, key="pna_papel_acao")
             with c_pap2:
-                srvs_uf_pna = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_pna]["Servidor"].dropna().unique().tolist()
+                # 🚀 LISTAGEM REATIVA: Servidores da UF + Equipe Sede Ceneac/DF
+                srvs_uf_pna = obter_servidores_por_uf(df_servidores, uf_filtro_pna)
                 if papel_inst == "Coordenação":
-                    servidor = st.selectbox(f"Ponto Focal / Coordenador da Ação na UF ({uf_filtro_pna}):", srvs_uf_pna if srvs_uf_pna else [email_logado], key="pna_focal_acao")
-                    uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Sim"
+                    servidor = st.selectbox(
+                        f"Ponto Focal / Coordenador da Ação na UF ({uf_filtro_pna}):", 
+                        srvs_uf_pna if srvs_uf_pna else [email_logado], 
+                        key=f"pna_focal_acao_{uf_filtro_pna}"
+                    )
+                    
+                    # 🚀 Resgata os dados cadastrais reais do coordenador
+                    match_srv_coord = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
+                    if not match_srv_coord.empty:
+                        d_coord = match_srv_coord.iloc[0]
+                        uf_servidor = str(d_coord.get("UF_Servidor", uf_filtro_pna))
+                        lotacao = str(d_coord.get("Lotacao", "Sede Superintendência"))
+                        equipe_emergencia = str(d_coord.get("Equipe_Emergencias", "Sim"))
+                        cad_fiscal = str(d_coord.get("Fiscal", "Não"))
+                        cad_aeac = str(d_coord.get("AEAC", "Não"))
+                        cad_funcao_srv = str(d_coord.get("Funcao", ""))
+                    else:
+                        uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Sim"
+                        cad_fiscal, cad_aeac, cad_funcao_srv = "Não", "Não", ""
                 else:
                     st.info(f"ℹ️ **Atuação em Apoio:** A UF ({uf_filtro_pna}) não indicará Coordenador Estadual.")
                     servidor, uf_servidor, lotacao, equipe_emergencia = "", "", "", "Não"
+                    cad_fiscal, cad_aeac, cad_funcao_srv = "Não", "Não", ""
 
             lista_andamentos_acao = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
             try: idx_and = lista_andamentos_acao.index(registro_selecionado["Andamento"]) if registro_selecionado is not None else 0
             except: idx_and = 0
             andamento = st.selectbox("Andamento da Ação", lista_andamentos_acao, index=idx_and, key="pna_sel_andamento_acao")
 
+            # 👑 PAINEL DE LIDERANÇA DO COORDENADOR DA AÇÃO
+            if papel_inst == "Coordenação" and servidor:
+                dias_acao_temp = st.session_state.get("pna_dias_pl_acao", obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
+                dados_term_ac_form = calcular_termometro_carga(
+                    df=df_atual,
+                    df_srv_base=df_servidores,
+                    nome_servidor=servidor,
+                    ano_alvo=val_ano if val_ano else 2026,
+                    dias_novos=float(dias_acao_temp),
+                    nivel_registro="Ação",
+                    num_acao_alvo=val_num_acao
+                )
+
+                with st.container(border=True):
+                    st.markdown(f"**👑 Painel de Liderança — {servidor}** *({dados_term_ac_form['perfil_dedicacao']})*")
+                    cl1, cl2, cl3 = st.columns(3)
+                    cl1.metric("📌 Total Coordenadas", f"{dados_term_ac_form['acoes_coord_totais']} / {dados_term_ac_form['teto_coord_total']} máx")
+                    cl2.metric("🔥 Ações Nível 3 (>=20d)", f"{dados_term_ac_form['acoes_coord_n3']} / {dados_term_ac_form['teto_coord_n3']} máx")
+                    cl3.metric("📅 Teto Anual de Dias", f"{dados_term_ac_form['teto_dias']:.0f} d")
+
+                    for err in dados_term_ac_form["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
+                    for avs in dados_term_ac_form["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
+
         with aba2:
             st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True)
             meta_indicador = st.number_input(f"Meta da Ação para a UF ({uf_filtro_pna}):", min_value=0.0, value=1.0, step=1.0, key="pna_meta_uf_input")
             
-            if perfil_usuario == "Administrador":
-                idx_uf_ac = LISTA_UFS_COMPLETA.index(uf_filtro_pna) if uf_filtro_pna in LISTA_UFS_COMPLETA else 0
-                uf_acao = st.selectbox("UF da Ação PNAPA", LISTA_UFS_COMPLETA, index=idx_uf_ac, key="form_uf_acao_sel")
-            else:
-                uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_filtro_pna), disabled=True)
-                
+            # 🚀 Herda a UF selecionada no topo como fonte única da verdade
+            uf_acao = uf_filtro_pna
+            st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_acao), disabled=True)
+            
             st.text_input("Importância da Atividade (Herdada do Catálogo)", value=importancia, disabled=True)
             
             tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="pna_sel_tema_acao")
@@ -3130,12 +3687,10 @@ elif modo == "➕ Inserir Nova Linha":
             resultado_indicador = st.text_input("Resultado do Indicador (Aferição Real):", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "", key="atv_res_ind")
             doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI):", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "", key="atv_doc_sei")
             
-            if perfil_usuario == "Administrador":
-                idx_uf_at = LISTA_UFS_COMPLETA.index(uf_filtro_pna) if uf_filtro_pna in LISTA_UFS_COMPLETA else 0
-                uf_acao = st.selectbox("UF da Ação PNAPA", LISTA_UFS_COMPLETA, index=idx_uf_at, key="form_uf_acao_sel")
-            else:
-                uf_acao = st.text_input("UF da Ação PNAPA", value=str(uf_filtro_pna), disabled=True)
-                
+            # 🚀 Herda a UF selecionada no topo como fonte única da verdade
+            uf_acao = uf_filtro_pna
+            st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_acao), disabled=True)
+            
             st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
             
             tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="atv_sel_tema")
@@ -3146,21 +3701,28 @@ elif modo == "➕ Inserir Nova Linha":
         with aba3:
             st.markdown("##### 👥 Recursos Humanos & Liderança da Operação")
             
-            df_servidores_filtrados = df_servidores[df_servidores["UF_Servidor"] == uf_filtro_pna]
-            lista_nomes_servidores = sorted(df_servidores_filtrados["Servidor"].dropna().unique().tolist()) if not df_servidores_filtrados.empty else [email_logado]
+            # 🚀 LISTAGEM REATIVA: Servidores da UF + Equipe Sede Ceneac/DF
+            lista_nomes_servidores = obter_servidores_por_uf(df_servidores, uf_filtro_pna)
+            if not lista_nomes_servidores:
+                lista_nomes_servidores = [email_logado]
             
             c_rh1, c_rh2 = st.columns(2)
             with c_rh1:
-                servidor = st.selectbox(f"Servidor Integrante / Responsável ({uf_filtro_pna}):", lista_nomes_servidores, key=f"atv_sel_servidor_{val_num_acao}")
+                servidor = st.selectbox(
+                    f"Servidor Integrante / Responsável ({uf_filtro_pna}):", 
+                    lista_nomes_servidores, 
+                    key=f"atv_sel_servidor_{val_num_acao}_{uf_filtro_pna}"
+                )
 
             with c_rh2:
                 eh_ponto_focal = bool(ponto_focal_estado and str(servidor).strip().lower() == str(ponto_focal_estado).strip().lower())
                 idx_funcao_sugerida = 0 if eh_ponto_focal else 1
                 funcao_campo = st.selectbox("Função na Atividade de Campo:", LISTA_FUNCOES_CAMPO, index=idx_funcao_sugerida, key=f"atv_funcao_campo_{val_num_acao}_{servidor}_{codigo_atividade}")
 
-            # 🚀 RESGATA DADOS COMPLEMENTARES DO SERVIDOR (INCLUINDO FISCAL, AEAC, FUNCAO)
-            if not df_servidores_filtrados.empty and servidor in df_servidores_filtrados["Servidor"].values:
-                dados_serv_linha = df_servidores_filtrados[df_servidores_filtrados["Servidor"] == servidor].iloc[0]
+            # 🚀 RESGATA DADOS REAIS DO SERVIDOR (Busca direta em toda a base auxiliar)
+            match_srv_atv = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
+            if not match_srv_atv.empty:
+                dados_serv_linha = match_srv_atv.iloc[0]
                 uf_servidor = str(dados_serv_linha.get("UF_Servidor", uf_filtro_pna))
                 lotacao = str(dados_serv_linha.get("Lotacao", "Sede Superintendência"))
                 equipe_emergencia = str(dados_serv_linha.get("Equipe_Emergencias", "Não"))
@@ -3171,6 +3733,33 @@ elif modo == "➕ Inserir Nova Linha":
             else:
                 uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Não"
                 cad_fiscal, cad_aeac, cad_funcao_srv = "Não", "Não", ""
+
+            # 🌡️ TERMÔMETRO VISUAL DE CAPACIDADE DA ATIVIDADE
+            dias_atv_temp = st.session_state.get("atv_dias_pl", obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"))
+            dados_term_atv_form = calcular_termometro_carga(
+                df=df_atual,
+                df_srv_base=df_servidores,
+                nome_servidor=servidor,
+                ano_alvo=val_ano if val_ano else 2026,
+                dias_novos=float(dias_atv_temp),
+                importancia_nova=importancia,
+                funcao_campo=funcao_campo,
+                nivel_registro="Atividade"
+            )
+
+            with st.container(border=True):
+                st.markdown(f"**🌡️ Termômetro de Capacidade — {servidor}** *({dados_term_atv_form['perfil_dedicacao']})*")
+                pct_dias = min(1.0, dados_term_atv_form["dias_totais_projetados"] / dados_term_atv_form["teto_dias"]) if dados_term_atv_form["teto_dias"] > 0 else 0
+                
+                col_t1, col_t2, col_t3 = st.columns(3)
+                col_t1.metric("📅 Dias Planejados", f"{dados_term_atv_form['dias_totais_projetados']:.1f} / {dados_term_atv_form['teto_dias']:.0f} d")
+                col_t2.metric("🔄 Ativ. Ordinárias (Máx 50%)", f"{dados_term_atv_form['dias_ord_projetados']:.1f} / {dados_term_atv_form['teto_ordinarias']:.0f} d")
+                col_t3.metric("👑 Coordenações Nível 3", f"{dados_term_atv_form['acoes_coord_n3']} / {dados_term_atv_form['teto_coord_n3']} máx")
+                
+                st.progress(pct_dias, text=f"Consumo de Tempo: {pct_dias*100:.1f}%")
+
+                for err in dados_term_atv_form["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
+                for avs in dados_term_atv_form["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
 
             st.text_input("UF do Servidor (Automático)", value=uf_servidor, disabled=True)
             st.text_input("Lotação (Automático)", value=lotacao, disabled=True)
@@ -3273,6 +3862,23 @@ elif modo == "➕ Inserir Nova Linha":
                     st.error(f"⛔ **Conflito de Liderança:** A atividade `{codigo_atividade}` já possui **{nome_outro_coord}** cadastrado como Coordenador de Campo. Uma mesma atividade só pode ter 1 coordenador.")
                     bloquear_envio = True
 
+        # 🛡️ TRAVA DO TERMÔMETRO NO ENVIO INDIVIDUAL (2027+)
+        if not bloquear_envio and servidor:
+            res_validacao_final = calcular_termometro_carga(
+                df=df_atual,
+                df_srv_base=df_servidores,
+                nome_servidor=servidor,
+                ano_alvo=val_ano if val_ano else 2026,
+                dias_novos=float(dias_plan),
+                importancia_nova=importancia,
+                funcao_campo=coord_op_final,
+                nivel_registro=nivel_selecionado,
+                num_acao_alvo=val_num_acao
+            )
+            if res_validacao_final["status_geral"] == "BLOQUEADO":
+                st.error("⛔ **Gravação Impedida pela Governança (2027+):** Limite de capacidade operacional ou de liderança excedido.")
+                bloquear_envio = True
+
         if not bloquear_envio:
             payload_unico = payload_gerador(
                 val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
@@ -3331,6 +3937,29 @@ elif modo == "➕ Inserir Nova Linha":
                 if not servidores_finais:
                     st.error("⚠️ Selecione pelo menos um servidor na lista acima.")
                 else:
+                    # 🛡️ VALIDAÇÃO DE CAPACIDADE DE CADA SERVIDOR DO LOTE (2027+)
+                    bloqueio_lote = False
+                    dias_lote_check = dias_plan if espelhar_crono else 0.0
+
+                    for srv_lote_chk in servidores_finais:
+                        func_chk = funcao_campo if srv_lote_chk == servidor else "Apoio de Campo"
+                        res_chk_lt = calcular_termometro_carga(
+                            df=df_atual,
+                            df_srv_base=df_servidores,
+                            nome_servidor=srv_lote_chk,
+                            ano_alvo=val_ano if val_ano else 2026,
+                            dias_novos=float(dias_lote_check),
+                            importancia_nova=importancia,
+                            funcao_campo=func_chk,
+                            nivel_registro="Atividade"
+                        )
+                        if res_chk_lt["status_geral"] == "BLOQUEADO":
+                            st.error(f"⛔ **Lote Impedido (2027+):** O servidor **{srv_lote_chk}** excederá os limites de capacidade.")
+                            bloqueio_lote = True
+
+                    if bloqueio_lote:
+                        st.stop()
+
                     payloads_lote = []
                     id_base_calculado = int(pd.to_numeric(df_atual["Id"], errors='coerce').dropna().max() + 1) if not df_atual.empty else 1
                     
@@ -3468,11 +4097,25 @@ elif modo == "🏢 Gerenciar Unidades":
             if not nova_uni:
                 st.error("⚠️ O nome da unidade é obrigatório.")
             else:
+                # 🚀 CÁLCULO SEGURO DO PRÓXIMO ID_UF
+                col_id_uf = "ID_UF" if "ID_UF" in df_lotacoes.columns else "Id"
+                if not df_lotacoes.empty and col_id_uf in df_lotacoes.columns:
+                    id_novo_uf = int(pd.to_numeric(df_lotacoes[col_id_uf], errors='coerce').fillna(0).max() + 1)
+                else:
+                    id_novo_uf = 1
+
+                payload_uni = {
+                    "Acao": "Inserir",
+                    "ID_UF": id_novo_uf,       # 👈 Chave primária enviada
+                    "UF": uf_uni_add,
+                    "Unidade": nova_uni
+                }
+
                 with st.spinner("Sincronizando nova unidade com o SharePoint..."):
-                    executar_api_unidades({"Acao": "Inserir", "UF": uf_uni_add, "Unidade": nova_uni})
+                    executar_api_unidades(payload_uni)
                     time.sleep(2)
                     st.cache_data.clear()
-                st.success(f"✅ Unidade '{nova_uni}' salva com sucesso!")
+                st.success(f"✅ Unidade '{nova_uni}' (ID: {id_novo_uf}) salva com sucesso!")
                 st.rerun()
 
     # =================================================================
@@ -3705,7 +4348,7 @@ elif modo == "👥 Gerenciar Equipes":
         unidades_lotacao_disponiveis = df_lotacoes[df_lotacoes["UF"] == uf_srv]["Unidade"].tolist()
         lot_srv = st.selectbox("Unidade de Lotação Relacionada:", unidades_lotacao_disponiveis if unidades_lotacao_disponiveis else ["Sede Superintendência"])
         
-        # 🚀 TROCA PARA SELECTBOX EM VEZ DE TEXT_INPUT
+        # 🚀 SELETOR DE FUNÇÃO CORPORATIVA
         fun_srv = st.selectbox("Função / Cargo Institucional:", LISTA_FUNCOES_SERVIDOR)
         
         col_eq1, col_eq2, col_eq3 = st.columns(3)
@@ -3715,14 +4358,37 @@ elif modo == "👥 Gerenciar Equipes":
         perf_srv = st.selectbox("Perfil de Acesso no Sistema:", LISTA_PERFIS) if perfil_usuario == "Administrador" else st.selectbox("Perfil de Acesso no Sistema:", ["Visualização", "Editor Regional"])
         tkn_srv = st.text_input("Definir Token/Senha de Acesso para o Usuário:", type="password")
         
-        if st.button("Habilitar Servidor"):
-            payload = {"Acao": "Inserir", "Servidor": n_srv, "UF_Servidor": uf_srv, "Lotacao": lot_srv, "Equipe_Emergencias": eq_emerg, "Fiscal": eq_fiscal, "AEAC": eq_aeac, "Funcao": fun_srv, "E_mail": e_srv, "Perfil": perf_srv, "Token": tkn_srv}
-            with st.spinner("Adicionando integrante da equipe..."):
-                executar_api_equipes(payload)
-                time.sleep(2)
-                st.cache_data.clear()
-            st.success(f"Servidor {n_srv} inserido com sucesso!")
-            st.rerun()
+        if st.button("Habilitar Servidor", type="primary"):
+            if not n_srv or not e_srv:
+                st.error("⚠️ O Nome e o E-mail do servidor são obrigatórios.")
+            else:
+                # 🚀 CÁLCULO SEGURO DO PRÓXIMO ID_SERV (max + 1)
+                col_id_srv = "ID_SERV" if "ID_SERV" in df_servidores.columns else "Id"
+                if not df_servidores.empty and col_id_srv in df_servidores.columns:
+                    id_novo_serv = int(pd.to_numeric(df_servidores[col_id_srv], errors='coerce').fillna(0).max() + 1)
+                else:
+                    id_novo_serv = 1
+
+                payload = {
+                    "Acao": "Inserir",
+                    "ID_SERV": id_novo_serv,   # 👈 ID gerado automaticamente
+                    "Servidor": n_srv.strip(),
+                    "UF_Servidor": uf_srv,
+                    "Lotacao": lot_srv,
+                    "Equipe_Emergencias": eq_emerg,
+                    "Fiscal": eq_fiscal,
+                    "AEAC": eq_aeac,
+                    "Funcao": fun_srv,
+                    "E_mail": e_srv.strip(),
+                    "Perfil": perf_srv,
+                    "Token": hash_senha(tkn_srv) if tkn_srv else ""
+                }
+                with st.spinner("Adicionando integrante da equipe..."):
+                    executar_api_equipes(payload)
+                    time.sleep(2)
+                    st.cache_data.clear()
+                st.success(f"✅ Servidor {n_srv} (ID: {id_novo_serv}) inserido com sucesso!")
+                st.rerun()
 
     # =================================================================
     # ABA 2: ALTERAR CADASTRO (PREENCHIMENTO AUTOMÁTICO REATIVO)
@@ -3981,7 +4647,9 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
     if df_pnapas.empty:
         st.warning("⚠️ O catálogo de Ações PNAPA está vazio no momento.")
     else:
-        st.dataframe(df_pnapas, use_container_width=True, hide_index=True)
+        # Oculta a linha técnica DIPRO_GLOBAL da exibição geral
+        df_pnapas_vis = df_pnapas[df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL"]
+        st.dataframe(df_pnapas_vis, use_container_width=True, hide_index=True)
 
     if not pode_administrar_catalogo:
         st.info("👁️ **Modo Somente Leitura:** Como Editor Regional, você pode consultar o catálogo de ações. A criação, alteração e exclusão de Ações PNAPA são operações de governança restritas ao **Administrador**.")
@@ -4009,16 +4677,19 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             novo_nome_comp = st.text_input("Nome Completo da Ação (Descrição Oficial):", key="cad_pna_nome_comp").strip()
             novo_nome_apelido = st.text_input("Nome Resumido / Apelido (Exibição Amigável):", key="cad_pna_nome_apelido").strip()
             
-            # 🚀 LIDERANÇA NACIONAL (DONO DA AÇÃO)
-            st.markdown("###### 👑 Liderança Nacional da Ação")
-            c_dn1, c_dn2, c_dn3 = st.columns([1, 2, 1])
+            # 🚀 LIDERANÇA NACIONAL (DONO DA AÇÃO) E TETOS
+            st.markdown("###### 👑 Liderança Nacional e Metas/Tetos Globais")
+            c_dn1, c_dn2, c_dn3, c_dn4 = st.columns([1, 1.5, 1, 1.2])
             with c_dn1:
                 novo_uf_dono = st.selectbox("UF/Órgão do Dono:", ["Ceneac"] + LISTA_UFS_COMPLETA, key="cad_pna_uf_dono")
             with c_dn2:
                 srvs_dono_disp = df_servidores[df_servidores["UF_Servidor"] == novo_uf_dono]["Servidor"].dropna().unique().tolist()
                 novo_dono_acao = st.selectbox("Servidor Especialista (Dono da Ação):", srvs_dono_disp if srvs_dono_disp else ["Guttemberg"], key="cad_pna_dono")
             with c_dn3:
-                nova_meta_nac = st.number_input("Meta Global Nacional:", min_value=0.0, value=12.0, step=1.0, key="cad_pna_meta_nac")
+                nova_meta_nac = st.number_input("Meta Global Física:", min_value=0.0, value=12.0, step=1.0, key="cad_pna_meta_nac")
+            with c_dn4:
+                # 🚀 TETO ORÇAMENTÁRIO ESTIMADO
+                novo_orc_nac = st.number_input("Teto Orçamentário (R$):", min_value=0.0, value=0.0, step=5000.0, format="%.2f", key="cad_pna_orc_nac")
 
             c_ind, c_imp = st.columns(2)
             with c_ind:
@@ -4047,7 +4718,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         "Importância": nova_importancia,
                         "UF_Dono": str(novo_uf_dono),
                         "Dono_Acao": str(novo_dono_acao),
-                        "Meta_Nacional": float(nova_meta_nac)
+                        "Meta_Nacional": float(nova_meta_nac),
+                        "Orcamento_Nacional": float(novo_orc_nac)
                     }
                     
                     with st.spinner("Gravando no catálogo do SharePoint..."):
@@ -4088,6 +4760,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 val_atual_uf_dono = str(dados_alvo_edt.get("UF_Dono", "Ceneac")).strip()
                 val_atual_dono = str(dados_alvo_edt.get("Dono_Acao", "")).strip()
                 val_atual_meta_nac = float(pd.to_numeric(dados_alvo_edt.get("Meta_Nacional", 0), errors='coerce') or 0.0)
+                val_atual_orc_nac = float(pd.to_numeric(dados_alvo_edt.get("Orcamento_Nacional", 0.0), errors='coerce') or 0.0)
 
                 st.markdown(f"#### 🗂️ Ficha da Ação: **{cod_alvo_edt}** `(ID: {id_pna_edit})`")
 
@@ -4100,9 +4773,9 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 e_comp = st.text_input("Nome Completo da Ação:", value=val_atual_comp, key=f"edt_pna_comp_{id_pna_edit}").strip()
                 e_apelido = st.text_input("Nome Resumido / Apelido:", value=val_atual_apelido, key=f"edt_pna_apelido_{id_pna_edit}").strip()
 
-                # 🚀 EDIÇÃO DA LIDERANÇA NACIONAL
-                st.markdown("###### 👑 Liderança Nacional da Ação")
-                c_edn1, c_edn2, c_edn3 = st.columns([1, 2, 1])
+                # 🚀 EDIÇÃO DA LIDERANÇA NACIONAL E TETOS
+                st.markdown("###### 👑 Liderança Nacional e Metas/Tetos Globais")
+                c_edn1, c_edn2, c_edn3, c_edn4 = st.columns([1, 1.5, 1, 1.2])
                 with c_edn1:
                     lista_ufs_dono_edit = ["Ceneac"] + LISTA_UFS_COMPLETA
                     idx_uf_dn = lista_ufs_dono_edit.index(val_atual_uf_dono) if val_atual_uf_dono in lista_ufs_dono_edit else 0
@@ -4112,7 +4785,9 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     idx_dn = srvs_dono_edit.index(val_atual_dono) if val_atual_dono in srvs_dono_edit else 0
                     e_dono = st.selectbox("Servidor Dono da Ação:", srvs_dono_edit if srvs_dono_edit else [val_atual_dono], index=idx_dn, key=f"edt_pna_dn_{id_pna_edit}")
                 with c_edn3:
-                    e_meta_nac = st.number_input("Meta Global Nacional:", min_value=0.0, value=val_atual_meta_nac, step=1.0, key=f"edt_pna_meta_nac_{id_pna_edit}")
+                    e_meta_nac = st.number_input("Meta Global Física:", min_value=0.0, value=val_atual_meta_nac, step=1.0, key=f"edt_pna_meta_nac_{id_pna_edit}")
+                with c_edn4:
+                    e_orc_nac = st.number_input("Teto Orçamentário (R$):", min_value=0.0, value=val_atual_orc_nac, step=5000.0, format="%.2f", key=f"edt_pna_orc_nac_{id_pna_edit}")
 
                 c_e_ind, c_e_imp = st.columns(2)
                 with c_e_ind:
@@ -4146,7 +4821,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             "Importância": e_imp,
                             "UF_Dono": str(e_uf_dono),
                             "Dono_Acao": str(e_dono),
-                            "Meta_Nacional": float(e_meta_nac)
+                            "Meta_Nacional": float(e_meta_nac),
+                            "Orcamento_Nacional": float(e_orc_nac)
                         }
                         
                         with st.spinner(f"1/2 Atualizando Ação '{nova_chave_acao_ano}' no Catálogo..."):
@@ -4248,7 +4924,361 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
 
 
 
-# --- TELA: MEUS FEEDBACKS (360º) ---
+# =====================================================================
+# --- TELA 6: PACTUAÇÃO PRÉ-PNAPA (DUPLO MATCHMAKER: FÍSICO & FINANCEIRO) ---
+# =====================================================================
+elif modo == "🤝 Pactuação Pré-PNAPA":
+    st.markdown("<h3 style='color: #03170a;'>🤝 Painel de Pactuação Pré-PNAPA (Físico & Orçamentário)</h3>", unsafe_allow_html=True)
+    st.caption("Pactuação estratégica entre as Metas e Tetos Globais do Ceneac (Top-Down) e as demandas inseridas pelos Estados (Bottom-Up).")
+
+    if df_pnapas.empty:
+        st.warning("⚠️ O Catálogo de Ações PNAPA está vazio. Cadastre ações no catálogo para iniciar a pactuação.")
+    else:
+        # 1. RECUPERAÇÃO E FILTRAGEM DO TETO GLOBAL DIPRO (OPÇÃO 1)
+        if not df_pnapas.empty and "Ano" in df_pnapas.columns:
+            anos_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
+        else:
+            anos_disponiveis = [2027, 2026]
+
+        c_topo1, c_topo2, c_topo3 = st.columns([1, 1.3, 1.3])
+        with c_topo1:
+            ano_pact_sel = st.selectbox("📅 Ano de Planejamento:", anos_disponiveis, key="pact_ano_sel")
+
+        # 1.1 Resgata a linha de configuração DIPRO_GLOBAL para o ano
+        linha_dipro_ano = df_pnapas[
+            (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() == "DIPRO_GLOBAL") &
+            (pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel))
+        ]
+
+        if not linha_dipro_ano.empty:
+            teto_dipro_atual = float(pd.to_numeric(linha_dipro_ano.iloc[0].get("Orcamento_Nacional", 0.0), errors='coerce') or 1500000.0)
+        else:
+            teto_dipro_atual = float(st.session_state.get("gov_params", {}).get("orcamento_global_dipro", 1500000.0))
+
+        st.session_state["teto_global_dipro"] = teto_dipro_atual
+
+        # 1.2 Filtra apenas ações operacionais (ocultando a linha de metadados DIPRO_GLOBAL)
+        df_pna_ano = df_pnapas[
+            (pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel)) &
+            (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL")
+        ].copy()
+
+        with c_topo2:
+            donos_disponiveis = ["Todos os Especialistas"] + sorted([d for d in df_pna_ano["Dono_Acao"].dropna().unique() if str(d).strip()])
+            filtro_dono = st.selectbox("👑 Filtrar por Dono da Ação (Sede):", donos_disponiveis, key="pact_dono_sel")
+
+        with c_topo3:
+            status_pact_filtro = st.selectbox(
+                "⚖️ Filtro de Alinhamento:", 
+                [
+                    "Todas as Ações", 
+                    "Déficit Físico (<100%)", 
+                    "Meta Física Atingida (100%)", 
+                    "Superávit Físico (>100%)", 
+                    "Orçamento Estourado (> Teto Ceneac)", 
+                    "Sem Adesão Estadual (0%)"
+                ], 
+                key="pact_status_filtro"
+            )
+
+        # 1.3 Popover com Gravação Persistente no SharePoint (Administrador)
+        if perfil_usuario == "Administrador":
+            with st.popover("⚙️ Calibrar Orçamento Global Aprovado pela DIPRO", use_container_width=True):
+                st.markdown("#### 🏛️ Envelope Orçamentário da Emergência Ambiental (DIPRO)")
+                novo_teto_dipro = st.number_input(
+                    f"Teto Orçamentário Global Autorizado pela DIPRO para {ano_pact_sel} (R$):",
+                    min_value=0.0,
+                    value=float(teto_dipro_atual),
+                    step=50000.0,
+                    format="%.2f",
+                    key=f"input_teto_dipro_persist_{ano_pact_sel}"
+                )
+                
+                if st.button("💾 Salvar Teto Global DIPRO no SharePoint", type="primary", key="btn_salvar_teto_dipro_db"):
+                    col_id_pna = "ID_PNAPA" if "ID_PNAPA" in df_pnapas.columns else "Id"
+                    if not linha_dipro_ano.empty:
+                        id_dipro_ref = int(float(linha_dipro_ano.iloc[0][col_id_pna]))
+                        acao_flow = "Editar"
+                    else:
+                        id_dipro_ref = int(pd.to_numeric(df_pnapas[col_id_pna], errors='coerce').fillna(0).max() + 1) if not df_pnapas.empty else 1
+                        acao_flow = "Inserir"
+                        
+                    payload_dipro = {
+                        "Acao": acao_flow,
+                        "Id": str(id_dipro_ref),
+                        "ID_PNAPA": id_dipro_ref,
+                        "Ano": int(ano_pact_sel),
+                        "Num_Acao_PNAPA": "DIPRO_GLOBAL",
+                        "Acao_Ano": f"DIPRO_GLOBAL-{ano_pact_sel}",
+                        "Nome_Acao_Completo": f"Orçamento Global Autorizado DIPRO {ano_pact_sel}",
+                        "Nome_Acao_Apelido": f"Teto DIPRO {ano_pact_sel}",
+                        "Indicador": "Orçamento Global",
+                        "Importância": "Estratégica",
+                        "UF_Dono": "Ceneac",
+                        "Dono_Acao": "Diretoria DIPRO",
+                        "Meta_Nacional": 0.0,
+                        "Orcamento_Nacional": float(novo_teto_dipro)
+                    }
+                    
+                    with st.spinner("Gravando Teto Global DIPRO no SharePoint..."):
+                        try:
+                            r = requests.post(URL_FLOW_PNAPAS, json=payload_dipro, timeout=35)
+                            if r.status_code in [200, 202]:
+                                time.sleep(2)
+                                st.cache_data.clear()
+                                st.session_state["teto_global_dipro"] = novo_teto_dipro
+                                st.success(f"✅ Teto Global DIPRO para {ano_pact_sel} salvo com sucesso!")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Erro ao salvar no SharePoint (Status {r.status_code})")
+                        except Exception as e:
+                            st.error(f"❌ Erro de comunicação: {e}")
+
+        if filtro_dono != "Todos os Especialistas":
+            df_pna_ano = df_pna_ano[df_pna_ano["Dono_Acao"] == filtro_dono]
+
+        # 2. CRUZAMENTO SEGURO DE DADOS COM AS AÇÕES ESTADUAIS (df_atual)
+        df_acoes_cadastradas = df_atual[
+            (df_atual["Nível"].astype(str).str.strip() == "Ação") &
+            (df_atual["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_pact_sel))
+        ].copy()
+
+        if not df_acoes_cadastradas.empty:
+            df_acoes_cadastradas["Meta_Num"] = pd.to_numeric(df_acoes_cadastradas["Meta_Indicador"], errors='coerce').fillna(0.0)
+            
+            r_d = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Diarias", 0), errors='coerce').fillna(0.0)
+            r_p = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Passagens", 0), errors='coerce').fillna(0.0)
+            r_o = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Outras_Despesas", 0), errors='coerce').fillna(0.0)
+            df_acoes_cadastradas["Rec_Plan_Num"] = r_d + r_p + r_o
+            
+            # 🚀 Chave normalizada para cruzamento exato
+            df_acoes_cadastradas["Num_Pna_Limpo"] = df_acoes_cadastradas["Número da Ação PNAPA"].astype(str).str.strip().str.upper()
+        else:
+            df_acoes_cadastradas["Num_Pna_Limpo"] = []
+
+        # 3. CONSOLIDAÇÃO GLOBAL DO BALANÇO ORÇAMENTÁRIO E METAS
+        total_acoes_catalogo = len(df_pna_ano)
+        meta_fisica_global = pd.to_numeric(df_pna_ano["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
+        
+        col_orc_nac = "Orcamento_Nacional" if "Orcamento_Nacional" in df_pna_ano.columns else ""
+        teto_total_distribuido_ceneac = pd.to_numeric(df_pna_ano[col_orc_nac], errors='coerce').fillna(0.0).sum() if col_orc_nac else 0.0
+
+        # Mapeamento de todas as chaves válidas do catálogo para este ano
+        todas_chaves_catalogo = set()
+        for _, r_pna in df_pna_ano.iterrows():
+            c_num = str(r_pna.get("Num_Acao_PNAPA", "")).strip().upper()
+            c_ano = str(r_pna.get("Acao_Ano", "")).strip().upper()
+            if c_num: todas_chaves_catalogo.add(c_num)
+            if c_ano: todas_chaves_catalogo.add(c_ano)
+            if c_num: todas_chaves_catalogo.add(f"{c_num}-{ano_pact_sel}")
+
+        df_pactuado_filtrado = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(todas_chaves_catalogo)] if not df_acoes_cadastradas.empty else pd.DataFrame()
+        
+        meta_fisica_demandada = df_pactuado_filtrado["Meta_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
+        orcamento_total_demandado_ufs = df_pactuado_filtrado["Rec_Plan_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
+        
+        taxa_adesao_fisica = (meta_fisica_demandada / meta_fisica_global * 100.0) if meta_fisica_global > 0 else 0.0
+        saldo_dipro_restante = teto_dipro_atual - orcamento_total_demandado_ufs
+
+        st.markdown("---")
+        # LINHA 1: BALANÇO ORÇAMENTÁRIO TRIPLO (DIPRO -> CENEAC -> ESTADOS)
+        c_m1, c_m2, c_m3, c_m4 = st.columns(4)
+        c_m1.metric("🏛️ Teto Global DIPRO", formatar_moeda_br(teto_dipro_atual))
+        c_m2.metric(
+            "📋 Teto Alocado Ceneac", 
+            formatar_moeda_br(teto_total_distribuido_ceneac), 
+            delta=f"{formatar_moeda_br(teto_dipro_atual - teto_total_distribuido_ceneac)} do teto DIPRO"
+        )
+        c_m3.metric(
+            "💰 Demandado pelas UFs", 
+            formatar_moeda_br(orcamento_total_demandado_ufs), 
+            delta=f"{(orcamento_total_demandado_ufs/teto_dipro_atual*100.0 if teto_dipro_atual > 0 else 0):.1f}% da DIPRO"
+        )
+        c_m4.metric(
+            "⚖️ Saldo Restante DIPRO", 
+            formatar_moeda_br(saldo_dipro_restante), 
+            delta="Dentro do Limite" if saldo_dipro_restante >= 0 else "⚠️ Estouro de Teto",
+            delta_color="normal" if saldo_dipro_restante >= 0 else "inverse"
+        )
+        
+        # LINHA 2: COBERTURA FÍSICA E ADESÃO (ALTO CONTRASTE)
+        c_sub1, c_sub2, c_sub3 = st.columns([1, 1.5, 1.5])
+        with c_sub1:
+            st.markdown(
+                f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
+                f"🎯 <strong>Ações Analisadas:</strong> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{total_acoes_catalogo}</span>"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
+        with c_sub2:
+            st.markdown(
+                f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
+                f"📊 <strong>Cobertura Física Nacional:</strong> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{taxa_adesao_fisica:.1f}%</span> "
+                f"<span style='color: #64748b; font-weight: 500;'>({meta_fisica_demandada:.1f} de {meta_fisica_global:.1f})</span>"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
+        with c_sub3:
+            ufs_part_count = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
+            pct_part_uf = (ufs_part_count / 26.0 * 100.0)
+            st.markdown(
+                f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
+                f"🗺️ <strong>Adesão Federativa:</strong> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{ufs_part_count}/26 UFs</span> "
+                f"<span style='color: #64748b; font-weight: 500;'>({pct_part_uf:.0f}%)</span>"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
+            
+        st.markdown("---")
+
+        # 4. CARDS POR AÇÃO COM DUPLA BARRA (FÍSICO + FINANCEIRO)
+        todas_ufs_brasil = [u for u in LISTA_UFS_COMPLETA if u not in ["Ceneac", "DF"]]
+
+        for _, acao_row in df_pna_ano.iterrows():
+            cod_num = str(acao_row.get("Num_Acao_PNAPA", "")).strip().upper()
+            cod_ano = str(acao_row.get("Acao_Ano", f"{cod_num}-{ano_pact_sel}")).strip().upper()
+            chave_acao_ano = cod_ano if cod_ano else f"{cod_num}-{ano_pact_sel}"
+            
+            nome_acao = str(acao_row.get("Nome_Acao_Apelido", acao_row.get("Nome_Acao_Completo", "")))
+            dono_acao = str(acao_row.get("Dono_Acao", "Ceneac"))
+            uf_dono = str(acao_row.get("UF_Dono", "Ceneac"))
+            indicador_acao = str(acao_row.get("Indicador", "Não informado"))
+            
+            # Metas e Tetos Nacionais (Top-Down)
+            meta_nacional_fisica = float(pd.to_numeric(acao_row.get("Meta_Nacional", 0.0), errors='coerce') or 0.0)
+            teto_nacional_orc = float(pd.to_numeric(acao_row.get(col_orc_nac, 0.0), errors='coerce') or 0.0) if col_orc_nac else 0.0
+
+            # 🚀 FILTRAGEM EXATA: Apenas propostas vinculadas a ESTA AÇÃO
+            chaves_desta_acao = {cod_num, cod_ano, f"{cod_num}-{ano_pact_sel}"} - {""}
+            
+            if not df_acoes_cadastradas.empty:
+                df_propostas_ufs = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_desta_acao)].copy()
+            else:
+                df_propostas_ufs = pd.DataFrame()
+            
+            meta_demandada_ufs = df_propostas_ufs["Meta_Num"].sum() if not df_propostas_ufs.empty else 0.0
+            orc_demandado_ufs = df_propostas_ufs["Rec_Plan_Num"].sum() if not df_propostas_ufs.empty else 0.0
+            
+            # % Físico
+            pct_fisico = (meta_demandada_ufs / meta_nacional_fisica * 100.0) if meta_nacional_fisica > 0 else (100.0 if meta_demandada_ufs > 0 else 0.0)
+
+            # Classificação Semafórica da Meta Física
+            if meta_demandada_ufs == 0:
+                badge_status = "⚪ Sem Adesão (0%)"
+            elif pct_fisico < 100:
+                badge_status = f"🟡 Déficit Físico ({pct_fisico:.0f}%)"
+            elif pct_fisico == 100:
+                badge_status = "🟢 Meta Pactuada (100%)"
+            else:
+                badge_status = f"🔵 Superávit Físico ({pct_fisico:.0f}%)"
+
+            # Filtros de Alinhamento
+            if status_pact_filtro != "Todas as Ações":
+                if "Déficit Físico" in status_pact_filtro and (pct_fisico >= 100 or meta_demandada_ufs == 0): continue
+                if "Meta Física Atingida" in status_pact_filtro and pct_fisico != 100: continue
+                if "Superávit Físico" in status_pact_filtro and pct_fisico <= 100: continue
+                if "Orçamento Estourado" in status_pact_filtro and (teto_nacional_orc == 0 or orc_demandado_ufs <= teto_nacional_orc): continue
+                if "Sem Adesão" in status_pact_filtro and meta_demandada_ufs > 0: continue
+
+            # RENDERIZAÇÃO DO EXPANDER DA AÇÃO COM ALTO CONTRASTE
+            with st.expander(f"📌 **{chave_acao_ano}** — {nome_acao}  |  {badge_status}  |  Demandado: {formatar_moeda_br(orc_demandado_ufs)}", expanded=False):
+                c_inf1, c_inf2, c_inf3 = st.columns([1.5, 1, 1])
+                with c_inf1:
+                    st.markdown(
+                        f"👑 **Especialista Sede (Dono):** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{dono_acao} ({uf_dono})</span>", 
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"📈 **Indicador Oficial:** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{indicador_acao}</span>", 
+                        unsafe_allow_html=True
+                    )
+                with c_inf2:
+                    st.metric("Meta Física Nacional", f"{meta_nacional_fisica:.1f}")
+                with c_inf3:
+                    st.metric("Meta Física Demandada (UFs)", f"{meta_demandada_ufs:.1f}", delta=f"{meta_demandada_ufs - meta_nacional_fisica:+.1f}")
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- BARRA 1: PACTUAÇÃO FÍSICA ---
+                pct_bar_fisico = min(100.0, max(0.0, pct_fisico))
+                cor_barra_fisica = "#15803d" if pct_fisico <= 100 else "#2563eb"
+                
+                st.markdown(f"""
+                <div style='margin-bottom: 6px;'>
+                    <strong>🎯 Alinhamento de Metas Físicas:</strong> 
+                    <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{pct_fisico:.1f}%</span> 
+                    <span style='color: #475569; font-size: 0.92em; font-weight: 500;'>({meta_demandada_ufs:.1f} de {meta_nacional_fisica:.1f})</span>
+                </div>
+                <div style='width: 100%; background-color: #e2e8f0; border-radius: 8px; height: 14px; overflow: hidden; margin-bottom: 16px;'>
+                    <div style='width: {pct_bar_fisico}%; background-color: {cor_barra_fisica}; height: 100%; border-radius: 8px; transition: width 0.4s ease;'></div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # --- BARRA 2: PACTUAÇÃO FINANCEIRA ---
+                if teto_nacional_orc > 0:
+                    pct_orc = (orc_demandado_ufs / teto_nacional_orc) * 100.0
+                    pct_bar_orc = min(100.0, max(0.0, pct_orc))
+                    cor_barra_orc = "#03170a" if pct_orc <= 100 else "#b91c1c"
+                    
+                    st.markdown(f"""
+                    <div style='margin-bottom: 6px;'>
+                        <strong>💰 Demanda Orçamentária vs Teto Ceneac:</strong> 
+                        <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{pct_orc:.1f}%</span> 
+                        <span style='color: #475569; font-size: 0.92em; font-weight: 500;'>({formatar_moeda_br(orc_demandado_ufs)} de {formatar_moeda_br(teto_nacional_orc)})</span>
+                    </div>
+                    <div style='width: 100%; background-color: #e2e8f0; border-radius: 8px; height: 14px; overflow: hidden; margin-bottom: 16px;'>
+                        <div style='width: {pct_bar_orc}%; background-color: {cor_barra_orc}; height: 100%; border-radius: 8px; transition: width 0.4s ease;'></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='margin-bottom: 16px;'>
+                        <strong>💰 Demanda Orçamentária Total Acumulada das UFs:</strong> 
+                        <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{formatar_moeda_br(orc_demandado_ufs)}</span> 
+                        <em style='color: #64748b; font-size: 0.9em;'>(Teto Ceneac não fixado no catálogo)</em>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                t_pact_ufs, t_pact_pend = st.tabs(["🗺️ Propostas dos Estados (Físico & Orçamento)", "⏳ Estados Sem Proposta Registrada"])
+
+                with t_pact_ufs:
+                    if df_propostas_ufs.empty:
+                        st.info("Nenhuma UF registrou proposta de planejamento para esta ação.")
+                    else:
+                        df_exibir_pact = df_propostas_ufs[[
+                            "UF_Acao_PNAPA", "Papel_Institucional", "Servidor", 
+                            "Meta_Indicador", "Rec_Plan_Diarias", "Rec_Plan_Passagens", 
+                            "Rec_Plan_Outras_Despesas", "Rec_Plan_Num", "Andamento"
+                        ]].copy()
+                        
+                        df_exibir_pact.columns = [
+                            "UF", "Papel", "Ponto Focal Estadual", 
+                            "Meta Proposta", "Diárias (R$)", "Passagens (R$)", 
+                            "Outras Desp. (R$)", "Total Previsto (R$)", "Situação"
+                        ]
+                        
+                        for col_moeda in ["Diárias (R$)", "Passagens (R$)", "Outras Desp. (R$)", "Total Previsto (R$)"]:
+                            df_exibir_pact[col_moeda] = df_exibir_pact[col_moeda].apply(formatar_moeda_br)
+                        
+                        st.dataframe(df_exibir_pact.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+                with t_pact_pend:
+                    ufs_aderiram = df_propostas_ufs["UF_Acao_PNAPA"].dropna().unique().tolist() if not df_propostas_ufs.empty else []
+                    ufs_faltantes = sorted([u for u in todas_ufs_brasil if u not in ufs_aderiram])
+                    
+                    if not ufs_faltantes:
+                        st.success("🎉 Todas as 26 UFs já enviaram propostas para esta Ação!")
+                    else:
+                        st.warning(f"⚠️ **{len(ufs_faltantes)} estado(s)** ainda não cadastraram proposta:")
+                        tags_estados = " ".join([f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.85em; margin-right: 4px;'>{u}</span>" for u in ufs_faltantes])
+                        st.markdown(tags_estados, unsafe_allow_html=True)
+
+# --- TELA 7: MEUS FEEDBACKS (360º) ---
 elif modo == "⭐ Meus Feedbacks (360º)":
     st.markdown("<h3 style='color: #03170a;'>⭐ Meus Feedbacks e Avaliações de Pares (360º)</h3>", unsafe_allow_html=True)
     st.markdown("Nesta área, você avalia colegas de missões concluídas (com 3 ou mais membros) e consulta os feedbacks anônimos que recebeu para o seu desenvolvimento profissional.")
@@ -4406,15 +5436,15 @@ elif modo == "⭐ Meus Feedbacks (360º)":
                 """, unsafe_allow_html=True)
 
 
-# --- TELA 7: CENTRAL DE SUGESTÕES E MELHORIAS ---
+# --- TELA 8: CENTRAL DE SUGESTÕES E MELHORIAS ---
 elif modo == "💡 Sugestões & Melhorias":
     st.markdown("<h2 style='color: #03170a;'>💡 Central de Feedback & Sugestões de Melhoria</h2>", unsafe_allow_html=True)
     st.caption("Espaço colaborativo para que testadores e usuários enviem inconsistências, ideias e solicitações.")
     
     # 1. Cartões de Métricas no Topo
-    total_feedbacks = len(df_sugestoes)
-    abertos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip().isin(["Aberto", "Em Desenvolvimento"])]) if not df_sugestoes.empty else 0
-    concluidos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip() == "Concluído"]) if not df_sugestoes.empty else 0
+    total_feedbacks = len(df_sugestoes) if not df_sugestoes.empty else 0
+    abertos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip().isin(["Aberto", "Em Desenvolvimento"])]) if not df_sugestoes.empty and "Status" in df_sugestoes.columns else 0
+    concluidos = len(df_sugestoes[df_sugestoes["Status"].astype(str).str.strip() == "Concluído"]) if not df_sugestoes.empty and "Status" in df_sugestoes.columns else 0
     
     c_m1, c_m2, c_m3 = st.columns(3)
     c_m1.metric("📋 Total de Sugestões", f"{total_feedbacks}")
@@ -4438,6 +5468,7 @@ elif modo == "💡 Sugestões & Melhorias":
                 [
                     "📊 Visualização de Dados & Filtros", 
                     "➕ Inserção de Atividades/Ações", 
+                    "🤝 Pactuação Pré-PNAPA",
                     "🛠️ Edição Individual / em Lote", 
                     "🏢 Tabelas Auxiliares (Equipes/Ações/Unidades)", 
                     "📈 Dashboards", 
@@ -4469,7 +5500,7 @@ elif modo == "💡 Sugestões & Melhorias":
             if not sug_titulo.strip() or not sug_descricao.strip():
                 st.error("⚠️ Por favor, preencha o Título e o Detalhamento antes de enviar.")
             else:
-                id_nova_sug = int(pd.to_numeric(df_sugestoes["Id"], errors='coerce').max() + 1) if not df_sugestoes.empty else 1
+                id_nova_sug = int(pd.to_numeric(df_sugestoes["Id"], errors='coerce').max() + 1) if not df_sugestoes.empty and "Id" in df_sugestoes.columns else 1
                 data_hora_envio = datetime.now().strftime('%d/%m/%Y %H:%M')
                 
                 payload_sugestao = {
@@ -4488,9 +5519,9 @@ elif modo == "💡 Sugestões & Melhorias":
                 
                 with st.spinner("Gravando no SharePoint e indexando na planilha..."):
                     try:
-                        r = requests.post(URL_FLOW_SUGESTOES, json=payload_sugestao, timeout=20)
+                        # 🚀 Timeout estendido para 35s
+                        r = requests.post(URL_FLOW_SUGESTOES, json=payload_sugestao, timeout=35)
                         if r.status_code in [200, 202]:
-                            # 🚀 Tempo seguro para o Excel Online gravar a linha antes do reload
                             time.sleep(2.5)
                             st.cache_data.clear()
                             st.success("🎉 Sugestão registrada com sucesso! Ela já consta no quadro de acompanhamento.")
@@ -4498,6 +5529,8 @@ elif modo == "💡 Sugestões & Melhorias":
                             st.rerun()
                         else:
                             st.error(f"❌ O Power Automate rejeitou a solicitação (Status {r.status_code}).")
+                    except requests.exceptions.Timeout:
+                        st.error("⏳ A gravação demorou mais de 35 segundos. Verifique o quadro antes de reenviar para evitar duplicidade.")
                     except Exception as e:
                         st.error(f"❌ Erro de comunicação: {e}")
 
@@ -4516,7 +5549,6 @@ elif modo == "💡 Sugestões & Melhorias":
         if df_sugestoes.empty:
             st.info("ℹ️ Nenhuma sugestão carregada no momento. Caso tenha acabado de enviar, clique em '🔄 Atualizar Lista'.")
         else:
-            # Filtros visuais da tabela
             c_f_st, c_f_pr = st.columns(2)
             with c_f_st:
                 filtro_status = st.selectbox("Filtrar por Status:", ["Todos", "Aberto", "Em Desenvolvimento", "Concluído", "Descartado"], key="f_sug_status")
@@ -4524,21 +5556,21 @@ elif modo == "💡 Sugestões & Melhorias":
                 filtro_prio = st.selectbox("Filtrar por Prioridade:", ["Todas", "Alta", "Média", "Baixa"], key="f_sug_prio")
                 
             df_sug_exib = df_sugestoes.copy()
-            if filtro_status != "Todos":
+            if filtro_status != "Todos" and "Status" in df_sug_exib.columns:
                 df_sug_exib = df_sug_exib[df_sug_exib["Status"].astype(str).str.strip() == filtro_status]
-            if filtro_prio != "Todas":
+            if filtro_prio != "Todas" and "Prioridade" in df_sug_exib.columns:
                 df_sug_exib = df_sug_exib[df_sug_exib["Prioridade"].astype(str).str.strip() == filtro_prio]
                 
             cols_exib = [c for c in ["Id", "Data_Registro", "Prioridade", "Status", "Modulo", "Titulo", "Descricao", "Autor", "Resposta_Admin"] if c in df_sug_exib.columns]
             st.dataframe(df_sug_exib[cols_exib], use_container_width=True, hide_index=True)
             
-            # --- PAINEL EXCLUSIVO DO ADMINISTRADOR (ATUALIZAR STATUS E PRIORIDADE) ---
-            if perfil_usuario == "Administrador":
+            # --- PAINEL EXCLUSIVO DO ADMINISTRADOR ---
+            if perfil_usuario == "Administrador" and not df_sugestoes.empty and "Id" in df_sugestoes.columns:
                 st.markdown("---")
                 with st.expander("⚙️ **Painel de Governança (Exclusivo Administrador)**", expanded=True):
                     st.caption("Altere a prioridade real, atualize o status da demanda e dê um parecer técnico ao autor.")
                     
-                    lista_ids_sug = df_sugestoes["Id"].astype(str).tolist()
+                    lista_ids_sug = df_sugestoes["Id"].dropna().astype(str).tolist()
                     id_gestao_sel = st.selectbox("Selecione a Sugestão para Gerenciar (ID):", lista_ids_sug, key="sel_sug_admin_id")
                     
                     sug_linha_alvo = df_sugestoes[df_sugestoes["Id"].astype(str) == str(id_gestao_sel)].iloc[0]
@@ -4567,7 +5599,6 @@ elif modo == "💡 Sugestões & Melhorias":
                     c_btn_salvar, c_btn_excluir = st.columns([3, 1])
                     with c_btn_salvar:
                         if st.button("💾 Gravar Atualização no SharePoint", type="primary", key="btn_salvar_gestao_sug"):
-                            # 🚀 Envio do payload completo para evitar erro 502 de campos nulos no Excel
                             payload_edt_sug = {
                                 "Acao": "Editar",
                                 "Id": str(id_gestao_sel),
@@ -4584,7 +5615,7 @@ elif modo == "💡 Sugestões & Melhorias":
                             
                             with st.spinner("Atualizando sugestão no SharePoint..."):
                                 try:
-                                    r = requests.post(URL_FLOW_SUGESTOES, json=payload_edt_sug, timeout=20)
+                                    r = requests.post(URL_FLOW_SUGESTOES, json=payload_edt_sug, timeout=35)
                                     if r.status_code in [200, 202]:
                                         time.sleep(2)
                                         st.cache_data.clear()
@@ -4593,6 +5624,8 @@ elif modo == "💡 Sugestões & Melhorias":
                                         st.rerun()
                                     else:
                                         st.error(f"❌ Erro ao atualizar (Status {r.status_code}): {r.text}")
+                                except requests.exceptions.Timeout:
+                                    st.error("⏳ A atualização demorou mais de 35s. Atualize a lista para verificar se foi concluída.")
                                 except Exception as e:
                                     st.error(f"❌ Erro de conexão: {e}")
 
@@ -4601,18 +5634,20 @@ elif modo == "💡 Sugestões & Melhorias":
                             st.caption(f"Excluir sugestão ID {id_gestao_sel}?")
                             if st.button("Confirmar exclusão", type="primary", key="btn_del_sug_conf"):
                                 try:
-                                    r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Excluir", "Id": str(id_gestao_sel)}, timeout=20)
+                                    r = requests.post(URL_FLOW_SUGESTOES, json={"Acao": "Excluir", "Id": str(id_gestao_sel)}, timeout=35)
                                     if r.status_code in [200, 202]:
                                         time.sleep(2)
                                         st.cache_data.clear()
                                         st.success("Sugestão excluída.")
                                         time.sleep(1)
                                         st.rerun()
+                                except requests.exceptions.Timeout:
+                                    st.error("⏳ Tempo limite excedido ao tentar excluir.")
                                 except Exception as e:
                                     st.error(f"Erro: {e}")
 
 
-# --- TELA 8: BASE DE CONHECIMENTO (FAQ) ---
+# --- TELA 9: BASE DE CONHECIMENTO (FAQ) ---
 elif modo == "📖 Base de Conhecimento (FAQ)":
     # CSS com escopo seguro para o FAQ (alto contraste em caixas de código, listas e textos)
     st.markdown("""
