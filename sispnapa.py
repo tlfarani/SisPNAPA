@@ -1352,8 +1352,15 @@ if modo == "📈 Dashboards Executivos":
 
             with c_filt2:
                 with st.popover("🗺️ UF / Lotação / Servidor / Recurso", use_container_width=True):
-                    df_p_uf = aplicar_filtros_dash(df_dash_atv, filtros_d, "uf")
-                    ufs_disp = ["Todos"] + sorted(df_p_uf["UF_Acao_PNAPA"].dropna().astype(str).unique().tolist())
+                    # 🚀 Busca UFs presentes tanto em Atividades quanto em Ações planejadas
+                    df_p_uf_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, "uf")
+                    df_p_uf_ac = aplicar_filtros_dash(df_dash_acao, filtros_d, "uf")
+                    
+                    ufs_encontradas = set(df_p_uf_atv["UF_Acao_PNAPA"].dropna().astype(str).str.strip()).union(
+                        set(df_p_uf_ac["UF_Acao_PNAPA"].dropna().astype(str).str.strip())
+                    )
+                    ufs_disp = ["Todos"] + sorted([u for u in ufs_encontradas if u != "" and u.lower() not in ["nan", "none"]])
+                    
                     idx_uf = ufs_disp.index(filtros_d["uf"][1]) if filtros_d["uf"][1] in ufs_disp else 0
                     f_uf = st.selectbox("UF da Ação:", ufs_disp, index=idx_uf, key="fd_uf")
                     filtros_d["uf"] = ("UF_Acao_PNAPA", f_uf)
@@ -1378,48 +1385,76 @@ if modo == "📈 Dashboards Executivos":
 
             with c_filt3:
                 with st.popover("🏷️ Classificação Temática", use_container_width=True):
+                    # 1. Status de Execução da Ação (Macro)
                     df_p_status_acao = aplicar_filtros_dash(df_dash_acao, filtros_d, "status_acao")
                     status_acao_disp = ["Todos"] + sorted([s for s in df_p_status_acao["Status de Execução"].dropna().astype(str).unique() if s != ""])
                     idx_status_acao = status_acao_disp.index(filtros_d["status_acao"][1]) if filtros_d["status_acao"][1] in status_acao_disp else 0
                     f_status_acao = st.selectbox("Status da Ação (Macro):", status_acao_disp, index=idx_status_acao, key="fd_status_acao")
                     filtros_d["status_acao"] = ("Status de Execução", f_status_acao)
 
+                    # 2. Andamento (Atividades)
                     df_p_and = aplicar_filtros_dash(df_dash_atv, filtros_d, "and")
                     ands_disp = ["Todos"] + sorted([a for a in df_p_and["Andamento"].dropna().astype(str).str.strip().unique() if a != ""])
                     idx_and = ands_disp.index(filtros_d["and"][1]) if filtros_d["and"][1] in ands_disp else 0
                     f_and = st.selectbox("Andamento (Atividades):", ands_disp, index=idx_and, key="fd_and")
                     filtros_d["and"] = ("Andamento", f_and)
 
-                    df_p_pna = aplicar_filtros_dash(df_dash_atv, filtros_d, "pna")
-                    pnas_disp = ["Todos"] + sorted(df_p_pna["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
+                    # 3. Ação PNAPA (Unificado: Atividades + Ações Planejadas)
+                    df_p_pna_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, "pna")
+                    df_p_pna_ac = aplicar_filtros_dash(df_dash_acao, filtros_d, "pna")
+                    pnas_encontradas = set(df_p_pna_atv["Número da Ação PNAPA"].dropna().astype(str).str.strip()).union(
+                        set(df_p_pna_ac["Número da Ação PNAPA"].dropna().astype(str).str.strip())
+                    )
+                    pnas_disp = ["Todos"] + sorted([p for p in pnas_encontradas if p != "" and p.lower() not in ["nan", "none"]])
                     idx_pna = pnas_disp.index(filtros_d["pna"][1]) if filtros_d["pna"][1] in pnas_disp else 0
                     f_pna = st.selectbox("Ação PNAPA:", pnas_disp, index=idx_pna, key="fd_pna")
                     filtros_d["pna"] = ("Número da Ação PNAPA", f_pna)
 
-                    df_p_tema = aplicar_filtros_dash(df_dash_atv, filtros_d, "tema")
-                    temas_disp = ["Todos"] + sorted(df_p_tema["Tema da Atividade"].dropna().astype(str).unique().tolist())
+                    # 4. Tema da Atividade (Unificado: Atividades + Ações Planejadas)
+                    df_p_tema_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, "tema")
+                    df_p_tema_ac = aplicar_filtros_dash(df_dash_acao, filtros_d, "tema")
+                    temas_encontrados = set(df_p_tema_atv["Tema da Atividade"].dropna().astype(str).str.strip()).union(
+                        set(df_p_tema_ac["Tema da Atividade"].dropna().astype(str).str.strip())
+                    )
+                    temas_disp = ["Todos"] + sorted([t for t in temas_encontrados if t != "" and t.lower() not in ["nan", "none"]])
                     idx_tema = temas_disp.index(filtros_d["tema"][1]) if filtros_d["tema"][1] in temas_disp else 0
                     f_tema = st.selectbox("Tema:", temas_disp, index=idx_tema, key="fd_tema")
                     filtros_d["tema"] = ("Tema da Atividade", f_tema)
 
-                    df_p_imp = aplicar_filtros_dash(df_dash_atv, filtros_d, "imp")
-                    imps_disp = ["Todos"] + sorted([i for i in df_p_imp["Importância da Atividade"].dropna().astype(str).str.strip().unique() if i != ""])
+                    # 5. Importância da Atividade (Unificado)
+                    df_p_imp_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, "imp")
+                    df_p_imp_ac = aplicar_filtros_dash(df_dash_acao, filtros_d, "imp")
+                    imps_encontradas = set(df_p_imp_atv["Importância da Atividade"].dropna().astype(str).str.strip()).union(
+                        set(df_p_imp_ac["Importância da Atividade"].dropna().astype(str).str.strip())
+                    )
+                    imps_disp = ["Todos"] + sorted([i for i in imps_encontradas if i != "" and i.lower() not in ["nan", "none"]])
                     idx_imp = imps_disp.index(filtros_d["imp"][1]) if filtros_d["imp"][1] in imps_disp else 0
                     f_imp = st.selectbox("Importância da Atividade:", imps_disp, index=idx_imp, key="fd_imp")
                     filtros_d["imp"] = ("Importância da Atividade", f_imp)
 
-                    df_p_obj = aplicar_filtros_dash(df_dash_atv, filtros_d, "obj")
-                    objs_disp = ["Todos"] + sorted([o for o in df_p_obj["Objetivo da Atividade"].dropna().astype(str).str.strip().unique() if o != ""])
+                    # 6. Objetivo da Atividade (Unificado)
+                    df_p_obj_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, "obj")
+                    df_p_obj_ac = aplicar_filtros_dash(df_dash_acao, filtros_d, "obj")
+                    objs_encontrados = set(df_p_obj_atv["Objetivo da Atividade"].dropna().astype(str).str.strip()).union(
+                        set(df_p_obj_ac["Objetivo da Atividade"].dropna().astype(str).str.strip())
+                    )
+                    objs_disp = ["Todos"] + sorted([o for o in objs_encontrados if o != "" and o.lower() not in ["nan", "none"]])
                     idx_obj = objs_disp.index(filtros_d["obj"][1]) if filtros_d["obj"][1] in objs_disp else 0
                     f_obj = st.selectbox("Objetivo da Atividade:", objs_disp, index=idx_obj, key="fd_obj")
                     filtros_d["obj"] = ("Objetivo da Atividade", f_obj)
 
-                    df_p_tipo = aplicar_filtros_dash(df_dash_atv, filtros_d, "tipo")
-                    tipos_disp = ["Todos"] + sorted([t for t in df_p_tipo["Tipo de Atividade"].dropna().astype(str).str.strip().unique() if t != ""])
+                    # 7. Tipo de Atividade (Unificado)
+                    df_p_tipo_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, "tipo")
+                    df_p_tipo_ac = aplicar_filtros_dash(df_dash_acao, filtros_d, "tipo")
+                    tipos_encontrados = set(df_p_tipo_atv["Tipo de Atividade"].dropna().astype(str).str.strip()).union(
+                        set(df_p_tipo_ac["Tipo de Atividade"].dropna().astype(str).str.strip())
+                    )
+                    tipos_disp = ["Todos"] + sorted([t for t in tipos_encontrados if t != "" and t.lower() not in ["nan", "none"]])
                     idx_tipo = tipos_disp.index(filtros_d["tipo"][1]) if filtros_d["tipo"][1] in tipos_disp else 0
                     f_tipo = st.selectbox("Tipo de Atividade:", tipos_disp, index=idx_tipo, key="fd_tipo")
                     filtros_d["tipo"] = ("Tipo de Atividade", f_tipo)
 
+                    # 8. Periculosidade/Insalubridade (Exclusivo de Atividades)
                     df_p_perigo = aplicar_filtros_dash(df_dash_atv, filtros_d, "perigo")
                     perigos_disp = ["Todos"] + sorted([p for p in df_p_perigo["Periculosidade/Insalubridade"].dropna().astype(str).str.strip().unique() if p != ""])
                     idx_perigo = perigos_disp.index(filtros_d["perigo"][1]) if filtros_d["perigo"][1] in perigos_disp else 0
