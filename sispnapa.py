@@ -1183,8 +1183,17 @@ if modo == "📈 Dashboards Executivos":
             
         df_dash_atv["Status_Atividade"] = df_dash_atv.apply(classificar_status_atv, axis=1)
 
-        # 🚀 Agrega previamente as atividades concluídas por Ação e UF para alimentar a classificação
-        atv_concluidas_prev = df_dash_atv[df_dash_atv["Andamento"] == "Concluída"]
+        # 🚀 Filtra apenas atividades concluídas E devidamente homologadas com SEI
+        def atv_valida_com_sei(row):
+            andamento = str(row.get("Andamento", "")).strip()
+            doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
+            if andamento != "Concluída":
+                return False
+            if not doc or doc.lower() in ["nan", "none", "null"]:
+                return False
+            return True
+
+        atv_concluidas_prev = df_dash_atv[df_dash_atv.apply(atv_valida_com_sei, axis=1)]
         agg_atv_acao = atv_concluidas_prev.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"]).agg(
             Resultado_Indicador_Agregado=('Resultado_Indicador', 'sum'),
             Dias_Gastos_Exec_Agregado=('Dias_Gastos_Exec', 'sum')
@@ -1521,8 +1530,9 @@ if modo == "📈 Dashboards Executivos":
 
             # 1. Definição de Parâmetros e Limiares
             if "Metas Físicas" in visao_consolidacao:
-                st.caption("Consolidação baseada no atingimento de **80% ou mais** da meta dos indicadores (considera apenas atividades concluídas; expurga canceladas justificadas).")
-                atv_base = df_filt_atv[df_filt_atv["Andamento"] == "Concluída"]
+                st.caption("Consolidação baseada no atingimento de **80% ou mais** da meta dos indicadores (considera apenas atividades concluídas com documento probatório SEI; expurga canceladas justificadas).")
+                # 🚀 Exige SEI preenchido para somar no resultado físico
+                atv_base = df_filt_atv[df_filt_atv.apply(atv_valida_com_sei, axis=1)]
                 col_meta = "Meta_Indicador"
                 col_res = "Resultado_Indicador"
                 nome_col_pct = "% de Ações Executadas (Meta Física ≥ 80%)"
@@ -2128,15 +2138,25 @@ elif modo == "📊 Visualizar Base":
             if df_base_acoes.empty:
                 st.info("Nenhuma Ação Estadual cadastrada na base.")
             else:
-                # 1. CÁLCULO E PROPAGAÇÃO DO RESULTADO, % E STATUS DE EXECUÇÃO SEGMENTADO POR TEMA
+                # 1. CÁLCULO E PROPAGAÇÃO DO RESULTADO SEGMENTADO (EXIGE SEI)
                 df_atv_temp = df_trabalho[df_trabalho["Nível"].astype(str).str.strip() == "Atividade"].copy()
-                atv_concluidas_temp = df_atv_temp[df_atv_temp["Andamento"].astype(str).str.strip() == "Concluída"].copy()
                 
-                # Padronização segura das chaves de agrupamento
+                # 🚀 Filtra apenas atividades concluídas COM processo SEI
+                def atv_homologada_t1(row):
+                    andamento = str(row.get("Andamento", "")).strip()
+                    doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
+                    if andamento != "Concluída":
+                        return False
+                    if not doc or doc.lower() in ["nan", "none", "null"]:
+                        return False
+                    return True
+
+                atv_concluidas_temp = df_atv_temp[df_atv_temp.apply(atv_homologada_t1, axis=1)].copy()
+
                 for col_chave in ["Número da Ação PNAPA", "UF_Acao_PNAPA", "Tema da Atividade"]:
                     df_base_acoes[col_chave] = df_base_acoes[col_chave].astype(str).str.strip()
                     atv_concluidas_temp[col_chave] = atv_concluidas_temp[col_chave].astype(str).str.strip()
-                
+
                 agg_atv_pna = atv_concluidas_temp.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA", "Tema da Atividade"]).agg(
                     Resultado_Agregado=('Resultado_Indicador', lambda x: pd.to_numeric(x, errors='coerce').fillna(0).sum()),
                     Dias_Exec_Agregado=('Dias_Gastos_Exec', lambda x: pd.to_numeric(x, errors='coerce').fillna(0).sum())
