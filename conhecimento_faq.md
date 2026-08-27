@@ -160,7 +160,7 @@ O painel monitora o equilíbrio orçamentário em três camadas hierárquicas:
 
 ```
 
-* **Persistência do Teto DIPRO (`DIPRO_GLOBAL`):** O valor aprovado pela Diretoria de Proteção Ambiental é calibrado pelo Administrador e gravado no SharePoint sob a chave técnica `DIPRO_GLOBAL-[Ano]`. Esse registro permanece isolado dos formulários operacionais.
+* **Persistência do Teto DIPRO (`DIPRO_GLOBAL`):** O valor aprovado pela Diretoria de Proteção Ambiental é calibrado pelo Administrador e gravado no SharePoint sob a chave técnica `DIPRO_GLOBAL-[Ano]`. Esse registro técnico é blindado e permanece isolado dos seletores e formulários operacionais de Ações.
 * **Saldo Restante DIPRO:** Apura em tempo real se as demandas dos 27 estados cabem no orçamento global:
 > **Saldo Restante** = `Teto Global DIPRO` − `Soma dos Recursos Demandados pelas UFs`
 
@@ -187,7 +187,7 @@ O menu **📊 Visualizar Base** é estruturado em duas subpáginas especializada
 ### 6.1 Subpágina 1: Ações Estaduais (Planejamento & Metas)
 Dedicada à gestão macro do plano na regional:
 * Apresenta o indicador, a meta quantitativa da UF, o resultado físico consolidado e a barra de `% de Execução`.
-* **Painel de Edição da Ação:** Permite alterar o Papel (`Coordenação` / `Apoio`), a UF da Ação e o Ponto Focal Estadual com recarga dinâmica de equipe na **Aba 1 (Governança Estadual)**.
+* **Painel de Edição da Ação:** Permite alterar o Papel (`Coordenação` / `Apoio`), a UF da Ação e o Ponto Focal Estadual com recarga dinâmica reativa (*callback*) de equipe na **Aba 1 (Governança Estadual)**.
 
 ### 6.2 Subpágina 2: Atividades de Campo (Operações & Execução)
 Dedicada à gestão micro das missões:
@@ -209,13 +209,13 @@ Nenhuma atividade é homologada sem a inserção do número de processo ou docum
 
 ### 7.3 Semáforo de Status das Ações Estaduais
 
-| Status de Execução | Marcador | Regra de Enquadramento Operacional |
-| :--- | :---: | :--- |
-| **Planejada** | ⚪ | Ação ativa dentro do cronograma vigente, aguardando execução ou lançamento das missões. |
-| **Executada** | 🟢 | Meta física atingida (≥ 80% da meta da UF ou esforço comprovado em ações qualitativas), com atividades concluídas e SEI registrado. |
-| **Não Executada - Sem Justificativa** | 🔴 | Prazo cronológico encerrado sem alcance da meta mínima de 80% e sem justificativa técnica. |
-| **Cancelada - Sem Justificativa** | 🔴 | Ação assinalada como cancelada, porém com o campo de justificativa em branco. |
-| **Cancelada (Justificada)** | 🟡 | Ação cancelada pela gestão regional contendo fundamentação técnica registrada. |
+| Status de Execução | Marcador | Regra de Enquadramento Operacional | Impacto no Cálculo de Desempenho |
+| :--- | :---: | :--- | :--- |
+| **Planejada** | ⚪ | Ação ativa dentro do cronograma vigente, aguardando execução ou lançamento das missões. | Entra no denominador como meta ativa. |
+| **Executada** | 🟢 | Meta física atingida (≥ 80% da meta da UF ou esforço comprovado em qualitativas), com SEI registrado. | Pontua como meta cumprida (+1). |
+| **Não Executada - Sem Justificativa** | 🔴 | Prazo expirado sem atingir os 80% e sem justificativa técnica registrada. | Penaliza a taxa de sucesso da UF e gera alerta no mural. |
+| **Cancelada - Sem Justificativa** | 🔴 | Marcada como cancelada, porém com o campo de justificativa em branco. | Penaliza a taxa de sucesso da UF e gera alerta no mural. |
+| **Cancelada (Justificada)** | 🟡 | Cancelada pela gestão regional contendo fundamentação técnica registrada. | **Expurgada da base ativa:** não penaliza a UF nem o Brasil. |
 
 ### 7.4 Semáforo de Status das Atividades de Campo
 
@@ -274,18 +274,20 @@ Permite cadastrar missões conjuntas rapidamente:
 
 ## 11. Dashboards Executivos e Consolidação Nacional
 
-O módulo **`📈 Dashboards Executivos`** consolida o desempenho físico e financeiro do PNAPA em tempo real.
+O módulo **`📈 Dashboards Executivos`** consolida o desempenho físico e financeiro do PNAPA em tempo real com expurgo automático *Bottom-Up*.
 
 ### 11.1 Tabela 1: Status de Execução Geral do PNAPA (Por UF e Nacional)
-Avalia a taxa de sucesso das 27 UFs e do país com base na quantidade de ações que atingiram a régua de **≥ 80% de cumprimento físico**:
+Avalia a taxa de sucesso das 27 UFs e do país com base na quantidade de ações ativas que atingiram a régua de **≥ 80% de cumprimento físico**:
 
-> **% de Ações Executadas da UF** = `(Ações com Meta Atingida na UF / Total de Ações Planejadas pela UF) × 100%`
+> **% de Ações Executadas da UF** = `(Ações com Meta Atingida na UF / Ações Planejadas Ativas da UF) × 100%`
 
-* **Consolidado Global (NACIONAL):** Não é uma média simples das UFs. Uma ação nacional só pontua como cumprida se a soma das entregas de todos os estados atingir ≥ 80% da meta nacional somada:
+* **Regra de Expurgo *Bottom-Up*:** Ações classificadas como `Cancelada (Justificada)` são expurgadas do total de ações planejadas e de todas as metas agregadas. A UF não é penalizada no seu percentual de sucesso por contingências formalmente justificadas.
+* **Consolidado Global (NACIONAL):** Não é uma média simples das UFs. Uma ação nacional só pontua como cumprida se a soma das entregas de todos os estados atingir ≥ 80% da soma das metas propostas apenas pelas UFs que mantiveram a ação ativa:
 
-> **% de Ações Executadas Nacional** = `(Ações Nacionais com Meta Global ≥ 80% / Total de Ações Nacionais no País) × 100%`
+> **% de Ações Executadas Nacional** = `(Ações Nacionais Ativas com Meta Global ≥ 80% / Total de Ações Nacionais Ativas no País) × 100%`
 
-### 11.2 Régua Semafórica da Tabela 2 (Por Ação)
+### 11.2 Régua Semafórica da Tabela 2 (Por Ação Nacional)
+Apresenta o desempenho detalhado de cada ação do catálogo, recalculando metas e entregas dinamicamente conforme os filtros de UF:
 
 | Faixa Percentual | Cor de Fundo | Significado Operacional |
 | :--- | :---: | :--- |
@@ -293,6 +295,14 @@ Avalia a taxa de sucesso das 27 UFs e do país com base na quantidade de ações
 | **80,0% a 99,9%** | 🟢 **Verde** | **Meta Atingida (Faixa de Conformidade PNAPA)** |
 | **50,0% a 79,9%** | 🟡 **Amarelo** | **Execução Parcial / Atenção** |
 | **< 50,0%** | 🔴 **Vermelho** | **Execução Crítica / Insuficiente** |
+
+* **Reatividade Federativa:** Ao selecionar uma UF específica no topo, a tabela exibe unicamente a meta e o resultado daquele estado. Ao selecionar "Todos", a tabela consolida o somatório das UFs ativas no Brasil.
+
+### 11.3 Tabela 3: Mural de Pendências Críticas (Mural de Atenção)
+Quadro de auditoria automatizado que isola em vermelho todas as Ações que expiraram o prazo ou foram marcadas como canceladas **sem a inserção da respectiva justificativa técnica**. Serve como instrumento de cobrança ativa para que as Superintendências regularizem suas pendências documentais.
+
+### 11.4 Filtros Temporais e Cobertura do Ano Civil
+O filtro de período no Dashboard Executivo é parametrizado para cobrir o ano civil completo (**01/01 a 31/12** do exercício selecionado), assegurando que ações de encerramento de ano ou de longo prazo não sejam descartadas da consolidação.
 
 ---
 
