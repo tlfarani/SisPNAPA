@@ -3883,10 +3883,7 @@ elif modo == "➕ Inserir Nova Linha":
     # =================================================================
     # PROCESSAMENTO DO ENVIO: INDIVIDUAL OU EM LOTE
     # =================================================================
-    if btn_enviar_individual:
-        bloquear_envio = False
-        
-        if nivel_selecionado == "Ação":
+    if nivel_selecionado == "Ação":
             coord_op_final = ""
             cod_atv_final = ""
             
@@ -3894,11 +3891,14 @@ elif modo == "➕ Inserir Nova Linha":
             cod_comp = str(val_num_acao).strip().upper()
             uf_limpa = str(uf_filtro_pna).strip().upper()
             ano_alvo_str = str(val_ano).strip()
+            tema_limpo = str(tema).strip()
             
+            # Valida duplicidade considerando também o Tema da Atividade
             acao_estadual_ja_existe = df_atual[
                 (df_atual["Nível"].astype(str).str.strip() == "Ação") &
                 (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_limpa) &
                 (df_atual["Ano da Ação"].astype(str).str.split('.').str[0].str.strip() == ano_alvo_str) &
+                (df_atual["Tema da Atividade"].astype(str).str.strip() == tema_limpo) &
                 (
                     (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_comp) |
                     (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == f"{cod_puro}-{ano_alvo_str}") |
@@ -3907,7 +3907,7 @@ elif modo == "➕ Inserir Nova Linha":
             ]
             
             if not acao_estadual_ja_existe.empty:
-                st.error(f"⛔ **Ação Já Cadastrada:** A UF **{uf_limpa}** já possui planejamento registrado para a Ação **{val_num_acao}** no ano de **{ano_alvo_str}**. Para alterar o Ponto Focal, Papel ou Meta, utilize a tela de **📊 Visualizar Base**.")
+                st.error(f"⛔ **Ação e Tema Já Cadastrados:** A UF **{uf_limpa}** já possui planejamento registrado para a Ação **{val_num_acao}** no tema **{tema_limpo}** ({ano_alvo_str}). Para alterar o Ponto Focal, Papel ou Meta, utilize a tela de **📊 Visualizar Base**.")
                 bloquear_envio = True
 
         elif nivel_selecionado == "Atividade":
