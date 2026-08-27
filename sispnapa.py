@@ -3883,7 +3883,10 @@ elif modo == "➕ Inserir Nova Linha":
     # =================================================================
     # PROCESSAMENTO DO ENVIO: INDIVIDUAL OU EM LOTE
     # =================================================================
-    if nivel_selecionado == "Ação":
+    if btn_enviar_individual:
+        bloquear_envio = False
+        
+        if nivel_selecionado == "Ação":
             coord_op_final = ""
             cod_atv_final = ""
             
@@ -3893,7 +3896,7 @@ elif modo == "➕ Inserir Nova Linha":
             ano_alvo_str = str(val_ano).strip()
             tema_limpo = str(tema).strip()
             
-            # Valida duplicidade considerando também o Tema da Atividade
+            # Valida duplicidade considerando Ação + UF + Ano + Tema
             acao_estadual_ja_existe = df_atual[
                 (df_atual["Nível"].astype(str).str.strip() == "Ação") &
                 (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_limpa) &
