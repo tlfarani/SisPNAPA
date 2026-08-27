@@ -2093,18 +2093,28 @@ elif modo == "📊 Visualizar Base":
             if df_base_acoes.empty:
                 st.info("Nenhuma Ação Estadual cadastrada na base.")
             else:
-                # 1. CÁLCULO E PROPAGAÇÃO DO RESULTADO, % E STATUS DE EXECUÇÃO
+                # 1. CÁLCULO E PROPAGAÇÃO DO RESULTADO, % E STATUS DE EXECUÇÃO SEGMENTADO POR TEMA
                 df_atv_temp = df_trabalho[df_trabalho["Nível"].astype(str).str.strip() == "Atividade"].copy()
-                atv_concluidas_temp = df_atv_temp[df_atv_temp["Andamento"].astype(str).str.strip() == "Concluída"]
+                atv_concluidas_temp = df_atv_temp[df_atv_temp["Andamento"].astype(str).str.strip() == "Concluída"].copy()
                 
-                agg_atv_pna = atv_concluidas_temp.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA"]).agg(
+                # Padronização segura das chaves de agrupamento
+                for col_chave in ["Número da Ação PNAPA", "UF_Acao_PNAPA", "Tema da Atividade"]:
+                    df_base_acoes[col_chave] = df_base_acoes[col_chave].astype(str).str.strip()
+                    atv_concluidas_temp[col_chave] = atv_concluidas_temp[col_chave].astype(str).str.strip()
+                
+                agg_atv_pna = atv_concluidas_temp.groupby(["Número da Ação PNAPA", "UF_Acao_PNAPA", "Tema da Atividade"]).agg(
                     Resultado_Agregado=('Resultado_Indicador', lambda x: pd.to_numeric(x, errors='coerce').fillna(0).sum()),
                     Dias_Exec_Agregado=('Dias_Gastos_Exec', lambda x: pd.to_numeric(x, errors='coerce').fillna(0).sum())
                 ).reset_index()
-
-                df_base_acoes = pd.merge(df_base_acoes, agg_atv_pna, on=["Número da Ação PNAPA", "UF_Acao_PNAPA"], how="left")
-                df_base_acoes["Resultado_Agregado"] = df_base_acoes["Resultado_Agregado"].fillna(0)
-                df_base_acoes["Dias_Exec_Agregado"] = df_base_acoes["Dias_Exec_Agregado"].fillna(0)
+                
+                df_base_acoes = pd.merge(
+                    df_base_acoes, 
+                    agg_atv_pna, 
+                    on=["Número da Ação PNAPA", "UF_Acao_PNAPA", "Tema da Atividade"], 
+                    how="left"
+                )
+                df_base_acoes["Resultado_Agregado"] = df_base_acoes["Resultado_Agregado"].fillna(0.0)
+                df_base_acoes["Dias_Exec_Agregado"] = df_base_acoes["Dias_Exec_Agregado"].fillna(0.0)
                 df_base_acoes["Resultado_Indicador"] = df_base_acoes["Resultado_Agregado"]
 
                 def calc_pct_exec_acao_t1(row):
