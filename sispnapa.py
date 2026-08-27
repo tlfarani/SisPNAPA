@@ -2205,17 +2205,43 @@ elif modo == "📊 Visualizar Base":
                         filtros_ac["ano"] = ("Ano da Ação", f_ano_ac)
 
                         df_p_data = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "data")
-                        dts_validas_ac = df_p_data["Data_Inicio_Datetime"].dropna()
-                        min_dt_ac = dts_validas_ac.min().date() if not dts_validas_ac.empty else date(2025, 1, 1)
-                        max_dt_ac = dts_validas_ac.max().date() if not dts_validas_ac.empty else date(2026, 12, 31)
-                        if min_dt_ac >= max_dt_ac: max_dt_ac = min_dt_ac + pd.Timedelta(days=1)
                         
+                        # 🚀 Intervalo de datas seguro (Ano Civil Completo quando filtrado por ano)
+                        if f_ano_ac != "Todos" and str(f_ano_ac).isdigit():
+                            ano_int_ac = int(f_ano_ac)
+                            min_dt_ac = date(ano_int_ac, 1, 1)
+                            max_dt_ac = date(ano_int_ac, 12, 31)
+                        else:
+                            dts_validas_ac = df_p_data["Data_Inicio_Datetime"].dropna()
+                            if not dts_validas_ac.empty:
+                                min_dt_ac = date(int(dts_validas_ac.min().year), 1, 1)
+                                max_dt_ac = date(int(dts_validas_ac.max().year), 12, 31)
+                            else:
+                                min_dt_ac = date(2025, 1, 1)
+                                max_dt_ac = date(2027, 12, 31)
+
+                        if min_dt_ac >= max_dt_ac:
+                            max_dt_ac = min_dt_ac + pd.Timedelta(days=1)
+                        
+                        # 🚀 Reset automático do slider ao mudar o ano selecionado
+                        if st.session_state.get("last_ano_ac_sel") != f_ano_ac:
+                            st.session_state["last_ano_ac_sel"] = f_ano_ac
+                            st.session_state["f_slider_dts_ac"] = (min_dt_ac, max_dt_ac)
+
                         val_atual_sl = st.session_state.get("f_slider_dts_ac", (min_dt_ac, max_dt_ac))
                         v_start = max(min_dt_ac, min(val_atual_sl[0], max_dt_ac))
                         v_end = max(min_dt_ac, min(val_atual_sl[1], max_dt_ac))
-                        if v_start > v_end: v_start = min_dt_ac
+                        if v_start > v_end: 
+                            v_start = min_dt_ac
 
-                        f_slider_dts_ac = st.slider("Data de Início:", min_value=min_dt_ac, max_value=max_dt_ac, value=(v_start, v_end), format="DD/MM/YYYY")
+                        f_slider_dts_ac = st.slider(
+                            "Data de Início:", 
+                            min_value=min_dt_ac, 
+                            max_value=max_dt_ac, 
+                            value=(v_start, v_end), 
+                            format="DD/MM/YYYY",
+                            key="slider_dts_acoes_tab1"
+                        )
                         st.session_state["f_slider_dts_ac"] = f_slider_dts_ac
                         filtros_ac["data"] = ("Data_Inicio_Datetime", f_slider_dts_ac)
 
@@ -2622,18 +2648,40 @@ elif modo == "📊 Visualizar Base":
                         filtros_at["ano"] = ("Ano da Ação", f_ano_at)
 
                         df_p_data_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "data")
-                        dts_validas_at = df_p_data_at["Data_Inicio_Datetime"].dropna()
-                        min_dt_at = dts_validas_at.min().date() if not dts_validas_at.empty else date(2025, 1, 1)
-                        max_dt_at = dts_validas_at.max().date() if not dts_validas_at.empty else date(2026, 12, 31)
-                        if min_dt_at >= max_dt_at: max_dt_at = min_dt_at + pd.Timedelta(days=1)
+                        
+                        if f_ano_at != "Todos" and str(f_ano_at).isdigit():
+                            ano_int_at = int(f_ano_at)
+                            min_dt_at = date(ano_int_at, 1, 1)
+                            max_dt_at = date(ano_int_at, 12, 31)
+                        else:
+                            dts_validas_at = df_p_data_at["Data_Inicio_Datetime"].dropna()
+                            if not dts_validas_at.empty:
+                                min_dt_at = date(int(dts_validas_at.min().year), 1, 1)
+                                max_dt_at = date(int(dts_validas_at.max().year), 12, 31)
+                            else:
+                                min_dt_at = date(2025, 1, 1)
+                                max_dt_at = date(2027, 12, 31)
+
+                        if min_dt_at >= max_dt_at:
+                            max_dt_at = min_dt_at + pd.Timedelta(days=1)
+
+                        if st.session_state.get("last_ano_at_sel") != f_ano_at:
+                            st.session_state["last_ano_at_sel"] = f_ano_at
+                            st.session_state["f_slider_dts_at"] = (min_dt_at, max_dt_at)
 
                         val_atual_sl_at = st.session_state.get("f_slider_dts_at", (min_dt_at, max_dt_at))
                         v_start_at = max(min_dt_at, min(val_atual_sl_at[0], max_dt_at))
                         v_end_at = max(min_dt_at, min(val_atual_sl_at[1], max_dt_at))
-                        if v_start_at > v_end_at: v_start_at = min_dt_at
+                        if v_start_at > v_end_at: 
+                            v_start_at = min_dt_at
 
                         f_slider_dts_at = st.slider(
-                            "Data de Início:", min_value=min_dt_at, max_value=max_dt_at, value=(v_start_at, v_end_at), format="DD/MM/YYYY"
+                            "Data de Início:", 
+                            min_value=min_dt_at, 
+                            max_value=max_dt_at, 
+                            value=(v_start_at, v_end_at), 
+                            format="DD/MM/YYYY",
+                            key="slider_dts_atvs_tab2"
                         )
                         st.session_state["f_slider_dts_at"] = f_slider_dts_at
                         filtros_at["data"] = ("Data_Inicio_Datetime", f_slider_dts_at)
