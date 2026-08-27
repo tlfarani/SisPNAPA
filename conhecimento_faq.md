@@ -51,7 +51,7 @@ O SisPNAPA organiza o planejamento e a execução das emergências ambientais em
 
 ### 2.1 O que é a Ação Nacional (Nível 1 - Estratégico)?
 * É a diretriz mestre definida pela Coordenação-Geral de Emergências Ambientais (Ceneac/Sede).
-* Fica cadastrada no Catálogo Oficial (`Acoes_PNAPA`) e define o **Código Nacional** (ex: `CEN001`), o Especialista Responsável na Sede (**Dono da Ação**), o **Teto Orçamentário Ceneac**, a meta física global e a unidade de medida do indicador padrão.
+* Fica cadastrada no Catálogo Oficial (`Acoes_PNAPA`) e define o **Código Nacional** (ex: `CEN001` ou `CEN02`), o Especialista Responsável na Sede (**Dono da Ação**), o **Teto Orçamentário Ceneac**, a meta física global e a unidade de medida do indicador padrão.
 
 ### 2.2 O que é a Ação Estadual (Nível 2 - Tático / Macro)?
 * É o compromisso formal de planejamento assumido por uma UF dentro do ciclo anual (ex: 2026 ou 2027).
@@ -59,18 +59,25 @@ O SisPNAPA organiza o planejamento e a execução das emergências ambientais em
   * A **Meta Quantitativa da UF** para o indicador.
   * O **Papel Institucional do Estado** (`Coordenação` ou `Apoio`).
   * O **Ponto Focal Estadual** (Coordenador responsável na regional).
+  * O **Tema Predominante** (ex: `Rodovias`, `Ferrovias`, `Portos`, `Dutos`).
   * A **Previsão Orçamentária Macro** da UF (Diárias, Passagens e Outras Despesas).
-* Uma Ação Estadual funciona como a "Ação Pai" que agrupa todas as missões operacionais realizadas naquele estado.
+* Uma Ação Estadual funciona como a "Ação Pai" que agrupa todas as missões operacionais realizadas naquele estado para aquela tipologia.
 
 ### 2.3 O que são as Atividades de Campo (Nível 3 - Operacional / Micro)?
 * São as missões reais realizadas no terreno ou nos núcleos (vistorias técnicas, fiscalizações, reuniões interinstitucionais, treinamentos, simulados).
 * Cada atividade é vinculada obrigatoriamente a uma Ação Estadual pai.
-* Registra os servidores escalados, esforço em dias, diárias pagas, custos de passagens e o número do processo SEI comprobatório.
+* Registra os servidores escalados, esforço em dias, diárias pagas, custos de passagens e o **número do processo SEI comprobatório**.
 
 ### 2.4 Como funciona o Código Inteligente da Atividade?
 As atividades recebem um código padronizado gerado automaticamente:
 > **Formato:** `[Código_Ação]-[Ano]-[UF]-ATV[Sequencial]`
-* *Exemplo:* A terceira missão da ação `CEN001` no estado de São Paulo em 2027 recebe automaticamente o identificador **`CEN001-2027-SP-ATV03`**.
+* *Exemplo:* A terceira missão da ação `CEN02-2027` no estado de São Paulo recebe automaticamente o identificador **`CEN02-2027-SP-ATV03`**.
+
+### 2.5 Proposta de Consolidação em 11 Macro-Ações e Múltiplas Linhas por Tema (Opção em Validação com o Ceneac)
+Para o ciclo 2027, está em análise junto ao Ceneac a transição do modelo hiperfragmentado de 55 Ações para **11 Macro-Ações Estratégicas Nacionais**:
+* **Arquitetura em Cascata:** A Diretoria acompanha os indicadores agregados (ex: *Total de Unidades de Transporte Fiscalizadas*), enquanto os especialistas setoriais acompanham as metas segmentadas por modal/tema.
+* **Múltiplas Linhas de Planejamento na UF:** O sistema está parametrizado para permitir que uma mesma UF cadastre **duas ou mais linhas da mesma Ação**, desde que com **Temas diferentes** (ex: uma linha para `CEN02` com Tema `Rodovias` para TRPP e outra linha para `CEN02` com Tema `Ferrovias` para TFPP).
+* **Validação de Cadastro:** O formulário de inserção bloqueia duplicidades apenas se houver tentativa de cadastrar exatamente a mesma Ação, UF, Ano e Tema.
 
 ---
 
@@ -184,10 +191,11 @@ Dentro de cada ação, a aba **`⏳ Estados Sem Proposta Registrada`** cruza a b
 
 O menu **📊 Visualizar Base** é estruturado em duas subpáginas especializadas:
 
-### 6.1 Subpágina 1: Ações Estaduais (Planejamento & Metas)
-Dedicada à gestão macro do plano na regional:
-* Apresenta o indicador, a meta quantitativa da UF, o resultado físico consolidado e a barra de `% de Execução`.
-* **Painel de Edição da Ação:** Permite alterar o Papel (`Coordenação` / `Apoio`), a UF da Ação e o Ponto Focal Estadual com recarga dinâmica reativa (*callback*) de equipe na **Aba 1 (Governança Estadual)**.
+### 6.1 Subpágina 1: Ações Estaduais (Planejamento & Metas Segmentadas por Tema)
+Dedicada à gestão analítica do plano na regional:
+* **Segmentação por Modal / Tema:** Cada linha de planejamento da UF agrega e calcula o seu `% de Execução` cruzando `[Número da Ação PNAPA, UF_Acao_PNAPA, Tema da Atividade]`. Assim, uma linha de Rodovias exibe estritamente os resultados de atividades rodoviárias, enquanto uma linha de Ferrovias exibe apenas os resultados ferroviários.
+* **Trava Documental SEI:** Atividades concluídas que não possuem número de processo SEI cadastrado pontuam **zero** no resultado físico da ação estadual.
+* **Painel de Edição da Ação:** Permite alterar o Papel (`Coordenação` / `Apoio`), a UF da Ação, o Ponto Focal Estadual e as metas com recarga dinâmica reativa de equipe na **Aba 1 (Governança Estadual)**.
 
 ### 6.2 Subpágina 2: Atividades de Campo (Operações & Execução)
 Dedicada à gestão micro das missões:
@@ -200,12 +208,12 @@ Dedicada à gestão micro das missões:
 
 ### 7.1 Como o SisPNAPA calcula o cumprimento de uma Ação Estadual?
 O sistema avalia o atingimento da meta da Ação Estadual (Nível 2) a partir do somatório das entregas registradas nas Atividades de Campo (Nível 3) concluídas:
-* **Ações com Indicador Numérico:** Ação cumprida quando o somatório das atividades com documento atinge **≥ 80% da Meta Planejada da UF**.
+* **Ações com Indicador Numérico:** Ação cumprida quando o somatório das atividades homologadas com SEI atinge **≥ 80% da Meta Planejada da UF**.
 * **Ações Qualitativas / Continuadas (Meta = 0):** Ação cumprida se houver esforço comprovado (`Dias_Gastos_Exec > 0`) e ao menos uma atividade finalizada com processo SEI.
 
-### 7.2 A Obrigatoriedade do Processo SEI (`Doc_Probatorio_Exec`)
-Nenhuma atividade é homologada sem a inserção do número de processo ou documento probatório no SEI (Relatório de Viagem, Informação Técnica, Termo de Vistoria):
-* **Sem SEI:** A atividade permanece como *🟡 Sem Documento de Conclusão*, não pontua para o cumprimento da meta da Ação e gera pendência de auditoria.
+### 7.2 A Obrigatoriedade Estrita do Processo SEI (`Doc_Probatorio_Exec`)
+Nenhuma entrega física é computada sem a inserção do número de processo ou documento probatório no SEI (Relatório de Viagem, Informação Técnica, Termo de Vistoria):
+* **Atividade com SEI em branco:** É enquadrada visualmente como *🟡 Sem Documento de Conclusão*, gera pendência documental e **tem seu resultado físico desconsiderado (zero)** em todas as tabelas de metas do sistema.
 
 ### 7.3 Semáforo de Status das Ações Estaduais
 
@@ -222,7 +230,7 @@ Nenhuma atividade é homologada sem a inserção do número de processo ou docum
 | Status da Atividade | Marcador | Descrição e Validação |
 | :--- | :---: | :--- |
 | **Concluída** | 🟢 | Atividade executada e com o processo SEI preenchido no campo `Doc_Probatorio_Exec`. |
-| **Sem Documento de Conclusão** | 🟡 | Atividade marcada como concluída, mas com o campo SEI vazio (pendência documental). |
+| **Sem Documento de Conclusão** | 🟡 | Atividade marcada como concluída, mas com o campo SEI vazio (não pontua fisicamente). |
 | **Prevista** | 🔵 | Missão programada dentro da janela temporal de execução. |
 | **Atrasada** | 🔴 | Data de término expirada sem conclusão ou justificativa registrada no sistema. |
 
@@ -281,8 +289,9 @@ Avalia a taxa de sucesso das 27 UFs e do país com base na quantidade de ações
 
 > **% de Ações Executadas da UF** = `(Ações com Meta Atingida na UF / Ações Planejadas Ativas da UF) × 100%`
 
-* **Regra de Expurgo *Bottom-Up*:** Ações classificadas como `Cancelada (Justificada)` são expurgadas do total de ações planejadas e de todas as metas agregadas. A UF não é penalizada no seu percentual de sucesso por contingências formalmente justificadas.
-* **Consolidado Global (NACIONAL):** Não é uma média simples das UFs. Uma ação nacional só pontua como cumprida se a soma das entregas de todos os estados atingir ≥ 80% da soma das metas propostas apenas pelas UFs que mantiveram a ação ativa:
+* **Fungibilidade da Meta Institucional:** Se uma UF planejou múltiplas linhas para a mesma Ação macro (ex: Rodovias e Ferrovias), a Tabela 1 consolida as metas e entregas sob o código-base da Ação. O superávit de um modal compensa o déficit de outro, protegendo a taxa de sucesso estadual e a nota de desempenho funcional.
+* **Regra de Expurgo *Bottom-Up*:** Ações classificadas como `Cancelada (Justificada)` são expurgadas do total de ações planejadas e de todas as metas agregadas. A UF não é penalizada por contingências formalmente justificadas.
+* **Consolidado Global (NACIONAL):** Uma ação nacional só pontua como cumprida se a soma das entregas de todos os estados atingir ≥ 80% da soma das metas propostas apenas pelas UFs que mantiveram a ação ativa:
 
 > **% de Ações Executadas Nacional** = `(Ações Nacionais Ativas com Meta Global ≥ 80% / Total de Ações Nacionais Ativas no País) × 100%`
 
@@ -296,13 +305,14 @@ Apresenta o desempenho detalhado de cada ação do catálogo, recalculando metas
 | **50,0% a 79,9%** | 🟡 **Amarelo** | **Execução Parcial / Atenção** |
 | **< 50,0%** | 🔴 **Vermelho** | **Execução Crítica / Insuficiente** |
 
-* **Reatividade Federativa:** Ao selecionar uma UF específica no topo, a tabela exibe unicamente a meta e o resultado daquele estado. Ao selecionar "Todos", a tabela consolida o somatório das UFs ativas no Brasil.
+* **Reatividade Federativa:** Ao selecionar uma UF específica no topo, a tabela exibe unicamente a meta e o resultado daquele estado. Ao selecionar "Todos", consolida o somatório das UFs ativas no Brasil.
 
 ### 11.3 Tabela 3: Mural de Pendências Críticas (Mural de Atenção)
-Quadro de auditoria automatizado que isola em vermelho todas as Ações que expiraram o prazo ou foram marcadas como canceladas **sem a inserção da respectiva justificativa técnica**. Serve como instrumento de cobrança ativa para que as Superintendências regularizem suas pendências documentais.
+Quadro de auditoria automatizado que isola em vermelho todas as Ações que expiraram o prazo ou foram marcadas como canceladas **sem a inserção da respectiva justificativa técnica**, orientando a cobrança ativa pelas chefias.
 
-### 11.4 Filtros Temporais e Cobertura do Ano Civil
-O filtro de período no Dashboard Executivo é parametrizado para cobrir o ano civil completo (**01/01 a 31/12** do exercício selecionado), assegurando que ações de encerramento de ano ou de longo prazo não sejam descartadas da consolidação.
+### 11.4 Filtros Responsivos e Cobertura Temporal do Ano Civil
+* **Unificação de Ações e UFs:** Os filtros superiores de `UF da Ação`, `Ação PNAPA`, `Tema`, `Importância`, `Objetivo` e `Tipo` unificam automaticamente registros de **Atividades** e de **Ações Planejadas**. UFs com planejamento recém-lançado aparecem de imediato nas opções.
+* **Cobertura do Ano Civil Completo:** Os seletores e controles deslizantes de período ajustam o intervalo dinamicamente para o ano civil completo (**01/01 a 31/12** do exercício), com reset automático ao alternar o ano para evitar truncamento de dados.
 
 ---
 
