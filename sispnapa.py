@@ -4994,6 +4994,15 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 cod_mae_final = ""
                 nivel_final = "Estratégica (Macro)"
                 nova_importancia = "Estratégica"  # 💎 Fixa para Nível 1
+                novo_tema_pna = "Multimodal / Geral"  # 🚀 Padrão automático para Macro
+                
+                # Exibe apenas o Objetivo Predominante
+                novo_obj_pna = st.selectbox(
+                    "Objetivo Estratégico Predominante:", 
+                    LISTA_OBJETIVOS, 
+                    key="cad_pna_obj_macro",
+                    help="Define o ciclo da gestão de risco atendido por esta Ação PNAPA."
+                )
                 
                 c_mt1, c_mt2 = st.columns(2)
                 with c_mt1:
