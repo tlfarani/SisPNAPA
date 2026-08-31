@@ -998,12 +998,8 @@ else:
         acesso_liberado = True
         st.sidebar.success("👑 Administrador Conectado")
     elif perfil_usuario == "Editor Regional":
-        token_digitado = st.sidebar.text_input("Token de Editor Regional:", type="password")
-        if token_digitado and token_digitado == token_correto:
-            acesso_liberado = True
-            st.sidebar.success(f"🔓 Editor Regional ({uf_usuario})")
-        elif token_digitado:
-            st.sidebar.error("❌ Token incorreto.")
+        acesso_liberado = True
+        st.sidebar.success(f"🔓 Editor Regional ({uf_usuario})")
     else:
         st.sidebar.info("👁️ Perfil: Somente Visualização")
 
@@ -1592,11 +1588,10 @@ if modo == "📈 Dashboards Executivos":
         # =====================================================================
         # 4. NAVEGAÇÃO POR ABAS TEMÁTICAS
         # =====================================================================
-        tab_exec, tab_oper, tab_gov, tab_desemp = st.tabs([
+        tab_exec, tab_oper, tab_gov = st.tabs([
             "📊 Visão Executiva (Nacional)", 
             "🗓️ Operações & Calendário", 
-            "⚖️ Governança & Carga (Ações)", 
-            "⭐ Desempenho de Equipes"
+            "⚖️ Governança & Carga (Ações)"
         ])
 
         # ---------------------------------------------------------------------
@@ -2631,12 +2626,25 @@ elif modo == "📊 Visualizar Base":
                         with aba2_ac:
                             st.text_input("Indicador Oficial", value=val_indicador_ac, disabled=True, key=f"t1_ac_ind_{id_ac_ref}")
                             meta_val_ac = obter_float_limpo(reg_ac_alvo.get("Meta_Indicador", 1.0))
-                            ed_meta_ac = st.number_input(f"Meta da Ação para a UF ({uf_acao_val}):", min_value=0.0, value=meta_val_ac, step=1.0, key=f"t1_ac_meta_{id_ac_ref}")
+                            ed_meta_ac = st.number_input(f"Meta da Ação Setorial para a UF ({uf_acao_val}):", min_value=0.0, value=meta_val_ac, step=1.0, key=f"t1_ac_meta_{id_ac_ref}")
                             
-                            st.text_input("Importância", value=importancia_ac, disabled=True, key=f"t1_ac_imp_{id_ac_ref}")
-                            ed_tema_ac = st.selectbox("Tema da Atividade:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_ac_alvo["Tema da Atividade"]) if reg_ac_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_ac_tema_{id_ac_ref}")
+                            st.text_input("Classificação da Ação Setorial", value=importancia_ac, disabled=True, key=f"t1_ac_imp_{id_ac_ref}")
+                            ed_tema_ac = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_ac_alvo["Tema da Atividade"]) if reg_ac_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_ac_tema_{id_ac_ref}")
                             ed_obj_ac = st.selectbox("Objetivo:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(reg_ac_alvo["Objetivo da Atividade"]) if reg_ac_alvo.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key=f"t1_ac_obj_{id_ac_ref}")
-                            ed_tipo_ac = st.selectbox("Tipo:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_ac_alvo["Tipo de Atividade"]) if reg_ac_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_ac_tipo_{id_ac_ref}")
+                            ed_tipo_ac = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_ac_alvo["Tipo de Atividade"]) if reg_ac_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_ac_tipo_{id_ac_ref}")
+
+                            # 📍 Geolocalização na Edição da Ação Setorial
+                            st.markdown("<p style='font-weight:bold; margin-top:12px; color:#03170a;'>📍 Local de Realização da Ação Setorial</p>", unsafe_allow_html=True)
+                            uf_oc_ac_atual = str(reg_ac_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", uf_acao_val)).strip()
+                            idx_uf_oc_ac = LISTA_UFS_COMPLETA.index(uf_oc_ac_atual) if uf_oc_ac_atual in LISTA_UFS_COMPLETA else 0
+                            ed_uf_oc_ac = st.selectbox("UF do Local de Realização:", LISTA_UFS_COMPLETA, index=idx_uf_oc_ac, key=f"t1_ac_ufoc_{id_ac_ref}")
+                            ed_est_loc_ac = MAPEAMENTO_ESTADOS_COMPLETO.get(ed_uf_oc_ac, "")
+                            st.text_input("Estado de Realização (Automático):", value=ed_est_loc_ac, disabled=True, key=f"t1_ac_estoc_{id_ac_ref}")
+                            
+                            mun_lista_ac = obter_municipios_ibge(ed_uf_oc_ac)
+                            mun_atual_ac = str(reg_ac_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
+                            idx_mun_ac = mun_lista_ac.index(mun_atual_ac) if mun_atual_ac in mun_lista_ac else 0
+                            ed_mun_ac = st.selectbox("Município Polo / Local de Realização:", mun_lista_ac if mun_lista_ac else ["Superintendência Sede"], index=idx_mun_ac, key=f"t1_ac_mun_{id_ac_ref}")
                                                   
                         with aba4_ac:
                             val_dti_ac = converter_para_data_segura(reg_ac_alvo.get("Data de Início"))
@@ -2682,11 +2690,11 @@ elif modo == "📊 Visualizar Base":
                                     st.stop()
 
                             payload_ac = payload_gerador(
-                                val_ano_ac, val_num_acao_ac, val_nome_acao_ac, val_indicador_ac, "Ação",
+                                val_ano_ac, val_num_acao_ac, val_nome_acao_ac, val_indicador_ac, "Ação Setorial",
                                 "", ed_andamento_ac, "", "", uf_acao_val,
                                 importancia_ac, ed_tema_ac, ed_obj_ac, ed_tipo_ac, "Não se Aplica", ed_servidor_ac,
-                                ed_uf_srv_ac, ed_lot_ac, ed_eq_ac, "", "Brasil", "",
-                                "", "", ed_dt_i_ac, ed_dt_f_ac, ed_dias_pl_ac, 0.0,
+                                ed_uf_srv_ac, ed_lot_ac, ed_eq_ac, "", "Brasil", ed_uf_oc_ac,
+                                ed_est_loc_ac, ed_mun_ac, ed_dt_i_ac, ed_dt_f_ac, ed_dias_pl_ac, 0.0,
                                 ed_orig_ac, ed_rp_d_ac, ed_rp_p_ac, ed_rp_o_ac, 0.0,
                                 0.0, 0.0, ed_obs_ac, ed_just_ac, id_ac_ref, "📝 Editar Linha Existente", df_atual,
                                 papel_institucional=ed_papel_inst, coordenador_operacao="", meta_indicador=ed_meta_ac,
@@ -3796,9 +3804,28 @@ elif modo == "➕ Inserir Nova Linha":
                         uf_servidor, lotacao, equipe_emergencia = uf_filtro_pna, "Sede Superintendência", "Sim"
                         cad_fiscal, cad_aeac, cad_funcao_srv = "Não", "Não", ""
                 else:
-                    st.info(f"ℹ️ **Atuação em Apoio:** A UF ({uf_filtro_pna}) não indicará Coordenador Estadual.")
+                    st.info(f"ℹ️ **Atuação em Apoio:** A UF ({uf_filtro_pna}) fornecerá apoio técnico/operacional.")
                     servidor, uf_servidor, lotacao, equipe_emergencia = "", "", "", "Não"
                     cad_fiscal, cad_aeac, cad_funcao_srv = "Não", "Não", ""
+
+            # 📍 GEOLOCALIZAÇÃO DA AÇÃO SETORIAL
+            st.markdown("##### 📍 Local de Realização da Ação Setorial")
+            c_loc_ac1, c_loc_ac2, c_loc_ac3 = st.columns(3)
+            with c_loc_ac1:
+                idx_uf_dest = LISTA_UFS_COMPLETA.index(uf_filtro_pna) if uf_filtro_pna in LISTA_UFS_COMPLETA else 0
+                uf_ocorrencia = st.selectbox(
+                    "UF do Local de Realização (Destino):", 
+                    LISTA_UFS_COMPLETA, 
+                    index=idx_uf_dest, 
+                    key="pna_uf_ocorrencia_acao",
+                    help="Caso seja uma missão em apoio a outro estado, selecione a UF onde a operação será realizada."
+                )
+            with c_loc_ac2:
+                estado_local = MAPEAMENTO_ESTADOS_COMPLETO.get(uf_ocorrencia, "")
+                st.text_input("Estado de Realização (Automático):", value=estado_local, disabled=True, key="pna_est_local_acao_dis")
+            with c_loc_ac3:
+                lista_muns_ac = obter_municipios_ibge(uf_ocorrencia)
+                municipio = st.selectbox("Município Polo / Local:", lista_muns_ac if lista_muns_ac else ["Superintendência Sede"], key="pna_mun_ocorrencia_acao")
 
             lista_andamentos_acao = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
             try: idx_and = lista_andamentos_acao.index(registro_selecionado["Andamento"]) if registro_selecionado is not None else 0
@@ -3854,13 +3881,13 @@ elif modo == "➕ Inserir Nova Linha":
             with c_dt2:
                 dt_termino = st.date_input("Data de Término:", value=val_dt_termino, format="DD/MM/YYYY", key="pna_dt_fim_acao")
             
-            # 🚀 Nome amigável de dias planejados:
-            dias_plan = st.number_input("Dias de Dedicação Planejados:", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
+            dias_plan = st.number_input("Dias Planejados (Esforço):", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
             
             idx_origem_padrao = LISTA_ORIGENS_RECURSO.index(uf_filtro_pna) if uf_filtro_pna in LISTA_ORIGENS_RECURSO else 0
             origem_recurso = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=idx_origem_padrao, key="pna_orig_acao")
             
             st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
+            
             rec_p_diarias = st.number_input("Recursos Planejados — Diárias (R$):", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), step=50.0, format="%.2f", key="pna_rpd_acao")
             rec_p_passagens = st.number_input("Recursos Planejados — Passagens (R$):", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), step=50.0, format="%.2f", key="pna_rpp_acao")
             rec_p_outras = st.number_input("Recursos Planejados — Outras Despesas (R$):", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), step=50.0, format="%.2f", key="pna_rpo_acao")
@@ -3875,10 +3902,12 @@ elif modo == "➕ Inserir Nova Linha":
             else:
                 justificativa = ""
 
+        # Define apenas as variáveis de Atividade que não existem na Ação Setorial
+        pais = "Brasil"
+        dias_exec = 0.0
+        rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
         nome_atividade, resultado_indicador, doc_probatorio, periculosidade = "", "", "", "Não se Aplica"
         coordenador_operacao, num_pcdp, codigo_atividade = "", "", ""
-        pais, uf_ocorrencia, estado_local, municipio, dias_exec = "Brasil", "", "", "", 0.0
-        rec_e_diarias, rec_e_passagens, rec_e_outras = 0.0, 0.0, 0.0
 
     # =================================================================
     # CONDICIONAL: SE FOR ATIVIDADE (OPERACIONAL / CAMPO)
@@ -4064,16 +4093,16 @@ elif modo == "➕ Inserir Nova Linha":
             st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=equipe_emergencia, disabled=True)
             num_pcdp = st.text_input("Número da PCDP", value=str(registro_selecionado["Número da PCDP"]) if registro_selecionado is not None else "", key="atv_num_pcdp")
             
-            st.markdown("<p style='font-weight: bold; margin-top:10px; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
-            pais = st.text_input("País", value="Brasil", disabled=True)
+            st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>📍 Local de Realização da Missão / Atividade</p>", unsafe_allow_html=True)
+            pais = st.text_input("País (Automático):", value="Brasil", disabled=True)
             
             idx_uf_oc = LISTA_UFS_COMPLETA.index(uf_filtro_pna) if uf_filtro_pna in LISTA_UFS_COMPLETA else 0
-            uf_ocorrencia = st.selectbox("UF Onde Ocorreu/Ocorrerá a Ação", LISTA_UFS_COMPLETA, index=idx_uf_oc, key="atv_sel_uf_ocorrencia")
-            estado_local = MAPEAMENTO_ESTADOS_COMPLETO[uf_ocorrencia]
-            st.text_input("Estado_Local_Acao (Automático)", value=estado_local, disabled=True)
+            uf_ocorrencia = st.selectbox("UF do Local de Realização:", LISTA_UFS_COMPLETA, index=idx_uf_oc, key="atv_sel_uf_ocorrencia")
+            estado_local = MAPEAMENTO_ESTADOS_COMPLETO.get(uf_ocorrencia, "")
+            st.text_input("Estado de Realização (Automático):", value=estado_local, disabled=True, key="atv_txt_est_oc")
             
             lista_municipios_uf = obter_municipios_ibge(uf_ocorrencia)
-            municipio = st.selectbox("Municipio Onde Ocorreu/Ocorrerá a Ação", lista_municipios_uf if lista_municipios_uf else ["Superintendência Sede"], key="atv_sel_municipio")
+            municipio = st.selectbox("Município Polo / Local de Realização:", lista_municipios_uf if lista_municipios_uf else ["Superintendência Sede"], key="atv_sel_municipio")
 
         with aba4:
             c_dt1, c_dt2 = st.columns(2)
@@ -4711,9 +4740,9 @@ elif modo == "👥 Gerenciar Equipes":
             val_atual_lotacao = str(dados_atuais_srv.get("Lotacao", "")).strip()
             val_atual_funcao = str(dados_atuais_srv.get("Funcao", "")).strip()
             val_atual_token = str(dados_atuais_srv.get("Token", "")).strip()
-            val_atual_emerg = str(dados_atuais_srv.get("Faz parte de Equipe de Emergências?", "Não")).strip().capitalize()
-            val_atual_fiscal = str(dados_atuais_srv.get("É Fiscal?", "Não")).strip().capitalize()
-            val_atual_aeac = str(dados_atuais_srv.get("É Agente de Emergências Ambientais e Climáticas?", "Não")).strip().capitalize()
+            val_atual_emerg = str(dados_atuais_srv.get("Equipe_Emergencias", "Não")).strip().capitalize()
+            val_atual_fiscal = str(dados_atuais_srv.get("Fiscal", "Não")).strip().capitalize()
+            val_atual_aeac = str(dados_atuais_srv.get("AEAC", "Não")).strip().capitalize()
             val_atual_perfil = str(dados_atuais_srv.get("Perfil", "Visualização")).strip()
 
             st.markdown(f"#### 👤 Ficha Cadastral: **{val_atual_nome}** `(ID: {id_srv_edit})`")
