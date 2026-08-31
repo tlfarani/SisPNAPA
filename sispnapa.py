@@ -2624,14 +2624,19 @@ elif modo == "📊 Visualizar Base":
                                     for avs in dados_term_ac_ed["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
 
                         with aba2_ac:
-                            st.text_input("Indicador Oficial", value=val_indicador_ac, disabled=True, key=f"t1_ac_ind_{id_ac_ref}")
+                            st.text_input("Indicador Oficial (Herdado)", value=val_indicador_ac, disabled=True, key=f"t1_ac_ind_{id_ac_ref}_{val_num_acao_ac}")
                             meta_val_ac = obter_float_limpo(reg_ac_alvo.get("Meta_Indicador", 1.0))
                             ed_meta_ac = st.number_input(f"Meta da Ação Setorial para a UF ({uf_acao_val}):", min_value=0.0, value=meta_val_ac, step=1.0, key=f"t1_ac_meta_{id_ac_ref}")
                             
-                            st.text_input("Classificação da Ação Setorial", value=importancia_ac, disabled=True, key=f"t1_ac_imp_{id_ac_ref}")
+                            st.text_input("Classificação da Ação Setorial (Herdada)", value=importancia_ac, disabled=True, key=f"t1_ac_imp_{id_ac_ref}_{val_num_acao_ac}")
+                            
                             ed_tema_ac = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_ac_alvo["Tema da Atividade"]) if reg_ac_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_ac_tema_{id_ac_ref}")
-                            ed_obj_ac = st.selectbox("Objetivo:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(reg_ac_alvo["Objetivo da Atividade"]) if reg_ac_alvo.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key=f"t1_ac_obj_{id_ac_ref}")
-                            ed_tipo_ac = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_ac_alvo["Tipo de Atividade"]) if reg_ac_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_ac_tipo_{id_ac_ref}")
+                            
+                            obj_ac_atual = str(reg_ac_alvo.get("Objetivo da Atividade", "Prevenção e Gestão de Riscos")).strip()
+                            st.text_input("Objetivo Estratégico (Herdado):", value=obj_ac_atual, disabled=True, key=f"t1_ac_obj_dis_{id_ac_ref}_{val_num_acao_ac}")
+                            ed_obj_ac = obj_ac_atual
+                            
+                            ed_tipo_ac = st.selectbox("Tipo de Atividade Padrão:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_ac_alvo["Tipo de Atividade"]) if reg_ac_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_ac_tipo_{id_ac_ref}")
 
                             # 📍 Geolocalização na Edição da Ação Setorial
                             st.markdown("<p style='font-weight:bold; margin-top:12px; color:#03170a;'>📍 Local de Realização da Ação Setorial</p>", unsafe_allow_html=True)
@@ -3079,8 +3084,13 @@ elif modo == "📊 Visualizar Base":
                                 val_num_acao_at = str(dados_novo_pai.get("Acao_Ano", dados_novo_pai["Num_Acao_PNAPA"]))
                                 apel_tmp = str(dados_novo_pai.get("Nome_Acao_Apelido", ""))
                                 val_nome_acao_at = apel_tmp if apel_tmp and apel_tmp.lower() != "nan" else str(dados_novo_pai.get("Nome_Acao_Completo", "")).strip()
+                                
+                                # 🚀 EXTRAÇÃO DA HERANÇA DIRETA DA AÇÃO
                                 val_indicador_at = str(dados_novo_pai["Indicador"])
-                                importancia_at = str(dados_novo_pai.get("Importância", "Ordinária")).strip()
+                                imp_raw = str(dados_novo_pai.get("Importância", "Ordinária")).strip()
+                                importancia_at = "Rotina" if imp_raw in ["Rotina", "Ordinária"] else "Finalística"
+                                tema_herdado_at = str(dados_novo_pai.get("Tema_Padrao", "Outros temas")).strip()
+                                objetivo_herdado_at = str(dados_novo_pai.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
 
                             c_pna1, c_pna2 = st.columns(2)
                             with c_pna1: st.text_input("Ano da Ação", value=str(val_ano_at), disabled=True, key=f"t1_at_ano_{id_at_ref}")
@@ -3156,10 +3166,10 @@ elif modo == "📊 Visualizar Base":
 
                         
                         with aba2_at:
-                            st.text_input("Indicador Oficial", value=val_indicador_at, disabled=True, key=f"t1_at_ind_{id_at_ref}")
+                            # 🚀 Keys com val_num_acao_at forçam a recarga instantânea na troca da Ação
+                            st.text_input("Indicador Oficial (Herdado)", value=val_indicador_at, disabled=True, key=f"t1_at_ind_{id_at_ref}_{val_num_acao_at}")
                             ed_res_ind_at = st.text_input("Resultado do Indicador (Aferição Real):", value=str(reg_at_alvo.get("Resultado_Indicador", "")), key=f"t1_at_resind_{id_at_ref}")
                             
-                            # 🚀 Nome amigável do documento SEI:
                             ed_doc_at = st.text_input("Número SEI do Documento Probatório de Execução:", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
                             
                             if perfil_usuario == "Administrador":
@@ -3168,11 +3178,16 @@ elif modo == "📊 Visualizar Base":
                             else:
                                 ed_uf_acao_val = st.text_input("UF da Ação PNAPA", value=uf_acao_at, disabled=True, key=f"t1_at_uf_dis_{id_at_ref}")
 
-                            st.text_input("Importância da Atividade (Herdada)", value=importancia_at, disabled=True, key=f"t1_at_imp_{id_at_ref}")
-                            ed_tema_at = st.selectbox("Tema da Atividade:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_at_alvo["Tema da Atividade"]) if reg_at_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_at_tema_{id_at_ref}")
-                            ed_obj_at = st.selectbox("Objetivo da Atividade:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(reg_at_alvo["Objetivo da Atividade"]) if reg_at_alvo.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key=f"t1_at_obj_{id_at_ref}")
-                            ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo["Tipo de Atividade"]) if reg_at_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
-                            ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo["Periculosidade/Insalubridade"]) if reg_at_alvo.get("Periculosidade/Insalubridade") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
+                            st.text_input("Classificação da Atividade (Herdada)", value=importancia_at, disabled=True, key=f"t1_at_imp_{id_at_ref}_{val_num_acao_at}")
+                            
+                            c_atv_t1, c_atv_t2 = st.columns(2)
+                            with c_atv_t1:
+                                st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado_at, disabled=True, key=f"t1_at_tema_dis_{id_at_ref}_{val_num_acao_at}")
+                            with c_atv_t2:
+                                st.text_input("Objetivo Estratégico (Herdado):", value=objetivo_herdado_at, disabled=True, key=f"t1_at_obj_dis_{id_at_ref}_{val_num_acao_at}")
+                            
+                            ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo.get("Tipo de Atividade", "Operação")) if reg_at_alvo.get("Tipo de Atividade", "Operação") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
+                            ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica")) if reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
                                                 
                         with aba3_at:
                             # 1. LISTAGEM ESTRITA DE SERVIDORES DA NOVA UF
@@ -3361,7 +3376,7 @@ elif modo == "📊 Visualizar Base":
                                 payload_at = payload_gerador(
                                     val_ano_at, val_num_acao_at, val_nome_acao_at, val_indicador_at, "Atividade",
                                     ed_nome_atv, ed_andamento_at, ed_res_ind_at, ed_doc_at, ed_uf_acao_val,
-                                    importancia_at, ed_tema_at, ed_obj_at, ed_tipo_at, ed_perigo_at, ed_servidor_at,
+                                    importancia_at, tema_herdado_at, objetivo_herdado_at, ed_tipo_at, ed_perigo_at, ed_servidor_at,
                                     ed_uf_srv_at, ed_lot_at, ed_eq_at, ed_pcdp_at, "Brasil", ed_uf_oc_at,
                                     ed_est_loc_at, ed_mun_at, ed_dt_i_at, ed_dt_f_at, ed_dias_pl_at, ed_dias_ex_at,
                                     ed_orig_at, ed_rp_d_at, ed_rp_p_at, ed_rp_o_at, ed_re_d_at,
@@ -3856,23 +3871,21 @@ elif modo == "➕ Inserir Nova Linha":
                     for avs in dados_term_ac_form["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
 
         with aba2:
-            st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True)
-            meta_indicador = st.number_input(f"Meta da Ação Setorial para a UF ({uf_filtro_pna}):", min_value=0.0, value=1.0, step=1.0, key="pna_meta_uf_input")
+            st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True, key=f"pna_ind_dis_{val_num_acao}")
+            meta_indicador = st.number_input(f"Meta da Ação Setorial para a UF ({uf_filtro_pna}):", min_value=0.0, value=1.0, step=1.0, key=f"pna_meta_uf_input_{val_num_acao}")
             
-            uf_acao = uf_filtro_pna
-            st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_acao), disabled=True)
-            st.text_input("Classificação da Ação Setorial (Herdada)", value=importancia, disabled=True)
+            st.text_input("UF Proponente / Responsável (Automático):", value=str(uf_filtro_pna), disabled=True, key=f"pna_uf_dis_{val_num_acao}")
+            st.text_input("Classificação da Ação Setorial (Herdada):", value=importancia, disabled=True, key=f"pna_imp_dis_{val_num_acao}")
             
-            # 🔒 TEMA E OBJETIVO 100% HERDADOS E BLOQUEADOS
             c_det1, c_det2 = st.columns(2)
             with c_det1:
-                st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado, disabled=True, key="pna_txt_tema_dis")
+                st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado, disabled=True, key=f"pna_txt_tema_dis_{val_num_acao}")
                 tema = tema_herdado
             with c_det2:
-                st.text_input("Objetivo Estratégico (Herdado da Ação PNAPA):", value=objetivo_herdado, disabled=True, key="pna_txt_obj_dis")
+                st.text_input("Objetivo Estratégico (Herdado):", value=objetivo_herdado, disabled=True, key=f"pna_txt_obj_dis_{val_num_acao}")
                 objetivo = objetivo_herdado
 
-            tipo_atividade = st.selectbox("Tipo de Atividade Padrão:", LISTA_TIPOS_ATIVIDADE, key="pna_sel_tipo_acao")
+            tipo_atividade = st.selectbox("Tipo de Atividade Padrão:", LISTA_TIPOS_ATIVIDADE, key=f"pna_sel_tipo_acao_{val_num_acao}")
 
         with aba4:
             c_dt1, c_dt2 = st.columns(2)
@@ -4015,7 +4028,7 @@ elif modo == "➕ Inserir Nova Linha":
             andamento = st.selectbox("Andamento da Atividade:", lista_andamentos_atividade, index=idx_and_atv, key=f"atv_sel_andamento_{codigo_atividade}")
 
         with aba2:
-            st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
+            st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True, key=f"atv_ind_dis_{val_num_acao}_{codigo_atividade}")
             
             res_ind_def = str(extrair_padrao_atv("Resultado_Indicador", "")).strip()
             resultado_indicador = st.text_input("Resultado do Indicador (Aferição Real):", value=res_ind_def, key=f"atv_res_ind_{codigo_atividade}")
@@ -4023,8 +4036,7 @@ elif modo == "➕ Inserir Nova Linha":
             doc_sei_def = str(extrair_padrao_atv("Doc_Probatorio_Exec", "")).strip()
             doc_probatorio = st.text_input("Número SEI do Documento Probatório de Execução:", value=doc_sei_def, key=f"atv_doc_sei_{codigo_atividade}")
             
-            uf_acao = uf_filtro_pna
-            st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_acao), disabled=True)
+            st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_filtro_pna), disabled=True, key=f"atv_uf_dis_{codigo_atividade}")
             
             imp_base_def = str(extrair_padrao_atv("Importância da Atividade", importancia)).strip()
             idx_imp_padrao = 0 if imp_base_def == "Finalística" else 1
@@ -4032,17 +4044,16 @@ elif modo == "➕ Inserir Nova Linha":
                 "Classificação da Atividade:",
                 ["Finalística", "Rotina"],
                 index=idx_imp_padrao,
-                key=f"atv_sel_imp_{codigo_atividade}",
+                key=f"atv_sel_imp_{val_num_acao}_{codigo_atividade}",
                 help="Herdada da Ação Setorial. Altere para 'Rotina' caso esta missão específica seja apenas reunião ou despacho de gabinete."
             )
             
-            # 🔒 TEMA E OBJETIVO HERDADOS
             c_atv_t1, c_atv_t2 = st.columns(2)
             with c_atv_t1:
-                st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado, disabled=True, key=f"atv_txt_tema_dis_{codigo_atividade}")
+                st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado, disabled=True, key=f"atv_txt_tema_dis_{val_num_acao}_{codigo_atividade}")
                 tema = tema_herdado
             with c_atv_t2:
-                st.text_input("Objetivo Estratégico (Herdado da Ação PNAPA):", value=objetivo_herdado, disabled=True, key=f"atv_txt_obj_dis_{codigo_atividade}")
+                st.text_input("Objetivo Estratégico (Herdado):", value=objetivo_herdado, disabled=True, key=f"atv_txt_obj_dis_{val_num_acao}_{codigo_atividade}")
                 objetivo = objetivo_herdado
 
             tipo_atv_def = str(extrair_padrao_atv("Tipo de Atividade", "Operação")).strip()
