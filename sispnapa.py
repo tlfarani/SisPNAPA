@@ -78,7 +78,7 @@ LISTA_OBJETIVOS = ["Atendimento a Acidentes", "Prevenção e Gestão de Riscos",
 LISTA_TIPOS_ATIVIDADE = ["Capacitação", "Coleta de Amostras", "Desenvolvimento de Ferramentas", "Documentos de Análise", "Elaboração de Normativas", "Fiscalização", "Operação", "Outros tipos", "Reunião", "Simulados", "Vistoria"]
 LISTA_PERIGOS = ["Não se Aplica", "Periculosidade", "Insalubridade"]
 LISTA_ORIGENS_RECURSO = LISTA_UFS_COMPLETA + ["Não se aplica", "Outras fontes"]
-LISTA_IMPORTANCIA = ["Ordinária", "Prioritária", "Estratégica"]
+LISTA_IMPORTANCIA = ["Estratégica", "Finalística", "Rotina"]
 LISTA_PAPEIS_INSTITUCIONAIS = ["Coordenação", "Apoio"]
 LISTA_FUNCOES_CAMPO = ["Coordenador de Campo", "Apoio de Campo"]
 
@@ -559,11 +559,15 @@ def calcular_termometro_carga(
     df_atvs_srv = df_ano_srv[df_ano_srv["Nível"].astype(str).str.strip() == "Atividade"]
     dias_totais_atuais = pd.to_numeric(df_atvs_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if "Dias_Gastos_Plan" in df_atvs_srv.columns else 0.0
     
-    df_ord_srv = df_atvs_srv[df_atvs_srv["Importância da Atividade"].astype(str).str.strip() == "Ordinária"] if "Importância da Atividade" in df_atvs_srv.columns else pd.DataFrame()
-    dias_ord_atuais = pd.to_numeric(df_ord_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if not df_ord_srv.empty and "Dias_Gastos_Plan" in df_ord_srv.columns else 0.0
-
-    dias_totais_proj = dias_totais_atuais + (dias_novos if nivel_registro == "Atividade" else 0.0)
-    dias_ord_proj = dias_ord_atuais + (dias_novos if (nivel_registro == "Atividade" and importancia_nova == "Ordinária") else 0.0)
+    # Filtra atividades de rotina
+    df_ord_srv = df_atvs_srv[df_atvs_srv["Importância da Atividade"].astype(str).str.strip().isin(["Rotina", "Ordinária"])]
+    
+    eh_rotina_nova = str(importancia_nova).strip() in ["Rotina", "Ordinária"]
+    dias_ord_proj = dias_ord_atuais + (dias_novos if (nivel_registro == "Atividade" and eh_rotina_nova) else 0.0)
+    
+    # Mensagem de alerta/bloqueio atualizada:
+    if dias_ord_proj > teto_ordinarias:
+        msg = f"Cota de atividades de Rotina ({fase_registro}) excedida: Projetado {dias_ord_proj:.1f} d / Máximo {teto_ordinarias:.0f} d ({int(pct_ord*100)}%)."
 
     # 4. Eixo de Liderança (Ações Coordenadas & Nível 3)
     df_acoes_coord = df_ano[
@@ -2103,7 +2107,7 @@ if modo == "📈 Dashboards Executivos":
             
             with col_gov2:
                 st.markdown("#### 🎯 Matriz de Priorização")
-                ordem_importancia = ["Ordinária", "Prioritária", "Estratégica"]
+                ordem_importancia = ["Rotina", "Ordinária", "Finalística", "Prioritária", "Estratégica"]
                 fig_matriz = px.scatter(
                     df_dashboard_acao, x="Dias_Gastos_Plan", y="Importância da Atividade", color="Papel_Institucional",
                     hover_name="Nome da Ação PNAPA", size_max=15,
@@ -2178,7 +2182,7 @@ elif modo == "📊 Visualizar Base":
 
         # 🚀 DIVISÃO EM DUAS SUBPÁGINAS DEDICADAS
         tab_sub_acoes, tab_sub_atividades = st.tabs([
-            "🎯 Ações Estaduais (Planejamento & Metas)", 
+            "🎯 Ações Setoriais (Planejamento & Metas)", 
             "📌 Atividades de Campo (Operações & Execução)"
         ])
 
@@ -2188,11 +2192,12 @@ elif modo == "📊 Visualizar Base":
         # SUBPÁGINA 1: AÇÕES ESTADUAIS
         # =====================================================================
         with tab_sub_acoes:
+            # Captura tanto os registros antigos ("Ação") quanto os novos ("Ação Setorial")
             df_base_acoes = df_trabalho[
-                (df_trabalho["Nível"].astype(str).str.strip() == "Ação") &
+                (df_trabalho["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
                 (df_trabalho["Número da Ação PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL")
             ].copy()
-            st.caption(f"🎯 Total de Ações Estaduais cadastradas: **{len(df_base_acoes)}** registros.")
+            st.caption(f"🎯 Total de Ações Setoriais cadastradas: **{len(df_base_acoes)}** registros.")
             
             if df_base_acoes.empty:
                 st.info("Nenhuma Ação Estadual cadastrada na base.")
@@ -3629,7 +3634,7 @@ elif modo == "➕ Inserir Nova Linha":
     st.markdown(f"<h3 style='color: #03170a;'>Formulário de Dados PNAPA — Modo: {modo}</h3>", unsafe_allow_html=True)
     
     idx_nivel_padrao = 0 if registro_selecionado is None or str(registro_selecionado.get("Nível", "")) == "Ação" else 1
-    nivel_selecionado = st.selectbox("O que deseja cadastrar?", ["Ação", "Atividade"], index=idx_nivel_padrao, key="main_txt_nivel")
+    nivel_selecionado = st.selectbox("O que deseja cadastrar?", ["Ação Setorial", "Atividade"], index=idx_nivel_padrao, key="main_txt_nivel")
     
     st.markdown("#### 📍 Definição da Localidade (UF da Ação)")
     if perfil_usuario == "Administrador":
@@ -3916,7 +3921,16 @@ elif modo == "➕ Inserir Nova Linha":
             uf_acao = uf_filtro_pna
             st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_acao), disabled=True)
             
-            st.text_input("Importância da Atividade (Herdada)", value=importancia, disabled=True)
+            imp_padrao_acao = "Rotina" if str(dados_aux_linha.get("Importância", "")).strip() in ["Rotina", "Ordinária"] else "Finalística"
+            idx_imp_padrao = 0 if imp_padrao_acao == "Finalística" else 1
+            
+            importancia = st.selectbox(
+                "Classificação da Atividade:",
+                ["Finalística", "Rotina"],
+                index=idx_imp_padrao,
+                key="atv_sel_imp",
+                help="Herdada da Ação Setorial. Altere para 'Rotina' caso esta missão específica seja apenas reunião ou despacho de gabinete."
+            )
             
             tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="atv_sel_tema")
             objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS, key="atv_sel_obj")
@@ -4962,17 +4976,30 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             df_ano_alvo = df_pnapas[df_pnapas["Ano_Num"] == int(novo_ano_pna)]
             lista_servidores_global = sorted(df_servidores["Servidor"].dropna().unique().tolist()) if not df_servidores.empty else []
 
-            if "Estratégica" in tipo_iniciativa:
-                c_m1, c_m2, c_m3 = st.columns([1, 2, 1])
+            if "Ação PNAPA" in tipo_iniciativa:
+                c_m1, c_m2 = st.columns([1, 2])
                 with c_m1:
-                    novo_num_pna = st.text_input("Código Macro (Ex: CEN02):", value="", key="cad_pna_cod_macro").strip().upper()
+                    novo_num_pna = st.text_input("Código da Ação PNAPA (Ex: CEN02):", key="cad_pna_cod_macro").strip().upper()
                 with c_m2:
-                    novo_nome_comp = st.text_input("Nome Completo da Ação Estratégica:", key="cad_pna_nome_macro").strip()
-                with c_m3:
-                    novo_nome_apelido = st.text_input("Nome Resumido (Painéis):", key="cad_pna_apelido_macro").strip()
-
+                    novo_nome_apelido = st.text_input(
+                        "Título / Nome da Ação PNAPA (Curto e Descritivo):",
+                        max_chars=70,
+                        placeholder="Ex: Fiscalização Preventiva de Transporte Perigoso",
+                        key="cad_pna_apelido_macro",
+                        help="Título principal da Ação PNAPA (máx. 70 caracteres)."
+                    ).strip()
+            
+                novo_nome_comp = st.text_area(
+                    "Descrição / Escopo da Ação PNAPA:",
+                    max_chars=400,
+                    placeholder="Descreva as diretrizes gerais, abrangência e impacto desta Ação PNAPA...",
+                    key="cad_pna_nome_macro",
+                    help="Detalhamento técnico da iniciativa (máx. 400 caracteres)."
+                ).strip()
+            
                 cod_mae_final = ""
                 nivel_final = "Estratégica (Macro)"
+                nova_importancia = "Estratégica"  # 💎 Fixa para Nível 1
                 
                 c_mt1, c_mt2, c_mt3 = st.columns(3)
                 with c_mt1:
@@ -4980,49 +5007,55 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 with c_mt2:
                     novo_obj_pna = st.selectbox("Objetivo Predominante:", LISTA_OBJETIVOS, key="cad_pna_obj_macro")
                 with c_mt3:
-                    nova_importancia = st.selectbox("Importância Padrão:", ["Estratégica / Prioritária", "Ordinária / Rotina"], key="cad_pna_imp_macro")
+                    nova_importancia = st.selectbox(
+                        "Classificação da Ação Setorial:",
+                        ["Finalística", "Rotina"],
+                        key="cad_pna_imp_setorial",
+                        help="Finalística: Operações, vistorias e fiscalizações. Rotina: Manutenção e governança ordinária."
+                    )
 
             else:
-                # AÇÃO SETORIAL (HERDA E GERA CÓDIGO DINÂMICO)
-                macros_existentes = df_ano_alvo[
-                    (df_ano_alvo["Nivel_Catalogo"] == "Estratégica (Macro)") |
-                    (df_ano_alvo["Acao_Mae"].isna()) |
-                    (df_ano_alvo["Acao_Mae"].astype(str).str.strip() == "")
-                ]
-
-                if macros_existentes.empty:
-                    st.warning(f"⚠️ Nenhuma Ação Estratégica (Macro) cadastrada para o ano {novo_ano_pna}. Cadastre primeiro uma Ação Macro.")
-                    st.stop()
-
-                opcoes_macro_dict = {
-                    f"{row['Num_Acao_PNAPA']} — {row['Nome_Acao_Apelido']}": row['Num_Acao_PNAPA']
-                    for _, row in macros_existentes.iterrows()
-                }
-
+                # Ação Setorial (Nível 2)
                 c_sm1, c_sm2 = st.columns([1.5, 1])
                 with c_sm1:
-                    macro_escolhida_lbl = st.selectbox("Vincular à Ação Estratégica Mãe:", list(opcoes_macro_dict.keys()), key="cad_pna_macro_mae_sel")
+                    macro_escolhida_lbl = st.selectbox("Vincular à Ação PNAPA Mãe:", list(opcoes_macro_dict.keys()), key="cad_pna_macro_mae_sel")
                     cod_mae_final = opcoes_macro_dict[macro_escolhida_lbl]
                 with c_sm2:
-                    # 🚀 Geração automática do próximo código sequencial (ex: CEN02.01)
                     cod_sugerido_setorial = gerar_proximo_codigo_setorial(df_pnapas, cod_mae_final, novo_ano_pna)
                     novo_num_pna = st.text_input("Código Setorial (Gerado Automaticamente):", value=cod_sugerido_setorial, key="cad_pna_cod_setorial").strip().upper()
-
-                c_sn1, c_sn2 = st.columns([2, 1])
+            
+                c_sn1, c_sn2 = st.columns([1.5, 2.5])
                 with c_sn1:
-                    novo_nome_comp = st.text_input("Nome Completo da Ação Setorial:", key="cad_pna_nome_setorial").strip()
+                    novo_nome_apelido = st.text_input(
+                        "Título / Nome da Ação Setorial:",
+                        max_chars=70,
+                        placeholder="Ex: TRPP - Fiscalização Rodoviária",
+                        key="cad_pna_apelido_setorial",
+                        help="Título direto contendo Objetivo e Tema (máx. 70 caracteres)."
+                    ).strip()
                 with c_sn2:
-                    novo_nome_apelido = st.text_input("Nome Resumido / Modal (Ex: TRPP Rodovias):", key="cad_pna_apelido_setorial").strip()
-
+                    novo_nome_comp = st.text_area(
+                        "Descrição / Escopo da Ação Setorial:",
+                        max_chars=400,
+                        placeholder="Descreva o escopo operacional, modais atendidos e metodologia...",
+                        key="cad_pna_nome_setorial",
+                        help="Detalhamento técnico da ação (máx. 400 caracteres)."
+                    ).strip()
+            
                 nivel_final = "Setorial (Tática)"
-
+                
                 c_st1, c_st2, c_st3 = st.columns(3)
                 with c_st1:
                     novo_tema_pna = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, key="cad_pna_tema_setorial")
                 with c_st2:
                     novo_obj_pna = st.selectbox("Objetivo Padrão:", LISTA_OBJETIVOS, key="cad_pna_obj_setorial")
                 with c_st3:
-                    nova_importancia = st.selectbox("Importância Padrão:", ["Estratégica / Prioritária", "Ordinária / Rotina"], key="cad_pna_imp_setorial")
+                    nova_importancia = st.selectbox(
+                        "Classificação da Ação Setorial:", 
+                        ["Finalística", "Rotina"], 
+                        key="cad_pna_imp_setorial",
+                        help="Finalística: Operações e vistorias de campo. Rotina: Manutenção e governança ordinária."
+                    )
 
             st.markdown("###### 🎯 Metas, Indicador e Especialista na Sede")
             c_ind1, c_ind2, c_ind3 = st.columns([2, 1, 1.2])
