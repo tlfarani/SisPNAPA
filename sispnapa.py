@@ -845,11 +845,18 @@ st.markdown("""
         div[data-testid="stPopoverBody"] div[data-baseweb="select"] * {
             color: #03170a !important; background-color: transparent !important;
         }
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] svg,
-        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] svg,
-        div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] svg,
-        div[data-testid="stPopoverBody"] div[data-baseweb="select"] svg { 
+        
+        /* 1. Aplica a cor preta estritamente na setinha do dropdown (sem atingir o label) */
+        div[data-baseweb="select"] svg,
+        section[data-testid="stSidebar"] div[data-baseweb="select"] svg { 
             fill: #03170a !important; 
+        }
+        
+        /* 2. Garante que qualquer ícone de tooltip (?) mantenha traçado padrão limpo */
+        [data-testid="stTooltipIcon"] svg,
+        div[data-testid="stSelectbox"] [data-testid="stTooltipIcon"] svg {
+            fill: currentColor !important;
+            stroke: none !important;
         }
         
         div[data-baseweb="popover"] ul { background-color: #ffffff !important; }
