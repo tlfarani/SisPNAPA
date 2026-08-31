@@ -3780,7 +3780,6 @@ elif modo == "➕ Inserir Nova Linha":
                     for avs in dados_term_ac_form["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
 
         with aba2:
-            with aba2:
             st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True)
             meta_indicador = st.number_input(f"Meta da Ação Setorial para a UF ({uf_filtro_pna}):", min_value=0.0, value=1.0, step=1.0, key="pna_meta_uf_input")
             uf_acao = uf_filtro_pna
