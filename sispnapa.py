@@ -815,6 +815,7 @@ def validar_senha(senha_digitada: str, token_armazenado: str, senha_padrao="pnap
 # =================================================================
 st.markdown("""
     <style>
+        /* 1. Barra Lateral (Sidebar) */
         section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
         section[data-testid="stSidebar"] label p,
@@ -830,9 +831,8 @@ st.markdown("""
         section[data-testid="stSidebar"] div[data-baseweb="select"] * {
             color: #03170a !important; font-weight: bold !important;
         }
-        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg { fill: #03170a !important; }
         
-        /* Selectboxes e Popovers */
+        /* 2. Selectboxes (Corpo Branco e Setinhas Escuras) */
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
         div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div,
         div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] > div,
@@ -846,28 +846,23 @@ st.markdown("""
             color: #03170a !important; background-color: transparent !important;
         }
         
-        /* 1. Aplica a cor preta estritamente na setinha do dropdown (sem atingir o label) */
+        /* Aplica cor preta estritamente na seta do dropdown (sem atingir labels nem tooltips) */
         div[data-baseweb="select"] svg,
         section[data-testid="stSidebar"] div[data-baseweb="select"] svg { 
             fill: #03170a !important; 
         }
         
-        /* 2. Garante que qualquer ícone de tooltip (?) mantenha traçado padrão limpo */
-        [data-testid="stTooltipIcon"] svg,
-        div[data-testid="stSelectbox"] [data-testid="stTooltipIcon"] svg {
-            fill: currentColor !important;
-            stroke: none !important;
-        }
-        
+        /* 3. Popovers & Menus Suspensos */
         div[data-baseweb="popover"] ul { background-color: #ffffff !important; }
         div[data-baseweb="popover"] ul li { color: #03170a !important; background-color: transparent !important; }
         div[data-baseweb="popover"] ul li:hover { background-color: #f1f5f9 !important; }
         
+        /* 4. Entradas Numéricas (Number Input) */
         div[data-testid="stNumberInput"] input { background-color: #ffffff !important; color: #03170a !important; }
         div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
         div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
         
-        /* 🚀 CORREÇÃO CIRÚRGICA: Caixas de Data com fundo branco e texto escuro */
+        /* 5. Caixas de Data (Date Input) */
         div[data-testid="stDateInput"] > div,
         div[data-testid="stDateInput"] div[data-baseweb="input"],
         div[data-testid="stDateInput"] div[data-baseweb="base-input"] {
@@ -883,6 +878,7 @@ st.markdown("""
             fill: #03170a !important;
         }
         
+        /* 6. Abas e Títulos */
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
         div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
@@ -896,6 +892,31 @@ st.markdown("""
             color: #03170a !important; font-weight: 500; 
         }
         h2, h3, [data-testid="stHeader"] { color: #03170a !important; font-weight: 700 !important; }
+
+        /* 7. 💡 ÍCONES DE AJUDA (?) - TRAÇADO NATIVO NÍTIDO SEM PREENCHIMENTO ESCURO */
+        [data-testid="stTooltipIcon"] {
+            color: #475569 !important;
+        }
+        [data-testid="stTooltipIcon"] svg,
+        [data-testid="stTooltipIcon"] svg * {
+            fill: none !important;
+            stroke: #475569 !important;
+        }
+
+        /* 8. 💬 BALÃO FLUTUANTE DE TEXTO DO TOOLTIP */
+        div[data-baseweb="tooltip"],
+        div[data-testid="stTooltipContent"] {
+            background-color: #1e293b !important;
+            color: #ffffff !important;
+            border-radius: 6px !important;
+            font-size: 0.85rem !important;
+            padding: 6px 10px !important;
+        }
+        div[data-baseweb="tooltip"] *,
+        div[data-testid="stTooltipContent"] * {
+            color: #ffffff !important;
+            background-color: transparent !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
