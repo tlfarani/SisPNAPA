@@ -4957,13 +4957,13 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             
             c_tipo1, c_tipo2 = st.columns([1, 1.5])
             with c_tipo1:
-                novo_ano_pna = st.selectbox("Exercício Alvo:", ["2027", "2028", "2026"], index=0, key="cad_pna_ano")
+                novo_ano_pna = st.selectbox("Exercício Alvo:", ["2027", "2028", "2026"], index=0, key="cad_pna_ano_novo")
             with c_tipo2:
                 tipo_iniciativa = st.radio(
                     "Tipo de Iniciativa:",
                     ["Ação PNAPA (Estratégica / Nível 1)", "Ação Setorial (Tática / Nível 2)"],
                     horizontal=True,
-                    key="cad_pna_tipo_iniciativa"
+                    key="cad_pna_tipo_iniciativa_novo"
                 )
 
             st.divider()
@@ -4973,13 +4973,13 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             if "Ação PNAPA" in tipo_iniciativa:
                 c_m1, c_m2 = st.columns([1, 2])
                 with c_m1:
-                    novo_num_pna = st.text_input("Código da Ação PNAPA (Ex: CEN02):", key="cad_pna_cod_macro").strip().upper()
+                    novo_num_pna = st.text_input("Código da Ação PNAPA (Ex: CEN01):", key="cad_macro_cod_pna").strip().upper()
                 with c_m2:
                     novo_nome_apelido = st.text_input(
                         "Título / Nome da Ação PNAPA (Curto e Descritivo):",
                         max_chars=70,
-                        placeholder="Ex: Fiscalização Preventiva de Transporte Perigoso",
-                        key="cad_pna_apelido_macro",
+                        placeholder="Ex: Governança e Operacionalização de Planos de Área",
+                        key="cad_macro_apelido_pna",
                         help="Título principal da Ação PNAPA (máx. 70 caracteres)."
                     ).strip()
             
@@ -4987,7 +4987,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     "Descrição / Escopo da Ação PNAPA:",
                     max_chars=400,
                     placeholder="Descreva as diretrizes gerais, abrangência e impacto desta Ação PNAPA...",
-                    key="cad_pna_nome_macro",
+                    key="cad_macro_desc_pna",
                     help="Detalhamento técnico da iniciativa (máx. 400 caracteres)."
                 ).strip()
             
@@ -4996,19 +4996,13 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 nova_importancia = "Estratégica"  # 💎 Fixa para Nível 1
                 novo_tema_pna = "Multimodal / Geral"  # 🚀 Padrão automático para Macro
                 
-                # Exibe apenas o Objetivo Predominante
+                # Exibe apenas o Objetivo Predominante (com key única)
                 novo_obj_pna = st.selectbox(
                     "Objetivo Estratégico Predominante:", 
                     LISTA_OBJETIVOS, 
-                    key="cad_pna_obj_macro",
+                    key="cad_macro_obj_predominante",
                     help="Define o ciclo da gestão de risco atendido por esta Ação PNAPA."
                 )
-                
-                c_mt1, c_mt2 = st.columns(2)
-                with c_mt1:
-                    novo_tema_pna = st.selectbox("Tema Predominante / Geral:", LISTA_TEMAS, key="cad_pna_tema_macro")
-                with c_mt2:
-                    novo_obj_pna = st.selectbox("Objetivo Predominante:", LISTA_OBJETIVOS, key="cad_pna_obj_macro")
 
             else:
                 # Ação Setorial (Nível 2)
@@ -5029,19 +5023,19 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
 
                 c_sm1, c_sm2 = st.columns([1.5, 1])
                 with c_sm1:
-                    macro_escolhida_lbl = st.selectbox("Vincular à Ação PNAPA Mãe:", list(opcoes_macro_dict.keys()), key="cad_pna_macro_mae_sel")
+                    macro_escolhida_lbl = st.selectbox("Vincular à Ação PNAPA Mãe:", list(opcoes_macro_dict.keys()), key="cad_setorial_macro_mae_sel")
                     cod_mae_final = opcoes_macro_dict[macro_escolhida_lbl]
                 with c_sm2:
                     cod_sugerido_setorial = gerar_proximo_codigo_setorial(df_pnapas, cod_mae_final, novo_ano_pna)
-                    novo_num_pna = st.text_input("Código Setorial (Gerado Automaticamente):", value=cod_sugerido_setorial, key="cad_pna_cod_setorial").strip().upper()
+                    novo_num_pna = st.text_input("Código Setorial (Gerado Automaticamente):", value=cod_sugerido_setorial, key="cad_setorial_cod_gerado").strip().upper()
             
                 c_sn1, c_sn2 = st.columns([1.5, 2.5])
                 with c_sn1:
                     novo_nome_apelido = st.text_input(
                         "Título / Nome da Ação Setorial:",
                         max_chars=70,
-                        placeholder="Ex: TRPP - Fiscalização Rodoviária",
-                        key="cad_pna_apelido_setorial",
+                        placeholder="Ex: Acompanhamento de Comitês e Reuniões de Planos de Área",
+                        key="cad_setorial_apelido_pna",
                         help="Título direto contendo Objetivo e Tema (máx. 70 caracteres)."
                     ).strip()
                 with c_sn2:
@@ -5049,7 +5043,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         "Descrição / Escopo da Ação Setorial:",
                         max_chars=400,
                         placeholder="Descreva o escopo operacional, modais atendidos e metodologia...",
-                        key="cad_pna_nome_setorial",
+                        key="cad_setorial_desc_pna",
                         help="Detalhamento técnico da ação (máx. 400 caracteres)."
                     ).strip()
             
@@ -5057,40 +5051,40 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 
                 c_st1, c_st2, c_st3 = st.columns(3)
                 with c_st1:
-                    novo_tema_pna = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, key="cad_pna_tema_setorial")
+                    novo_tema_pna = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, key="cad_setorial_tema_sel")
                 with c_st2:
-                    novo_obj_pna = st.selectbox("Objetivo Padrão:", LISTA_OBJETIVOS, key="cad_pna_obj_setorial")
+                    novo_obj_pna = st.selectbox("Objetivo Padrão:", LISTA_OBJETIVOS, key="cad_setorial_obj_sel")
                 with c_st3:
                     nova_importancia = st.selectbox(
                         "Classificação da Ação Setorial:", 
                         ["Finalística", "Rotina"], 
-                        key="cad_pna_imp_setorial",
+                        key="cad_setorial_imp_sel",
                         help="Finalística: Operações e vistorias de campo. Rotina: Manutenção e governança ordinária."
                     )
 
             st.markdown("###### 🎯 Metas, Indicador e Especialista na Sede")
             c_ind1, c_ind2, c_ind3 = st.columns([2, 1, 1.2])
             with c_ind1:
-                novo_indicador = st.text_input("Indicador Mensurável Oficial:", key="cad_pna_ind_txt").strip()
+                novo_indicador = st.text_input("Indicador Mensurável Oficial:", key="cad_gen_indicador_txt").strip()
             with c_ind2:
-                nova_meta_nac = st.number_input("Meta Física Nacional:", min_value=0.0, value=100.0, step=1.0, format="%.1f", key="cad_pna_meta_nac_in")
+                nova_meta_nac = st.number_input("Meta Física Nacional:", min_value=0.0, value=100.0, step=1.0, format="%.1f", key="cad_gen_meta_nac_in")
             with c_ind3:
-                novo_orc_nac = st.number_input("Teto Ceneac (R$):", min_value=0.0, value=0.0, step=5000.0, format="%.2f", key="cad_pna_orc_nac_in")
+                novo_orc_nac = st.number_input("Teto Ceneac (R$):", min_value=0.0, value=0.0, step=5000.0, format="%.2f", key="cad_gen_orc_nac_in")
 
             c_dn1, c_dn2 = st.columns([1, 2])
             with c_dn1:
                 idx_uf_dono_df = LISTA_UFS_COMPLETA.index("DF") if "DF" in LISTA_UFS_COMPLETA else 0
-                novo_uf_dono = st.selectbox("UF do Dono da Ação:", LISTA_UFS_COMPLETA, index=idx_uf_dono_df, key="cad_pna_uf_dono_in")
+                novo_uf_dono = st.selectbox("UF do Dono da Ação:", LISTA_UFS_COMPLETA, index=idx_uf_dono_df, key="cad_gen_uf_dono_sel")
             with c_dn2:
                 srvs_dono_disp = df_servidores[df_servidores["UF_Servidor"] == novo_uf_dono]["Servidor"].dropna().unique().tolist() if not df_servidores.empty else []
-                novo_dono_acao = st.selectbox("Especialista Responsável (Sede/Liderança):", srvs_dono_disp if srvs_dono_disp else lista_servidores_global, key="cad_pna_dono_in")
+                novo_dono_acao = st.selectbox("Especialista Responsável (Sede/Liderança):", srvs_dono_disp if srvs_dono_disp else lista_servidores_global, key="cad_gen_dono_acao_sel")
 
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🚀 Gravar Ação no Catálogo Oficial", type="primary", key="btn_gravar_nova_acao_pna"):
+            if st.button("🚀 Gravar Ação no Catálogo Oficial", type="primary", key="btn_gravar_catalogo_oficial"):
                 if not novo_num_pna:
                     st.error("⚠️ O Código da Ação é obrigatório.")
                 elif not novo_nome_comp:
-                    st.error("⚠️ O Nome Completo da Ação é obrigatório.")
+                    st.error("⚠️ A Descrição / Escopo da Ação é obrigatória.")
                 elif not novo_indicador:
                     st.error("⚠️ O Indicador Oficial da Ação é obrigatório.")
                 else:
@@ -5115,7 +5109,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             "Num_Acao_PNAPA": novo_num_pna,
                             "Acao_Ano": chave_acao_ano,
                             "Nome_Acao_Completo": novo_nome_comp,
-                            "Nome_Acao_Apelido": novo_nome_apelido if novo_nome_apelido else novo_nome_comp,
+                            "Nome_Acao_Apelido": novo_nome_apelido if novo_nome_apelido else novo_nome_comp[:70],
                             "Importância": nova_importancia,
                             "Indicador": novo_indicador,
                             "UF_Dono": str(novo_uf_dono),
