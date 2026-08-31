@@ -5082,11 +5082,18 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             
                 nivel_final = "Setorial (Tática)"
                 
+                # 🚀 Resgata a linha completa da Ação Mãe selecionada
+                linha_macro_mae = macros_existentes[macros_existentes["Num_Acao_PNAPA"].astype(str).str.split("-").str[0].str.strip() == cod_mae_final].iloc[0]
+                
+                # Herda automaticamente o objetivo da Ação Mãe
+                novo_obj_pna = str(linha_macro_mae.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
+
                 c_st1, c_st2, c_st3 = st.columns(3)
                 with c_st1:
                     novo_tema_pna = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, key=f"cad_set_tema_{cod_mae_final}")
                 with c_st2:
-                    novo_obj_pna = st.selectbox("Objetivo Padrão:", LISTA_OBJETIVOS, key=f"cad_set_obj_{cod_mae_final}")
+                    # 🔒 Exibição travada: Herança direta da Ação Mãe
+                    st.text_input("Objetivo (Herdado da Ação Mãe):", value=novo_obj_pna, disabled=True, key=f"cad_set_obj_dis_{cod_mae_final}")
                 with c_st3:
                     nova_importancia = st.selectbox(
                         "Classificação da Ação Setorial:", 
