@@ -406,17 +406,18 @@ def classificar_nivel_acao(dias):
 
 def gerar_proximo_codigo_setorial(df_acoes, cod_macro, ano_alvo):
     """
-    Gera automaticamente o próximo código sequencial para Ações Setoriais (ex: CEN02.01, CEN02.02).
+    Gera automaticamente o próximo código sequencial para Ações Setoriais (ex: CEN01.01, CEN01.02).
     """
+    cod_macro_limpo = str(cod_macro).split("-")[0].strip().upper() if cod_macro else "CEN01"
+    
     if df_acoes is None or df_acoes.empty or not cod_macro:
-        return f"{cod_macro}.01" if cod_macro else "CEN01.01"
+        return f"{cod_macro_limpo}.01"
 
     ano_int = int(pd.to_numeric(str(ano_alvo).split('.')[0], errors='coerce') or 2027)
     df_mesmo_ano = df_acoes[pd.to_numeric(df_acoes["Ano"], errors='coerce').fillna(0).astype(int) == ano_int]
-    cod_macro_limpo = str(cod_macro).strip().upper()
     
     df_filhas = df_mesmo_ano[
-        (df_mesmo_ano["Acao_Mae"].astype(str).str.strip().str.upper() == cod_macro_limpo) |
+        (df_mesmo_ano["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == cod_macro_limpo) |
         (df_mesmo_ano["Num_Acao_PNAPA"].astype(str).str.strip().str.upper().str.startswith(f"{cod_macro_limpo}."))
     ]
 
@@ -4996,7 +4997,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 nova_importancia = "Estratégica"  # 💎 Fixa para Nível 1
                 novo_tema_pna = "Multimodal / Geral"  # 🚀 Padrão automático para Macro
                 
-                # Exibe apenas o Objetivo Predominante (com key única)
                 novo_obj_pna = st.selectbox(
                     "Objetivo Estratégico Predominante:", 
                     LISTA_OBJETIVOS, 
@@ -5017,7 +5017,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     st.stop()
 
                 opcoes_macro_dict = {
-                    f"{row['Num_Acao_PNAPA']} — {row['Nome_Acao_Apelido']}": row['Num_Acao_PNAPA']
+                    f"{str(row['Num_Acao_PNAPA']).split('-')[0].strip()} — {row['Nome_Acao_Apelido']}": str(row['Num_Acao_PNAPA']).split('-')[0].strip()
                     for _, row in macros_existentes.iterrows()
                 }
 
@@ -5026,8 +5026,13 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     macro_escolhida_lbl = st.selectbox("Vincular à Ação PNAPA Mãe:", list(opcoes_macro_dict.keys()), key="cad_setorial_macro_mae_sel")
                     cod_mae_final = opcoes_macro_dict[macro_escolhida_lbl]
                 with c_sm2:
+                    # 🚀 GERAÇÃO AUTOMÁTICA REATIVA: chave dinâmica força a atualização do campo
                     cod_sugerido_setorial = gerar_proximo_codigo_setorial(df_pnapas, cod_mae_final, novo_ano_pna)
-                    novo_num_pna = st.text_input("Código Setorial (Gerado Automaticamente):", value=cod_sugerido_setorial, key="cad_setorial_cod_gerado").strip().upper()
+                    novo_num_pna = st.text_input(
+                        "Código Setorial (Gerado Automaticamente):", 
+                        value=cod_sugerido_setorial, 
+                        key=f"cad_set_cod_{cod_mae_final}_{novo_ano_pna}"
+                    ).strip().upper()
             
                 c_sn1, c_sn2 = st.columns([1.5, 2.5])
                 with c_sn1:
@@ -5035,7 +5040,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         "Título / Nome da Ação Setorial:",
                         max_chars=70,
                         placeholder="Ex: Acompanhamento de Comitês e Reuniões de Planos de Área",
-                        key="cad_setorial_apelido_pna",
+                        key=f"cad_set_apelido_{cod_mae_final}",
                         help="Título direto contendo Objetivo e Tema (máx. 70 caracteres)."
                     ).strip()
                 with c_sn2:
@@ -5043,7 +5048,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         "Descrição / Escopo da Ação Setorial:",
                         max_chars=400,
                         placeholder="Descreva o escopo operacional, modais atendidos e metodologia...",
-                        key="cad_setorial_desc_pna",
+                        key=f"cad_set_desc_{cod_mae_final}",
                         help="Detalhamento técnico da ação (máx. 400 caracteres)."
                     ).strip()
             
@@ -5051,14 +5056,14 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 
                 c_st1, c_st2, c_st3 = st.columns(3)
                 with c_st1:
-                    novo_tema_pna = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, key="cad_setorial_tema_sel")
+                    novo_tema_pna = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, key=f"cad_set_tema_{cod_mae_final}")
                 with c_st2:
-                    novo_obj_pna = st.selectbox("Objetivo Padrão:", LISTA_OBJETIVOS, key="cad_setorial_obj_sel")
+                    novo_obj_pna = st.selectbox("Objetivo Padrão:", LISTA_OBJETIVOS, key=f"cad_set_obj_{cod_mae_final}")
                 with c_st3:
                     nova_importancia = st.selectbox(
                         "Classificação da Ação Setorial:", 
                         ["Finalística", "Rotina"], 
-                        key="cad_setorial_imp_sel",
+                        key=f"cad_set_imp_{cod_mae_final}",
                         help="Finalística: Operações e vistorias de campo. Rotina: Manutenção e governança ordinária."
                     )
 
