@@ -2643,7 +2643,9 @@ elif modo == "📊 Visualizar Base":
                             val_dtf_ac = converter_para_data_segura(reg_ac_alvo.get("Data de Término"))
                             ed_dt_i_ac = st.date_input("Data de Início:", value=val_dti_ac, format="DD/MM/YYYY", key=f"t1_ac_dti_{id_ac_ref}")
                             ed_dt_f_ac = st.date_input("Data de Término:", value=val_dtf_ac, format="DD/MM/YYYY", key=f"t1_ac_dtf_{id_ac_ref}")
-                            ed_dias_pl_ac = st.number_input("Dias Gastos Plan:", min_value=0.0, value=obter_float_limpo(reg_ac_alvo.get("Dias_Gastos_Plan")), step=0.5, format="%.1f", key=f"t1_ac_dpl_{id_ac_ref}")
+                            
+                            # 🚀 Nome amigável de dias planejados:
+                            ed_dias_pl_ac = st.number_input("Dias de Dedicação Planejados:", min_value=0.0, value=obter_float_limpo(reg_ac_alvo.get("Dias_Gastos_Plan")), step=0.5, format="%.1f", key=f"t1_ac_dpl_{id_ac_ref}")
                             ed_orig_ac = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(reg_ac_alvo["Origem do Recurso"]) if reg_ac_alvo.get("Origem do Recurso") in LISTA_ORIGENS_RECURSO else 0, key=f"t1_ac_orig_{id_ac_ref}")
                             
                             st.markdown("<p style='font-weight:bold; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
@@ -3144,10 +3146,13 @@ elif modo == "📊 Visualizar Base":
                             idx_and_at = lista_and_at.index(reg_at_alvo["Andamento"]) if reg_at_alvo.get("Andamento") in lista_and_at else 0
                             ed_andamento_at = st.selectbox("Andamento da Atividade:", lista_and_at, index=idx_and_at, key=f"t1_at_and_{id_at_ref}")
 
+                        
                         with aba2_at:
                             st.text_input("Indicador Oficial", value=val_indicador_at, disabled=True, key=f"t1_at_ind_{id_at_ref}")
                             ed_res_ind_at = st.text_input("Resultado do Indicador (Aferição Real):", value=str(reg_at_alvo.get("Resultado_Indicador", "")), key=f"t1_at_resind_{id_at_ref}")
-                            ed_doc_at = st.text_input("Doc_Probatorio_Exec (SEI):", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
+                            
+                            # 🚀 Nome amigável do documento SEI:
+                            ed_doc_at = st.text_input("Número SEI do Documento Probatório de Execução:", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
                             
                             if perfil_usuario == "Administrador":
                                 idx_uf_at_sel = LISTA_UFS_COMPLETA.index(uf_acao_at) if uf_acao_at in LISTA_UFS_COMPLETA else 0
@@ -3160,7 +3165,7 @@ elif modo == "📊 Visualizar Base":
                             ed_obj_at = st.selectbox("Objetivo da Atividade:", LISTA_OBJETIVOS, index=LISTA_OBJETIVOS.index(reg_at_alvo["Objetivo da Atividade"]) if reg_at_alvo.get("Objetivo da Atividade") in LISTA_OBJETIVOS else 0, key=f"t1_at_obj_{id_at_ref}")
                             ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo["Tipo de Atividade"]) if reg_at_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
                             ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo["Periculosidade/Insalubridade"]) if reg_at_alvo.get("Periculosidade/Insalubridade") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
-
+                                                
                         with aba3_at:
                             # 1. LISTAGEM ESTRITA DE SERVIDORES DA NOVA UF
                             lista_nomes_servidores = obter_servidores_por_uf(df_servidores, ed_uf_acao_val)
@@ -3266,8 +3271,10 @@ elif modo == "📊 Visualizar Base":
                             val_dtf_at = converter_para_data_segura(reg_at_alvo.get("Data de Término"))
                             ed_dt_i_at = st.date_input("Data de Início:", value=val_dti_at, format="DD/MM/YYYY", key=f"t1_at_dti_{id_at_ref}")
                             ed_dt_f_at = st.date_input("Data de Término:", value=val_dtf_at, format="DD/MM/YYYY", key=f"t1_at_dtf_{id_at_ref}")
-                            ed_dias_pl_at = st.number_input("Dias Gastos Plan:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Plan")), step=0.5, format="%.1f", key=f"t1_at_dpl_{id_at_ref}")
-                            ed_dias_ex_at = st.number_input("Dias Gastos Exec:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Exec")), step=0.5, format="%.1f", key=f"t1_at_dex_{id_at_ref}")
+                            
+                            # 🚀 Nomes amigáveis de dias planejados e executados:
+                            ed_dias_pl_at = st.number_input("Dias de Dedicação Planejados:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Plan")), step=0.5, format="%.1f", key=f"t1_at_dpl_{id_at_ref}")
+                            ed_dias_ex_at = st.number_input("Dias de Dedicação Executados:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Exec")), step=0.5, format="%.1f", key=f"t1_at_dex_{id_at_ref}")
                             ed_orig_at = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(reg_at_alvo["Origem do Recurso"]) if reg_at_alvo.get("Origem do Recurso") in LISTA_ORIGENS_RECURSO else 0, key=f"t1_at_orig_{id_at_ref}")
                             
                             st.markdown("<p style='font-weight:bold; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
@@ -3443,7 +3450,7 @@ elif modo == "📊 Visualizar Base":
                         with l_aba2:
                             if st.checkbox("Alterar Resultado do Indicador (Aferição Real)?", key="chk_res_lt"):
                                 edicoes_lote["Resultado_Indicador"] = st.text_input("Novo Resultado:", key="in_res_lt").strip()
-                            if st.checkbox("Alterar Doc_Probatorio_Exec (SEI)?", key="chk_doc_lt"):
+                            if st.checkbox("Alterar Número SEI do Documento Probatório de Execução?", key="chk_doc_lt"):
                                 edicoes_lote["Doc_Probatorio_Exec"] = st.text_input("Novo SEI:", key="in_doc_lt").strip()
                             if st.checkbox("Alterar Tema da Atividade?", key="chk_tema_lt"):
                                 edicoes_lote["Tema da Atividade"] = st.selectbox("Novo Tema:", LISTA_TEMAS, key="in_tema_lt")
@@ -3485,27 +3492,27 @@ elif modo == "📊 Visualizar Base":
                                 if st.checkbox("Alterar Origem do Recurso?", key="chk_orig_lt"):
                                     edicoes_lote["Origem do Recurso"] = st.selectbox("Nova Origem do Recurso:", LISTA_ORIGENS_RECURSO, key="in_orig_lt")
                             with col_ld2:
-                                if st.checkbox("Alterar Dias_Gastos_Plan?", key="chk_dpl_lt"):
-                                    edicoes_lote["Dias_Gastos_Plan"] = st.number_input("Novos Dias Gastos Plan:", min_value=0.0, step=0.5, format="%.1f", key="in_dpl_lt")
-                                if st.checkbox("Alterar Dias_Gastos_Exec?", key="chk_dex_lt"):
-                                    edicoes_lote["Dias_Gastos_Exec"] = st.number_input("Novos Dias Gastos Exec:", min_value=0.0, step=0.5, format="%.1f", key="in_dex_lt")
+                                if st.checkbox("Alterar Dias de Dedicação Planejados?", key="chk_dpl_lt"):
+                                    edicoes_lote["Dias_Gastos_Plan"] = st.number_input("Novos Dias de Dedicação Planejados:", min_value=0.0, step=0.5, format="%.1f", key="in_dpl_lt")
+                                if st.checkbox("Alterar Dias de Dedicação Executados?", key="chk_dex_lt"):
+                                    edicoes_lote["Dias_Gastos_Exec"] = st.number_input("Novos Dias de Dedicação Executados:", min_value=0.0, step=0.5, format="%.1f", key="in_dex_lt")
 
                             st.markdown("##### Valores Orçamentários (Planejado vs Executado)")
                             col_lpl, col_lex = st.columns(2)
                             with col_lpl:
-                                if st.checkbox("Alterar Rec_Plan_Diarias?", key="chk_rpd_lt"):
-                                    edicoes_lote["Rec_Plan_Diarias"] = st.number_input("Novo Rec_Plan_Diarias:", min_value=0.0, step=50.0, format="%.2f", key="in_rpd_lt")
-                                if st.checkbox("Alterar Rec_Plan_Passagens?", key="chk_rpp_lt"):
-                                    edicoes_lote["Rec_Plan_Passagens"] = st.number_input("Novo Rec_Plan_Passagens:", min_value=0.0, step=50.0, format="%.2f", key="in_rpp_lt")
-                                if st.checkbox("Alterar Rec_Plan_Outras_Despesas?", key="chk_rpo_lt"):
-                                    edicoes_lote["Rec_Plan_Outras_Despesas"] = st.number_input("Novo Rec_Plan_Outras_Despesas:", min_value=0.0, step=50.0, format="%.2f", key="in_rpo_lt")
+                                if st.checkbox("Alterar Recursos Planejados — Diárias (R$)?", key="chk_rpd_lt"):
+                                    edicoes_lote["Rec_Plan_Diarias"] = st.number_input("Novo Rec. Planejado — Diárias:", min_value=0.0, step=50.0, format="%.2f", key="in_rpd_lt")
+                                if st.checkbox("Alterar Recursos Planejados — Passagens (R$)?", key="chk_rpp_lt"):
+                                    edicoes_lote["Rec_Plan_Passagens"] = st.number_input("Novo Rec. Planejado — Passagens:", min_value=0.0, step=50.0, format="%.2f", key="in_rpp_lt")
+                                if st.checkbox("Alterar Recursos Planejados — Outras Despesas (R$)?", key="chk_rpo_lt"):
+                                    edicoes_lote["Rec_Plan_Outras_Despesas"] = st.number_input("Novo Rec. Planejado — Outras Despesas:", min_value=0.0, step=50.0, format="%.2f", key="in_rpo_lt")
                             with col_lex:
-                                if st.checkbox("Alterar Rec_Exec_Diarias?", key="chk_red_lt"):
-                                    edicoes_lote["Rec_Exec_Diarias"] = st.number_input("Novo Rec_Exec_Diarias:", min_value=0.0, step=50.0, format="%.2f", key="in_red_lt")
-                                if st.checkbox("Alterar Rec_Exec_Passagens?", key="chk_rep_lt"):
-                                    edicoes_lote["Rec_Exec_Passagens"] = st.number_input("Novo Rec_Exec_Passagens:", min_value=0.0, step=50.0, format="%.2f", key="in_rep_lt")
-                                if st.checkbox("Alterar Rec_Exec_Outras_Despesas?", key="chk_reo_lt"):
-                                    edicoes_lote["Rec_Exec_Outras_Despesas"] = st.number_input("Novo Rec_Exec_Outras_Despesas:", min_value=0.0, step=50.0, format="%.2f", key="in_reo_lt")
+                                if st.checkbox("Alterar Recursos Executados — Diárias (R$)?", key="chk_red_lt"):
+                                    edicoes_lote["Rec_Exec_Diarias"] = st.number_input("Novo Rec. Executado — Diárias:", min_value=0.0, step=50.0, format="%.2f", key="in_red_lt")
+                                if st.checkbox("Alterar Recursos Executados — Passagens (R$)?", key="chk_rep_lt"):
+                                    edicoes_lote["Rec_Exec_Passagens"] = st.number_input("Novo Rec. Executado — Passagens:", min_value=0.0, step=50.0, format="%.2f", key="in_rep_lt")
+                                if st.checkbox("Alterar Recursos Executados — Outras Despesas (R$)?", key="chk_reo_lt"):
+                                    edicoes_lote["Rec_Exec_Outras_Despesas"] = st.number_input("Novo Rec. Executado — Outras Despesas:", min_value=0.0, step=50.0, format="%.2f", key="in_reo_lt")
 
                         with l_aba5:
                             if st.checkbox("Alterar Observações?", key="chk_obs_lt"):
@@ -3847,15 +3854,13 @@ elif modo == "➕ Inserir Nova Linha":
             with c_dt2:
                 dt_termino = st.date_input("Data de Término:", value=val_dt_termino, format="DD/MM/YYYY", key="pna_dt_fim_acao")
             
-            dias_plan = st.number_input("Dias Gastos Plan:", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
+            # 🚀 Nome amigável de dias planejados:
+            dias_plan = st.number_input("Dias de Dedicação Planejados:", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
             
-            # 🚀 Origem do recurso padronizada para a UF do operador
             idx_origem_padrao = LISTA_ORIGENS_RECURSO.index(uf_filtro_pna) if uf_filtro_pna in LISTA_ORIGENS_RECURSO else 0
             origem_recurso = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=idx_origem_padrao, key="pna_orig_acao")
             
             st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
-            
-            # 🚀 Rótulos amigáveis de recursos
             rec_p_diarias = st.number_input("Recursos Planejados — Diárias (R$):", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), step=50.0, format="%.2f", key="pna_rpd_acao")
             rec_p_passagens = st.number_input("Recursos Planejados — Passagens (R$):", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Passagens"), step=50.0, format="%.2f", key="pna_rpp_acao")
             rec_p_outras = st.number_input("Recursos Planejados — Outras Despesas (R$):", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Outras_Despesas"), step=50.0, format="%.2f", key="pna_rpo_acao")
@@ -3968,7 +3973,9 @@ elif modo == "➕ Inserir Nova Linha":
         with aba2:
             st.text_input("Indicador (Automático)", value=val_indicador, disabled=True)
             resultado_indicador = st.text_input("Resultado do Indicador (Aferição Real):", value=str(registro_selecionado["Resultado_Indicador"]) if registro_selecionado is not None else "", key="atv_res_ind")
-            doc_probatorio = st.text_input("Doc_Probatorio_Exec (SEI):", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "", key="atv_doc_sei")
+            
+            # 🚀 Nome amigável do documento SEI:
+            doc_probatorio = st.text_input("Número SEI do Documento Probatório de Execução:", value=str(registro_selecionado["Doc_Probatorio_Exec"]) if registro_selecionado is not None else "", key="atv_doc_sei")
             
             uf_acao = uf_filtro_pna
             st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_acao), disabled=True)
@@ -3982,7 +3989,6 @@ elif modo == "➕ Inserir Nova Linha":
                 help="Herdada da Ação Setorial. Altere para 'Rotina' caso esta missão específica seja apenas reunião ou despacho de gabinete."
             )
             
-            # 🔒 TEMA E OBJETIVO 100% HERDADOS E BLOQUEADOS
             c_atv_t1, c_atv_t2 = st.columns(2)
             with c_atv_t1:
                 st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado, disabled=True, key="atv_txt_tema_dis")
@@ -4076,19 +4082,18 @@ elif modo == "➕ Inserir Nova Linha":
             with c_dt2:
                 dt_termino = st.date_input("Data de Término:", value=val_dt_termino, format="DD/MM/YYYY", key="atv_dt_fim")
             
+            # 🚀 Nomes amigáveis de dias planejados e executados:
             c_d1_ins, c_d2_ins = st.columns(2)
             with c_d1_ins:
-                dias_plan = st.number_input("Dias Gastos Plan:", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="atv_dias_pl")
+                dias_plan = st.number_input("Dias de Dedicação Planejados:", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="atv_dias_pl")
             with c_d2_ins:
-                dias_exec = st.number_input("Dias Gastos Exec:", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"), step=0.5, format="%.1f", key="atv_dias_ex")
+                dias_exec = st.number_input("Dias de Dedicação Executados:", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Exec"), step=0.5, format="%.1f", key="atv_dias_ex")
                 
             idx_origem_padrao = LISTA_ORIGENS_RECURSO.index(uf_filtro_pna) if uf_filtro_pna in LISTA_ORIGENS_RECURSO else 0
             origem_recurso = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=idx_origem_padrao, key="atv_sel_origem")
             
             st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
             c_pl, c_ex = st.columns(2)
-            
-            # 🚀 Nomes amigáveis dos recursos em colunas lado a lado
             with c_pl:
                 st.caption("Recursos Planejados")
                 rec_p_diarias = st.number_input("Planejado — Diárias (R$):", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), step=50.0, format="%.2f", key="atv_rpd")
