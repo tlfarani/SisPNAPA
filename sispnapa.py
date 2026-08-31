@@ -5180,182 +5180,229 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
         # TAB 3: EDITAR AÇÃO EXISTENTE (COM SINCRONIZAÇÃO EM CASCATA)
         # =================================================================
         with tab_edt_pna:
-            st.markdown("##### 📝 Atualizar Dados de Ação PNAPA")
+            st.markdown("##### 📝 Atualizar Dados de Ação PNAPA / Setorial")
             df_pna_edt_pool = df_pnapas[
                 ~df_pnapas["Num_Acao_PNAPA"].astype(str).str.upper().str.contains("DIPRO") &
                 ~df_pnapas["Acao_Ano"].astype(str).str.upper().str.contains("DIPRO")
             ].copy()
 
             if not df_pna_edt_pool.empty:
-                anos_disp_edt = ["Todos"] + sorted([str(int(a)) for a in df_pna_edt_pool["Ano_Num"].unique() if a > 0], reverse=True)
-                c_fano_edt, _ = st.columns([1, 2])
+                # 🚀 1. FILTROS DE TOPO (ANO E NÍVEL DA AÇÃO)
+                c_fano_edt, c_fniv_edt = st.columns([1, 1.5])
                 with c_fano_edt:
-                    f_ano_pna_edt = st.selectbox("Filtrar Ações por Ano:", anos_disp_edt, key="f_ano_pna_edt_v2")
+                    anos_disp_edt = ["Todos"] + sorted([str(int(a)) for a in df_pna_edt_pool["Ano_Num"].unique() if a > 0], reverse=True)
+                    f_ano_pna_edt = st.selectbox("Filtrar por Ano:", anos_disp_edt, key="f_ano_pna_edt_v3")
+                with c_fniv_edt:
+                    f_niv_pna_edt = st.selectbox(
+                        "Filtrar por Nível de Iniciativa:", 
+                        ["Todos", "Ação PNAPA (Estratégica / Nível 1)", "Ação Setorial (Tática / Nível 2)"], 
+                        key="f_niv_pna_edt_v3"
+                    )
 
                 df_pna_edt_filtrado = df_pna_edt_pool.copy()
                 if f_ano_pna_edt != "Todos":
                     df_pna_edt_filtrado = df_pna_edt_filtrado[df_pna_edt_filtrado["Ano_Num"] == int(f_ano_pna_edt)]
-
-                lista_acoes_edt = sorted((
-                    df_pna_edt_filtrado["Num_Acao_PNAPA"].astype(str) + " — " + 
-                    df_pna_edt_filtrado["Nome_Acao_Apelido"].astype(str) + " (" + 
-                    df_pna_edt_filtrado["Nivel_Catalogo"].astype(str) + ")"
-                ).tolist())
                 
-                acao_edt_sel = st.selectbox("Selecione a Ação para visualizar/alterar:", lista_acoes_edt, key="edt_pna_sel_v2")
-                cod_alvo_edt = acao_edt_sel.split(" — ")[0].strip()
-                dados_alvo_edt = df_pna_edt_filtrado[df_pna_edt_filtrado["Num_Acao_PNAPA"].astype(str) == cod_alvo_edt].iloc[0]
+                if f_niv_pna_edt == "Ação PNAPA (Estratégica / Nível 1)":
+                    df_pna_edt_filtrado = df_pna_edt_filtrado[
+                        (df_pna_edt_filtrado["Nivel_Catalogo"] == "Estratégica (Macro)") |
+                        (df_pna_edt_filtrado["Acao_Mae"].isna()) |
+                        (df_pna_edt_filtrado["Acao_Mae"].astype(str).str.strip() == "")
+                    ]
+                elif f_niv_pna_edt == "Ação Setorial (Tática / Nível 2)":
+                    df_pna_edt_filtrado = df_pna_edt_filtrado[
+                        (df_pna_edt_filtrado["Nivel_Catalogo"] == "Setorial (Tática)") |
+                        (df_pna_edt_filtrado["Acao_Mae"].notna() & (df_pna_edt_filtrado["Acao_Mae"].astype(str).str.strip() != ""))
+                    ]
 
-                id_col_nome = "ID_PNAPA" if "ID_PNAPA" in dados_alvo_edt else "Id"
-                id_pna_edit = int(float(dados_alvo_edt[id_col_nome]))
+                if df_pna_edt_filtrado.empty:
+                    st.warning("⚠️ Nenhuma ação encontrada com os filtros selecionados.")
+                else:
+                    lista_acoes_edt = sorted((
+                        df_pna_edt_filtrado["Num_Acao_PNAPA"].astype(str) + " — " + 
+                        df_pna_edt_filtrado["Nome_Acao_Apelido"].astype(str) + " (" + 
+                        df_pna_edt_filtrado["Nivel_Catalogo"].astype(str) + ")"
+                    ).tolist())
+                    
+                    acao_edt_sel = st.selectbox("Selecione a Ação para visualizar/alterar:", lista_acoes_edt, key="edt_pna_sel_v3")
+                    cod_alvo_edt = acao_edt_sel.split(" — ")[0].strip()
+                    dados_alvo_edt = df_pna_edt_filtrado[df_pna_edt_filtrado["Num_Acao_PNAPA"].astype(str) == cod_alvo_edt].iloc[0]
 
-                val_atual_ano = int(dados_alvo_edt.get("Ano_Num", 2027))
-                val_atual_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip().upper()
-                val_atual_comp = str(dados_alvo_edt.get("Nome_Acao_Completo", "")).strip()
-                val_atual_apelido = str(dados_alvo_edt.get("Nome_Acao_Apelido", "")).strip()
-                val_atual_ind = str(dados_alvo_edt.get("Indicador", "")).strip()
-                val_atual_imp = str(dados_alvo_edt.get("Importância", "Estratégica / Prioritária")).strip()
-                val_atual_uf_dono = str(dados_alvo_edt.get("UF_Dono", "DF")).strip()
-                val_atual_dono = str(dados_alvo_edt.get("Dono_Acao", "")).strip()
-                val_atual_meta_nac = float(dados_alvo_edt.get("Meta_Nacional", 0.0))
-                val_atual_orc_nac = float(dados_alvo_edt.get("Orcamento_Nacional", 0.0))
-                val_atual_mae = str(dados_alvo_edt.get("Acao_Mae", "")).strip()
-                val_atual_nivel = str(dados_alvo_edt.get("Nivel_Catalogo", "Estratégica (Macro)")).strip()
-                val_atual_tema = str(dados_alvo_edt.get("Tema_Padrao", "Outros temas")).strip()
-                val_atual_obj = str(dados_alvo_edt.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
+                    id_col_nome = "ID_PNAPA" if "ID_PNAPA" in dados_alvo_edt else "Id"
+                    id_pna_edit = int(float(dados_alvo_edt[id_col_nome]))
 
-                st.markdown(f"#### 🗂️ Ficha da Ação: **{val_atual_num}** `(ID: {id_pna_edit})`")
+                    val_atual_ano = int(dados_alvo_edt.get("Ano_Num", 2027))
+                    val_atual_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip().upper()
+                    val_atual_comp = str(dados_alvo_edt.get("Nome_Acao_Completo", "")).strip()
+                    val_atual_apelido = str(dados_alvo_edt.get("Nome_Acao_Apelido", "")).strip()
+                    val_atual_ind = str(dados_alvo_edt.get("Indicador", "")).strip()
+                    val_atual_imp_raw = str(dados_alvo_edt.get("Importância", "")).strip()
+                    val_atual_uf_dono = str(dados_alvo_edt.get("UF_Dono", "DF")).strip()
+                    val_atual_dono = str(dados_alvo_edt.get("Dono_Acao", "")).strip()
+                    val_atual_meta_nac = float(dados_alvo_edt.get("Meta_Nacional", 0.0))
+                    val_atual_orc_nac = float(dados_alvo_edt.get("Orcamento_Nacional", 0.0))
+                    val_atual_mae = str(dados_alvo_edt.get("Acao_Mae", "")).strip()
+                    val_atual_nivel = str(dados_alvo_edt.get("Nivel_Catalogo", "Estratégica (Macro)")).strip()
+                    val_atual_tema = str(dados_alvo_edt.get("Tema_Padrao", "Outros temas")).strip()
+                    val_atual_obj = str(dados_alvo_edt.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
 
-                c_e_ano, c_e_num, c_e_niv = st.columns([1, 1, 1.2])
-                with c_e_ano:
-                    e_ano = st.number_input("Ano:", min_value=2020, max_value=2040, value=val_atual_ano, step=1, key=f"edt_pna_ano_{id_pna_edit}")
-                with c_e_num:
-                    e_num = st.text_input("Código:", value=val_atual_num, key=f"edt_pna_num_{id_pna_edit}").strip().upper()
-                with c_e_niv:
-                    idx_niv = 1 if "Setorial" in val_atual_nivel else 0
-                    e_nivel = st.selectbox("Nível:", ["Estratégica (Macro)", "Setorial (Tática)"], index=idx_niv, key=f"edt_pna_niv_{id_pna_edit}")
+                    st.markdown(f"#### 🗂️ Ficha da Ação: **{val_atual_num}** `(ID: {id_pna_edit})`")
 
-                c_en1, c_en2 = st.columns([2, 1])
-                with c_en1:
-                    e_comp = st.text_input("Nome Completo:", value=val_atual_comp, key=f"edt_pna_comp_{id_pna_edit}").strip()
-                with c_en2:
-                    e_apelido = st.text_input("Nome Resumido / Apelido:", value=val_atual_apelido, key=f"edt_pna_apelido_{id_pna_edit}").strip()
+                    c_e_ano, c_e_num, c_e_niv = st.columns([1, 1, 1.2])
+                    with c_e_ano:
+                        e_ano = st.number_input("Ano:", min_value=2020, max_value=2040, value=val_atual_ano, step=1, key=f"edt_pna_ano_{id_pna_edit}")
+                    with c_e_num:
+                        e_num = st.text_input("Código:", value=val_atual_num, key=f"edt_pna_num_{id_pna_edit}").strip().upper()
+                    with c_e_niv:
+                        idx_niv = 1 if "Setorial" in val_atual_nivel else 0
+                        e_nivel = st.selectbox("Nível:", ["Estratégica (Macro)", "Setorial (Tática)"], index=idx_niv, key=f"edt_pna_niv_{id_pna_edit}")
 
-                c_et1, c_et2, c_et3 = st.columns(3)
-                with c_et1:
-                    idx_tema = LISTA_TEMAS.index(val_atual_tema) if val_atual_tema in LISTA_TEMAS else 0
-                    e_tema = st.selectbox("Tema Padrão:", LISTA_TEMAS, index=idx_tema, key=f"edt_pna_tema_{id_pna_edit}")
-                with c_et2:
-                    idx_obj = LISTA_OBJETIVOS.index(val_atual_obj) if val_atual_obj in LISTA_OBJETIVOS else 0
-                    e_obj = st.selectbox("Objetivo Padrão:", LISTA_OBJETIVOS, index=idx_obj, key=f"edt_pna_obj_{id_pna_edit}")
-                with c_et3:
-                    idx_imp = 0 if "Estratégica" in val_atual_imp or "Prioritária" in val_atual_imp else 1
-                    e_imp = st.selectbox("Importância Padrão:", ["Estratégica / Prioritária", "Ordinária / Rotina"], index=idx_imp, key=f"edt_pna_imp_{id_pna_edit}")
+                    # 🚀 2. TÍTULO (70 CHARS) E DESCRIÇÃO / ESCOPO (400 CHARS)
+                    c_en1, c_en2 = st.columns([1.5, 2.5])
+                    with c_en1:
+                        e_apelido = st.text_input(
+                            "Título / Nome da Ação:", 
+                            value=val_atual_apelido, 
+                            max_chars=70,
+                            help="Título direto contendo Objetivo e Tema (máx. 70 caracteres).",
+                            key=f"edt_pna_apelido_{id_pna_edit}"
+                        ).strip()
+                    with c_en2:
+                        e_comp = st.text_area(
+                            "Descrição / Escopo da Ação:", 
+                            value=val_atual_comp, 
+                            max_chars=400,
+                            help="Detalhamento técnico da ação (máx. 400 caracteres).",
+                            key=f"edt_pna_comp_{id_pna_edit}"
+                        ).strip()
 
-                c_edn1, c_edn2, c_edn3, c_edn4 = st.columns([1, 1.5, 1, 1.2])
-                with c_edn1:
-                    idx_uf_dn = LISTA_UFS_COMPLETA.index(val_atual_uf_dono) if val_atual_uf_dono in LISTA_UFS_COMPLETA else 0
-                    e_uf_dono = st.selectbox("UF Dono:", LISTA_UFS_COMPLETA, index=idx_uf_dn, key=f"edt_pna_uf_dn_{id_pna_edit}")
-                with c_edn2:
-                    srvs_dono_edit = df_servidores[df_servidores["UF_Servidor"] == e_uf_dono]["Servidor"].dropna().unique().tolist() if not df_servidores.empty else []
-                    idx_dn = srvs_dono_edit.index(val_atual_dono) if val_atual_dono in srvs_dono_edit else 0
-                    e_dono = st.selectbox("Especialista Sede:", srvs_dono_edit if srvs_dono_edit else [val_atual_dono], index=idx_dn, key=f"edt_pna_dn_{id_pna_edit}")
-                with c_edn3:
-                    e_meta_nac = st.number_input("Meta Nacional:", min_value=0.0, value=val_atual_meta_nac, step=1.0, key=f"edt_pna_meta_nac_{id_pna_edit}")
-                with c_edn4:
-                    e_orc_nac = st.number_input("Teto Ceneac (R$):", min_value=0.0, value=val_atual_orc_nac, step=5000.0, format="%.2f", key=f"edt_pna_orc_nac_{id_pna_edit}")
+                    # 🚀 3. CLASSIFICAÇÃO OFICIAL E HERANÇA
+                    c_et1, c_et2, c_et3 = st.columns(3)
+                    with c_et1:
+                        idx_tema = LISTA_TEMAS.index(val_atual_tema) if val_atual_tema in LISTA_TEMAS else 0
+                        e_tema = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, index=idx_tema, key=f"edt_pna_tema_{id_pna_edit}")
+                    with c_et2:
+                        idx_obj = LISTA_OBJETIVOS.index(val_atual_obj) if val_atual_obj in LISTA_OBJETIVOS else 0
+                        e_obj = st.selectbox("Objetivo Predominante:", LISTA_OBJETIVOS, index=idx_obj, key=f"edt_pna_obj_{id_pna_edit}")
+                    with c_et3:
+                        if e_nivel == "Estratégica (Macro)":
+                            e_imp = "Estratégica"
+                            st.text_input("Classificação da Ação:", value="Estratégica (Padrão Nível 1)", disabled=True, key=f"edt_pna_imp_dis_{id_pna_edit}")
+                        else:
+                            val_padronizado_imp = "Rotina" if val_atual_imp_raw in ["Rotina", "Ordinária"] else "Finalística"
+                            idx_imp = 0 if val_padronizado_imp == "Finalística" else 1
+                            e_imp = st.selectbox(
+                                "Classificação da Ação Setorial:", 
+                                ["Finalística", "Rotina"], 
+                                index=idx_imp, 
+                                key=f"edt_pna_imp_{id_pna_edit}",
+                                help="Finalística: Operações e vistorias de campo. Rotina: Manutenção e governança ordinária."
+                            )
 
-                e_ind = st.text_input("Indicador Associado:", value=val_atual_ind, key=f"edt_pna_ind_{id_pna_edit}").strip()
-                e_mae = st.text_input("Código Ação Mãe (Vazio se for Macro):", value=val_atual_mae, key=f"edt_pna_mae_{id_pna_edit}").strip().upper()
+                    c_edn1, c_edn2, c_edn3, c_edn4 = st.columns([1, 1.5, 1, 1.2])
+                    with c_edn1:
+                        idx_uf_dn = LISTA_UFS_COMPLETA.index(val_atual_uf_dono) if val_atual_uf_dono in LISTA_UFS_COMPLETA else 0
+                        e_uf_dono = st.selectbox("UF Dono:", LISTA_UFS_COMPLETA, index=idx_uf_dn, key=f"edt_pna_uf_dn_{id_pna_edit}")
+                    with c_edn2:
+                        srvs_dono_edit = df_servidores[df_servidores["UF_Servidor"] == e_uf_dono]["Servidor"].dropna().unique().tolist() if not df_servidores.empty else []
+                        idx_dn = srvs_dono_edit.index(val_atual_dono) if val_atual_dono in srvs_dono_edit else 0
+                        e_dono = st.selectbox("Especialista Sede:", srvs_dono_edit if srvs_dono_edit else [val_atual_dono], index=idx_dn, key=f"edt_pna_dn_{id_pna_edit}")
+                    with c_edn3:
+                        e_meta_nac = st.number_input("Meta Nacional:", min_value=0.0, value=val_atual_meta_nac, step=1.0, key=f"edt_pna_meta_nac_{id_pna_edit}")
+                    with c_edn4:
+                        e_orc_nac = st.number_input("Teto Ceneac (R$):", min_value=0.0, value=val_atual_orc_nac, step=5000.0, format="%.2f", key=f"edt_pna_orc_nac_{id_pna_edit}")
 
-                st.markdown("<br>", unsafe_allow_html=True)
-                from concurrent.futures import ThreadPoolExecutor
+                    e_ind = st.text_input("Indicador Associado:", value=val_atual_ind, key=f"edt_pna_ind_{id_pna_edit}").strip()
+                    e_mae = st.text_input("Código Ação Mãe (Vazio se for Ação PNAPA):", value=val_atual_mae, key=f"edt_pna_mae_{id_pna_edit}").strip().upper()
 
-                if st.button("💾 Salvar Alterações e Sincronizar Base Principal", type="primary", key=f"btn_salvar_edt_pna_{id_pna_edit}"):
-                    if not e_num or not e_comp:
-                        st.error("⚠️ Código e Nome Completo são obrigatórios.")
-                    else:
-                        nova_chave_acao_ano = f"{e_num}-{e_ano}"
-                        novo_nome_display = e_apelido if e_apelido else e_comp
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    from concurrent.futures import ThreadPoolExecutor
 
-                        payload_edt = {
-                            "Acao": "Editar",
-                            "Id": str(id_pna_edit),
-                            "ID_PNAPA": id_pna_edit,
-                            "Ano": int(e_ano),
-                            "Num_Acao_PNAPA": e_num,
-                            "Acao_Ano": nova_chave_acao_ano,
-                            "Nome_Acao_Completo": e_comp,
-                            "Nome_Acao_Apelido": novo_nome_display,
-                            "Importância": e_imp,
-                            "Indicador": e_ind,
-                            "UF_Dono": str(e_uf_dono),
-                            "Dono_Acao": str(e_dono),
-                            "Meta_Nacional": float(e_meta_nac),
-                            "Orcamento_Nacional": float(e_orc_nac),
-                            "Acao_Mae": str(e_mae),
-                            "Nivel_Catalogo": str(e_nivel),
-                            "Tema_Padrao": str(e_tema),
-                            "Objetivo_Padrao": str(e_obj)
-                        }
+                    if st.button("💾 Salvar Alterações e Sincronizar Base Principal", type="primary", key=f"btn_salvar_edt_pna_{id_pna_edit}"):
+                        if not e_num or not e_comp:
+                            st.error("⚠️ Código e Descrição / Escopo são obrigatórios.")
+                        else:
+                            nova_chave_acao_ano = f"{e_num}-{e_ano}"
+                            novo_nome_display = e_apelido if e_apelido else e_comp[:70]
 
-                        with st.spinner(f"1/2 Atualizando Ação '{nova_chave_acao_ano}' no Catálogo..."):
-                            try:
-                                requests.post(URL_FLOW_PNAPAS, json=payload_edt, timeout=25)
-                            except Exception as e:
-                                st.error(f"Erro ao conectar ao catálogo: {e}")
+                            payload_edt = {
+                                "Acao": "Editar",
+                                "Id": str(id_pna_edit),
+                                "ID_PNAPA": id_pna_edit,
+                                "Ano": int(e_ano),
+                                "Num_Acao_PNAPA": e_num,
+                                "Acao_Ano": nova_chave_acao_ano,
+                                "Nome_Acao_Completo": e_comp,
+                                "Nome_Acao_Apelido": novo_nome_display,
+                                "Importância": e_imp,
+                                "Indicador": e_ind,
+                                "UF_Dono": str(e_uf_dono),
+                                "Dono_Acao": str(e_dono),
+                                "Meta_Nacional": float(e_meta_nac),
+                                "Orcamento_Nacional": float(e_orc_nac),
+                                "Acao_Mae": str(e_mae),
+                                "Nivel_Catalogo": str(e_nivel),
+                                "Tema_Padrao": str(e_tema),
+                                "Objetivo_Padrao": str(e_obj)
+                            }
 
-                        # Sincronização em cascata na planilha principal
-                        cod_antigo_acao_ano = str(dados_alvo_edt.get("Acao_Ano", "")).strip()
-                        cod_antigo_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip()
+                            with st.spinner(f"1/2 Atualizando Ação '{nova_chave_acao_ano}' no Catálogo..."):
+                                try:
+                                    requests.post(URL_FLOW_PNAPAS, json=payload_edt, timeout=25)
+                                except Exception as e:
+                                    st.error(f"Erro ao conectar ao catálogo: {e}")
 
-                        linhas_macro_afetadas = df_atual[
-                            (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_antigo_acao_ano) |
-                            (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_antigo_num)
-                        ]
-                        qtd_macro_afetadas = len(linhas_macro_afetadas)
-                        sucessos_macro = 0
+                            # Sincronização em cascata na planilha principal
+                            cod_antigo_acao_ano = str(dados_alvo_edt.get("Acao_Ano", "")).strip()
+                            cod_antigo_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip()
 
-                        if qtd_macro_afetadas > 0:
-                            with st.spinner(f"2/2 Sincronizando {qtd_macro_afetadas} registro(s) vinculados na Planilha Principal..."):
-                                payloads_cascata_pna = []
-                                for _, row_orig in linhas_macro_afetadas.iterrows():
-                                    p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
-                                    p_item["Acao"] = "Editar"
-                                    p_item["Id"] = str(row_orig["Id"])
-                                    p_item["Ano da Ação"] = int(e_ano)
-                                    p_item["Número da Ação PNAPA"] = str(nova_chave_acao_ano)
-                                    p_item["Nome da Ação PNAPA"] = str(novo_nome_display)
-                                    p_item["Indicador"] = str(e_ind)
-                                    p_item["Importância da Atividade"] = str(e_imp)
-                                    p_item["Tema da Atividade"] = str(e_tema)
-                                    p_item["Objetivo da Atividade"] = str(e_obj)
+                            linhas_macro_afetadas = df_atual[
+                                (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_antigo_acao_ano) |
+                                (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_antigo_num)
+                            ]
+                            qtd_macro_afetadas = len(linhas_macro_afetadas)
+                            sucessos_macro = 0
 
-                                    payload_sanit = {
-                                        k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v))
-                                        for k, v in p_item.items()
-                                    }
-                                    payloads_cascata_pna.append(payload_sanit)
+                            if qtd_macro_afetadas > 0:
+                                with st.spinner(f"2/2 Sincronizando {qtd_macro_afetadas} registro(s) vinculados na Planilha Principal..."):
+                                    payloads_cascata_pna = []
+                                    for _, row_orig in linhas_macro_afetadas.iterrows():
+                                        p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                                        p_item["Acao"] = "Editar"
+                                        p_item["Id"] = str(row_orig["Id"])
+                                        p_item["Ano da Ação"] = int(e_ano)
+                                        p_item["Número da Ação PNAPA"] = str(nova_chave_acao_ano)
+                                        p_item["Nome da Ação PNAPA"] = str(novo_nome_display)
+                                        p_item["Indicador"] = str(e_ind)
+                                        p_item["Importância da Atividade"] = str(e_imp)
+                                        p_item["Tema da Atividade"] = str(e_tema)
+                                        p_item["Objetivo da Atividade"] = str(e_obj)
 
-                                def enviar_req_pna_macro(p):
-                                    try:
-                                        r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
-                                        return 1 if r.status_code in [200, 202] else 0
-                                    except:
-                                        return 0
+                                        payload_sanit = {
+                                            k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v))
+                                            for k, v in p_item.items()
+                                        }
+                                        payloads_cascata_pna.append(payload_sanit)
 
-                                with ThreadPoolExecutor(max_workers=10) as executor:
-                                    resultados = list(executor.map(enviar_req_pna_macro, payloads_cascata_pna))
-                                    sucessos_macro = sum(resultados)
+                                    def enviar_req_pna_macro(p):
+                                        try:
+                                            r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
+                                            return 1 if r.status_code in [200, 202] else 0
+                                        except:
+                                            return 0
 
-                        time.sleep(2.0)
-                        st.cache_data.clear()
-                        if "df" in st.session_state:
-                            del st.session_state.df
+                                    with ThreadPoolExecutor(max_workers=10) as executor:
+                                        resultados = list(executor.map(enviar_req_pna_macro, payloads_cascata_pna))
+                                        sucessos_macro = sum(resultados)
 
-                        st.success(f"🎉 Ação **{nova_chave_acao_ano}** e {sucessos_macro}/{qtd_macro_afetadas} atividades sincronizadas com sucesso!")
-                        time.sleep(1.5)
-                        st.rerun()
+                            time.sleep(2.0)
+                            st.cache_data.clear()
+                            if "df" in st.session_state:
+                                del st.session_state.df
+
+                            st.success(f"🎉 Ação **{nova_chave_acao_ano}** e {sucessos_macro}/{qtd_macro_afetadas} atividades sincronizadas com sucesso!")
+                            time.sleep(1.5)
+                            st.rerun()
 
         # =================================================================
         # TAB 4: EXCLUIR AÇÃO
