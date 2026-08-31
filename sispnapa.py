@@ -3684,7 +3684,15 @@ elif modo == "➕ Inserir Nova Linha":
             
         ano_vinculo = st.selectbox("Selecione o Ano para filtrar as Ações:", anos_aux_disponiveis, index=idx_ano_form, key="form_pna_vinculo_ano")
         
-        df_pnapas_ano = df_pnapas_op[pd.to_numeric(df_pnapas_op["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_vinculo)]
+        # Filtra apenas Ações Setoriais (Nível 2) para vínculo
+        df_pnapas_ano = df_pnapas_op[
+            (pd.to_numeric(df_pnapas_op["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_vinculo)) &
+            (
+                (df_pnapas_op["Nivel_Catalogo"] == "Setorial (Tática)") |
+                (df_pnapas_op["Acao_Mae"].notna() & (df_pnapas_op["Acao_Mae"].astype(str).str.strip() != "")) |
+                (df_pnapas_op["Num_Acao_PNAPA"].astype(str).str.contains(r"\."))
+            )
+        ]
         
         if not df_pnapas_ano.empty:
             lista_opcoes_vinc = (df_pnapas_ano["Acao_Ano"].astype(str) + " - " + df_pnapas_ano["Nome_Acao_Apelido"].astype(str)).tolist()
@@ -3814,8 +3822,15 @@ elif modo == "➕ Inserir Nova Linha":
             uf_acao = uf_filtro_pna
             st.text_input("UF da Ação PNAPA (Automático)", value=str(uf_acao), disabled=True)
             st.text_input("Classificação da Ação Setorial (Herdada)", value=importancia, disabled=True)
-            tema = st.selectbox("Tema da Atividade", LISTA_TEMAS, key="pna_sel_tema_acao")
-            objetivo = st.selectbox("Objetivo da Atividade", LISTA_OBJETIVOS, key="pna_sel_obj_acao")
+            
+            tema_sugerido = str(dados_aux_linha.get("Tema_Padrao", "Outros temas")).strip()
+            idx_tema_padrao = LISTA_TEMAS.index(tema_sugerido) if tema_sugerido in LISTA_TEMAS else 0
+            tema = st.selectbox("Tema da Atividade:", LISTA_TEMAS, index=idx_tema_padrao, key="pna_sel_tema_dinamico")
+            
+            objetivo_herdado = str(dados_aux_linha.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
+            st.text_input("Objetivo da Atividade (Herdado da Ação PNAPA):", value=objetivo_herdado, disabled=True)
+            objetivo = objetivo_herdado
+            
             tipo_atividade = st.selectbox("Tipo de Atividade", LISTA_TIPOS_ATIVIDADE, key="pna_sel_tipo_acao")
 
         with aba4:
@@ -3823,7 +3838,9 @@ elif modo == "➕ Inserir Nova Linha":
             dt_termino = st.date_input("Data de Término:", value=val_dt_termino, format="DD/MM/YYYY", key="pna_dt_fim_acao")
             
             dias_plan = st.number_input("Dias Gastos Plan", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Dias_Gastos_Plan"), step=0.5, format="%.1f", key="pna_dias_pl_acao")
-            origem_recurso = st.selectbox("Origem do Recurso", LISTA_ORIGENS_RECURSO, key="pna_orig_acao")
+            
+            idx_origem_padrao = LISTA_ORIGENS_RECURSO.index(uf_filtro_pna) if uf_filtro_pna in LISTA_ORIGENS_RECURSO else 0
+            origem_recurso = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=idx_origem_padrao, key="pna_orig_dinamica")
             
             st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
             rec_p_diarias = st.number_input("Rec_Plan_Diarias", min_value=0.0, value=obter_num_seguro(registro_selecionado, "Rec_Plan_Diarias"), step=50.0, format="%.2f", key="pna_rpd_acao")
