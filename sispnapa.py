@@ -981,7 +981,7 @@ st.markdown("""
             font-weight: 700 !important;
         }
         
-        /* 2. Rótulos e Cabeçalhos de Campos (Sempre Transparentes) */
+        /* 2. Rótulos e Cabeçalhos dos Campos (100% Transparentes sobre o fundo original) */
         div[data-testid="stWidgetLabel"],
         div[data-testid="stWidgetLabel"] *,
         label,
@@ -991,72 +991,76 @@ st.markdown("""
             font-weight: 600 !important;
         }
 
-        /* 3. SELECTBOXES & MULTISELECTS (Fundo Branco Estrito na Caixa de Entrada) */
+        /* 3. SELECTBOXES & MULTISELECTS (Fundo Branco em TODAS as camadas internas da caixa) */
         div[data-testid="stSelectbox"],
         div[data-testid="stMultiSelect"] {
             background-color: transparent !important;
         }
 
-        div[data-baseweb="select"] > div {
+        div[data-baseweb="select"],
+        div[data-baseweb="select"] * {
             background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+
+        /* Borda Externa e Arredondamento do Campo */
+        div[data-baseweb="select"] > div:first-child {
             border: 1px solid #cbd5e1 !important;
             border-radius: 6px !important;
         }
 
-        div[data-baseweb="select"] div,
-        div[data-baseweb="select"] span,
-        div[data-baseweb="select"] input {
-            color: #0f172a !important;
-            font-weight: 500 !important;
-        }
-
+        /* Placeholder do Select/MultiSelect */
         div[data-baseweb="select"] input::placeholder {
             color: #64748b !important;
         }
 
-        /* Setas e Ícones de Dropdown */
+        /* Ícones e Setas do Dropdown */
         div[data-baseweb="select"] svg { 
             fill: #0f172a !important; 
             stroke: #0f172a !important;
+            background-color: transparent !important;
         }
 
-        /* Tags / Chips das UFs Selecionadas no MultiSelect */
-        div[data-baseweb="tag"] {
+        /* 4. Chips / Tags das UFs Selecionadas no MultiSelect */
+        div[data-baseweb="tag"],
+        div[data-baseweb="tag"] * {
             background-color: #e2e8f0 !important;
-            border: 1px solid #cbd5e1 !important;
-            border-radius: 4px !important;
-        }
-        div[data-baseweb="tag"] span {
             color: #0f172a !important;
+            border-radius: 4px !important;
             font-weight: 700 !important;
-            background-color: transparent !important;
+        }
+        div[data-baseweb="tag"] {
+            border: 1px solid #cbd5e1 !important;
         }
         div[data-baseweb="tag"] svg {
             fill: #475569 !important;
             stroke: none !important;
+            background-color: transparent !important;
         }
 
-        /* 4. Menus Suspensos Abertos (Popovers e Listas Virtuais) */
+        /* 5. Menus Suspensos Abertos (Popovers, Dropdowns Flutuantes e Listas) */
         ul[data-testid="stSelectboxVirtualDropdown"],
-        div[data-baseweb="popover"] ul,
-        div[data-baseweb="menu"] {
-            background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
-        }
-        div[data-baseweb="popover"] li,
-        div[data-baseweb="menu"] li {
+        div[data-baseweb="popover"],
+        div[data-baseweb="popover"] *,
+        div[data-baseweb="menu"],
+        div[data-baseweb="menu"] * {
             background-color: #ffffff !important;
             color: #0f172a !important;
         }
+
         div[data-baseweb="popover"] li:hover,
+        div[data-baseweb="popover"] li:hover *,
         div[data-baseweb="menu"] li:hover,
+        div[data-baseweb="menu"] li:hover *,
         div[data-baseweb="popover"] li[aria-selected="true"],
-        div[data-baseweb="menu"] li[aria-selected="true"] {
+        div[data-baseweb="popover"] li[aria-selected="true"] *,
+        div[data-baseweb="menu"] li[aria-selected="true"],
+        div[data-baseweb="menu"] li[aria-selected="true"] * {
             background-color: #f1f5f9 !important;
             color: #0f172a !important;
         }
 
-        /* 5. Entradas Numéricas (Number Input) */
+        /* 6. Entradas Numéricas (Number Input) */
         div[data-testid="stNumberInput"] input { 
             background-color: #ffffff !important; 
             color: #03170a !important; 
@@ -1071,7 +1075,7 @@ st.markdown("""
             border: 1px solid #cbd5e1 !important; 
         }
 
-        /* 6. Caixas de Data (Date Input) */
+        /* 7. Caixas de Data (Date Input) */
         div[data-testid="stDateInput"] > div,
         div[data-testid="stDateInput"] div[data-baseweb="input"],
         div[data-testid="stDateInput"] div[data-baseweb="base-input"] {
@@ -1086,7 +1090,7 @@ st.markdown("""
             fill: #03170a !important;
         }
 
-        /* 7. Inputs de Texto, TextAreas, Abas e Cabeçalhos */
+        /* 8. Inputs de Texto, TextAreas, Abas e Cabeçalhos */
         div[data-testid="stTextInput"] input, 
         div[data-testid="stTextArea"] textarea {
             border: 1px solid #cbd5e1 !important; 
@@ -1111,7 +1115,7 @@ st.markdown("""
             font-weight: 700 !important; 
         }
 
-        /* 8. 🛡️ FORMATAÇÃO UNIVERSAL DE TAGS DE CÓDIGO (BADGES / IDs) */
+        /* 9. 🛡️ FORMATAÇÃO UNIVERSAL DE TAGS DE CÓDIGO (BADGES / IDs) */
         code {
             background-color: #e2e8f0 !important;
             color: #0f172a !important;
@@ -1122,7 +1126,7 @@ st.markdown("""
             font-size: 0.88em !important;
         }
 
-        /* 9. Ícones de Ajuda (?) */
+        /* 10. Ícones de Ajuda (?) e Tooltips */
         [data-testid="stTooltipIcon"] {
             color: #475569 !important;
         }
@@ -1131,8 +1135,6 @@ st.markdown("""
             fill: none !important;
             stroke: #475569 !important;
         }
-
-        /* 10. Balão Flutuante de Tooltip */
         div[data-baseweb="tooltip"],
         div[data-testid="stTooltipContent"] {
             background-color: #1e293b !important;
