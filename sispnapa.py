@@ -974,7 +974,7 @@ def validar_senha(senha_digitada: str, token_armazenado: str, senha_padrao="pnap
 # =================================================================
 st.markdown("""
     <style>
-        /* 1. Barra Lateral (Sidebar Verde Escura: #1c4029) */
+        /* 1. BARRA LATERAL (Sidebar: #1c4029) */
         section[data-testid="stSidebar"] {
             background-color: #1c4029 !important;
         }
@@ -988,48 +988,72 @@ st.markdown("""
             font-weight: 700 !important;
         }
 
-        /* 🔘 BOTÕES DA BARRA LATERAL (Verde Intermediário / Sálvia Corporativo) */
+        /* 🔘 BOTÕES DA BARRA LATERAL (Atualizar Base, Trocar Senha, Calibrar Regras) */
         section[data-testid="stSidebar"] button,
+        section[data-testid="stSidebar"] button[kind="secondary"],
+        section[data-testid="stSidebar"] button[kind="primary"],
+        section[data-testid="stSidebar"] div[data-testid="stButton"] > button,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
             background-color: #cce3d4 !important;
             border: 1px solid #9fc4ab !important;
             border-radius: 6px !important;
             color: #063319 !important;
+            box-shadow: none !important;
             transition: all 0.2s ease-in-out !important;
         }
         section[data-testid="stSidebar"] button *,
+        section[data-testid="stSidebar"] div[data-testid="stButton"] > button *,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button * {
             color: #063319 !important;
             font-weight: 700 !important;
             background-color: transparent !important;
         }
         section[data-testid="stSidebar"] button:hover,
+        section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
             background-color: #b8d9c2 !important;
             border-color: #6ea47f !important;
             color: #022410 !important;
         }
-        
-        /* 2. Rótulos dos Campos na Área Principal (Transparentes sobre o fundo da página) */
-        div[data-testid="stAppViewContainer"] div[data-testid="stWidgetLabel"] p,
-        div[data-testid="stAppViewContainer"] label p {
+
+        /* 📋 SELECTBOX DA BARRA LATERAL (Testar Perfil como: Branco com seta preta) */
+        section[data-testid="stSidebar"] div[data-baseweb="select"],
+        section[data-testid="stSidebar"] div[data-baseweb="select"] * {
+            background-color: #ffffff !important;
             color: #03170a !important;
-            font-weight: 600 !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"] > div:first-child {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"] svg {
+            fill: #03170a !important;
+            background-color: transparent !important;
         }
 
-        /* 3. Caixas de Seleção, Textos, Números e Datas (Fundo Branco Sólido e Bordas Cinzas) */
+        /* 2. RÓTULOS NA ÁREA PRINCIPAL */
+        section.main div[data-testid="stWidgetLabel"] p,
+        section.main label p,
+        div[data-testid="stMain"] div[data-testid="stWidgetLabel"] p,
+        div[data-testid="stMain"] label p {
+            color: #03170a !important;
+            font-weight: 600 !important;
+            background-color: transparent !important;
+        }
+
+        /* 3. CAMPOS DE ENTRADA NA ÁREA PRINCIPAL (Fundo Branco) */
         div[data-testid="stTextInput"] input,
         div[data-testid="stTextArea"] textarea,
         div[data-testid="stNumberInput"] input,
         div[data-testid="stDateInput"] input,
-        div[data-baseweb="select"] > div {
+        section.main div[data-baseweb="select"] > div,
+        div[data-testid="stMain"] div[data-baseweb="select"] > div {
             border: 1px solid #cbd5e1 !important;
             border-radius: 6px !important;
             background-color: #ffffff !important;
             color: #03170a !important;
         }
 
-        /* Inputs desabilitados/automáticos */
         div[data-testid="stTextInput"] input:disabled,
         div[data-testid="stTextArea"] textarea:disabled {
             background-color: #ffffff !important;
@@ -1039,7 +1063,7 @@ st.markdown("""
             -webkit-text-fill-color: #475569 !important;
         }
 
-        /* 4. Chips / Tags das UFs Selecionadas no MultiSelect */
+        /* 4. CHIPS DO MULTISELECT NA ÁREA PRINCIPAL */
         div[data-testid="stMultiSelect"] span[data-baseweb="tag"] {
             background-color: #e2e8f0 !important;
             border: 1px solid #cbd5e1 !important;
@@ -1053,7 +1077,7 @@ st.markdown("""
             fill: #475569 !important; 
         }
 
-        /* 5. Menus Suspensos / Opções Abertas (Dropdown Flutuante) */
+        /* 5. MENUS SUSPENSOS / DROPDOWNS ABERTOS */
         div[data-baseweb="popover"],
         ul[data-testid="stSelectboxVirtualDropdown"] {
             background-color: #ffffff !important;
@@ -1074,41 +1098,43 @@ st.markdown("""
             color: #03170a !important;
         }
 
-        /* 6. Botões na Área Principal (Primários e Secundários) */
-        div[data-testid="stAppViewContainer"] button[kind="primary"] {
+        /* 6. BOTÕES DA ÁREA PRINCIPAL (Exclusivos da tela) */
+        section.main button[kind="primary"],
+        div[data-testid="stMain"] button[kind="primary"] {
             background-color: #1c4029 !important;
             border: 1px solid #1c4029 !important;
             border-radius: 6px !important;
             color: #ffffff !important;
         }
-        div[data-testid="stAppViewContainer"] button[kind="primary"] * {
+        section.main button[kind="primary"] *,
+        div[data-testid="stMain"] button[kind="primary"] * {
             color: #ffffff !important;
             font-weight: 700 !important;
         }
-        div[data-testid="stAppViewContainer"] button[kind="primary"]:hover {
+        section.main button[kind="primary"]:hover,
+        div[data-testid="stMain"] button[kind="primary"]:hover {
             background-color: #285739 !important;
             border-color: #285739 !important;
         }
 
-        div[data-testid="stAppViewContainer"] div[data-testid="stPopover"] > button,
-        div[data-testid="stAppViewContainer"] button[kind="secondary"] {
+        section.main div[data-testid="stPopover"] > button,
+        section.main button[kind="secondary"],
+        div[data-testid="stMain"] div[data-testid="stPopover"] > button,
+        div[data-testid="stMain"] button[kind="secondary"] {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
             border-radius: 6px !important;
             color: #03170a !important;
         }
-        div[data-testid="stAppViewContainer"] div[data-testid="stPopover"] > button *,
-        div[data-testid="stAppViewContainer"] button[kind="secondary"] * {
+        section.main div[data-testid="stPopover"] > button *,
+        section.main button[kind="secondary"] *,
+        div[data-testid="stMain"] div[data-testid="stPopover"] > button *,
+        div[data-testid="stMain"] button[kind="secondary"] * {
             color: #03170a !important;
             font-weight: 600 !important;
         }
-        div[data-testid="stAppViewContainer"] div[data-testid="stPopover"] > button:hover,
-        div[data-testid="stAppViewContainer"] button[kind="secondary"]:hover {
-            background-color: #f1f5f9 !important;
-            border-color: #94a3b8 !important;
-        }
 
-        /* 7. Abas, Cabeçalhos e Badges de Código */
+        /* 7. ABAS, CABEÇALHOS E BADGES */
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
         div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
@@ -1124,7 +1150,7 @@ st.markdown("""
             font-size: 0.88em !important;
         }
 
-        /* 8. Tooltips e Ícones de Ajuda (?) */
+        /* 8. TOOLTIPS */
         [data-testid="stTooltipIcon"] svg * { stroke: #475569 !important; }
         div[data-baseweb="tooltip"] * { color: #ffffff !important; background-color: transparent !important; }
         div[data-baseweb="tooltip"] {
