@@ -462,6 +462,27 @@ def obter_servidores_por_uf(df_srv, uf_alvo):
     return sorted(df_filtrado["Servidor"].dropna().unique().tolist())
 
 # =================================================================
+# FUNÇÃO AUXILIAR: Decodificação das UFs Obrigatórias
+# =================================================================
+def obter_lista_ufs_obrigatorias(valor_ufs_raw):
+    """
+    Decodifica a string da coluna 'UFs_Obrigatorias' do catálogo e retorna um conjunto (set) de UFs.
+    Suporta 'TODAS', listas separadas por vírgula/ponto-e-vírgula/espaço e trata nulos.
+    """
+    if pd.isna(valor_ufs_raw) or valor_ufs_raw is None:
+        return set()
+    val_str = str(valor_ufs_raw).strip().upper()
+    if not val_str or val_str in ["NAN", "NONE", "NÃO SE APLICA", "N/A"]:
+        return set()
+    if "TODAS" in val_str or "27" in val_str:
+        return set(LISTA_UFS_COMPLETA)
+    
+    # Extrai siglas de 2 letras
+    import re
+    ufs_encontradas = re.findall(r'\b[A-Z]{2}\b', val_str)
+    return set([u for u in ufs_encontradas if u in LISTA_UFS_COMPLETA])
+
+# =================================================================
 # REGRA DE GOVERNANÇA: MOTOR DO TERMÔMETRO DE CAPACIDADE E LIDERANÇA
 # =================================================================
 def calcular_termometro_carga(
@@ -3907,6 +3928,15 @@ elif modo == "➕ Inserir Nova Linha":
                     st.info(f"ℹ️ **Capacidade da Equipe {uf_filtro_pna}:** {saldo_uf_val:.1f} dias disponíveis de {cap_uf_val:.0f} dias no ciclo Pré-PNAPA ({uso_uf_val:.1f}% comprometido).")
                 else:
                     st.warning(f"⚠️ **Atenção:** A equipe de {uf_filtro_pna} já atingiu 100% da sua capacidade pactuada (Saldo negativo de {abs(saldo_uf_val):.1f} dias).")
+
+            # 🚨 Alerta de Obrigatoriedade para a UF Proponente
+            ufs_obrig_acao_atual = obter_lista_ufs_obrigatorias(dados_aux_linha.get("UFs_Obrigatorias", ""))
+            if uf_filtro_pna in ufs_obrig_acao_atual:
+                st.warning(f"📌 **Diretriz Ceneac:** A participação da UF **{uf_filtro_pna}** nesta Ação Setorial é de **ADESÃO OBRIGATÓRIA**.")
+            elif len(ufs_obrig_acao_atual) == len(LISTA_UFS_COMPLETA):
+                st.warning(f"📌 **Diretriz Ceneac:** Esta Ação Setorial é de **ADESÃO OBRIGATÓRIA para todas as 27 UFs**.")
+        
+        
         else:
             st.warning("⚠️ Nenhuma Ação Setorial (Nível 2) cadastrada para este ano no catálogo auxiliar.")
             val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Finalística"
@@ -5232,7 +5262,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
 
             cols_exibicao = [
                 "Nivel_Catalogo", "Num_Acao_PNAPA", "Acao_Mae", "Nome_Acao_Apelido", 
-                "Tema_Padrao", "Objetivo_Padrao", "Dono_Acao", "UF_Dono", "Meta_Nacional", "Orcamento_Nacional"
+                "Tema_Padrao", "Objetivo_Padrao", "Dono_Acao", "UF_Dono", "UFs_Obrigatorias", "Meta_Nacional", "Orcamento_Nacional"
             ]
             cols_exib_validas = [c for c in cols_exibicao if c in df_grid.columns]
 
@@ -5250,6 +5280,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     "Objetivo_Padrao": "Objetivo",
                     "Dono_Acao": "Especialista Sede",
                     "UF_Dono": "UF Dono",
+                    "UFs_Obrigatorias": "UFs Obrigatórias",
                     "Meta_Nacional": "Meta Nacional",
                     "Orcamento_Nacional": "Teto Ceneac"
                 }),
@@ -5401,6 +5432,16 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 srvs_dono_disp = df_servidores[df_servidores["UF_Servidor"] == novo_uf_dono]["Servidor"].dropna().unique().tolist() if not df_servidores.empty else []
                 novo_dono_acao = st.selectbox("Especialista Responsável (Sede/Liderança):", srvs_dono_disp if srvs_dono_disp else lista_servidores_global, key="cad_gen_dono_acao_sel")
 
+            # 🚨 >>> NOVO CAMPO: UFS OBRIGATÓRIAS (DIRETRIZ CENEAC) <<<
+            sel_ufs_obrig_novo = st.multiselect(
+                "UFs com Adesão Obrigatória (Diretriz Ceneac):",
+                options=["TODAS"] + LISTA_UFS_COMPLETA,
+                default=[],
+                help="Selecione 'TODAS' ou as siglas dos estados que devem obrigatoriamente registrar propostas para esta ação.",
+                key="cad_gen_ufs_obrig_sel"
+            )
+            ufs_obrig_para_salvar_novo = "TODAS" if "TODAS" in sel_ufs_obrig_novo else ", ".join(sel_ufs_obrig_novo)
+
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🚀 Gravar Ação no Catálogo Oficial", type="primary", key="btn_gravar_catalogo_oficial"):
                 if not novo_num_pna:
@@ -5441,7 +5482,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             "Acao_Mae": str(cod_mae_final),
                             "Nivel_Catalogo": str(nivel_final),
                             "Tema_Padrao": str(novo_tema_pna),
-                            "Objetivo_Padrao": str(novo_obj_pna)
+                            "Objetivo_Padrao": str(novo_obj_pna),
+                            "UFs_Obrigatorias": str(ufs_obrig_para_salvar_novo)  # 🚀 Gravando no SharePoint
                         }
 
                         with st.spinner("Gravando iniciativa no catálogo do SharePoint..."):
@@ -5527,7 +5569,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     val_atual_nivel = str(dados_alvo_edt.get("Nivel_Catalogo", "Estratégica (Macro)")).strip()
                     val_atual_tema = str(dados_alvo_edt.get("Tema_Padrao", "Outros temas")).strip()
                     val_atual_obj = str(dados_alvo_edt.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
-
+                    val_atual_obrig = str(dados_alvo_edt.get("UFs_Obrigatorias", "")).strip()  # 🚀 Resgata valor atual
+                    
                     st.markdown(f"#### 🗂️ Ficha da Ação: **{val_atual_num}** `(ID: {id_pna_edit})`")
 
                     c_e_ano, c_e_num, c_e_niv = st.columns([1, 1, 1.2])
@@ -5597,6 +5640,24 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     e_ind = st.text_input("Indicador Associado:", value=val_atual_ind, key=f"edt_pna_ind_{id_pna_edit}").strip()
                     e_mae = st.text_input("Código Ação Mãe (Vazio se for Ação PNAPA):", value=val_atual_mae, key=f"edt_pna_mae_{id_pna_edit}").strip().upper()
 
+                    # 🚨 >>> NOVO CAMPO: UFS OBRIGATÓRIAS NA EDIÇÃO <<<
+                    lista_obrig_init = []
+                    if "TODAS" in val_atual_obrig.upper():
+                        lista_obrig_init = ["TODAS"]
+                    else:
+                        import re
+                        ufs_enc = re.findall(r'\b[A-Z]{2}\b', val_atual_obrig.upper())
+                        lista_obrig_init = [u for u in ufs_enc if u in LISTA_UFS_COMPLETA]
+
+                    sel_ufs_obrig_edt = st.multiselect(
+                        "UFs com Adesão Obrigatória (Diretriz Ceneac):",
+                        options=["TODAS"] + LISTA_UFS_COMPLETA,
+                        default=lista_obrig_init,
+                        help="Selecione 'TODAS' ou as siglas das UFs com participação compulsória.",
+                        key=f"edt_pna_obrig_{id_pna_edit}"
+                    )
+                    e_ufs_obrig = "TODAS" if "TODAS" in sel_ufs_obrig_edt else ", ".join(sel_ufs_obrig_edt)
+                    
                     st.markdown("<br>", unsafe_allow_html=True)
                     from concurrent.futures import ThreadPoolExecutor
 
@@ -5625,7 +5686,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                                 "Acao_Mae": str(e_mae),
                                 "Nivel_Catalogo": str(e_nivel),
                                 "Tema_Padrao": str(e_tema),
-                                "Objetivo_Padrao": str(e_obj)
+                                "Objetivo_Padrao": str(e_obj),
+                                "UFs_Obrigatorias": str(e_ufs_obrig)  # 🚀 Gravando a alteração
                             }
 
                             with st.spinner(f"1/2 Atualizando Ação '{nova_chave_acao_ano}' no Catálogo..."):
@@ -6179,7 +6241,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 st.markdown(f"#### 🏷️ Ações Setoriais Vinculadas ({len(df_setoriais_filhas)} iniciativas)")
 
                 # =============================================================
-                # 6. LOOP DE AÇÕES SETORIAIS (NÍVEL 2)
+                # 6. LOOP DE AÇÕES SETORIAIS (NÍVEL 2) COM UFS OBRIGATÓRIAS
                 # =============================================================
                 for idx_sec, sec_row in df_setoriais_filhas.iterrows():
                     cod_sec_puro = str(sec_row.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
@@ -6193,6 +6255,10 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     meta_nac_sec = float(pd.to_numeric(sec_row.get("Meta_Nacional", 0.0), errors='coerce') or 0.0)
                     teto_orc_sec = float(pd.to_numeric(sec_row.get("Orcamento_Nacional", 0.0), errors='coerce') or 0.0)
 
+                    # 🚨 Identificação das UFs com Adesão Obrigatória
+                    ufs_obrig_set = obter_lista_ufs_obrigatorias(sec_row.get("UFs_Obrigatorias", ""))
+                    eh_obrig_todas = (len(ufs_obrig_set) == len(LISTA_UFS_COMPLETA))
+
                     # Chaves de identificação da Setorial nas propostas estaduais
                     chaves_desta_sec = {cod_sec_puro, cod_sec_ano, f"{cod_sec_puro}-{ano_pact_sel}"} - {""}
                     df_prop_sec = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_desta_sec)].copy() if not df_acoes_cadastradas.empty else pd.DataFrame()
@@ -6200,20 +6266,35 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     meta_dem_sec = df_prop_sec["Meta_Num"].sum() if not df_prop_sec.empty else 0.0
                     orc_dem_sec = df_prop_sec["Rec_Plan_Num"].sum() if not df_prop_sec.empty else 0.0
 
-                    # 🛡️ VALIDAÇÃO DE TETO ORÇAMENTÁRIO SETORIAL
+                    # 🛡️ Validação de Teto e Pendências
                     tem_estouro_sec = (teto_orc_sec > 0 and orc_dem_sec > teto_orc_sec)
                     saldo_orc_sec = teto_orc_sec - orc_dem_sec
 
-                    # Card Bordered da Ação Setorial (Nível 2) com Alto Contraste
+                    ufs_com_proposta = df_prop_sec["UF_Acao_PNAPA"].dropna().unique().tolist() if not df_prop_sec.empty else []
+                    ufs_faltantes_total = sorted([u for u in todas_ufs_brasil if u not in ufs_com_proposta])
+                    ufs_obrig_faltantes = sorted([u for u in ufs_obrig_set if u not in ufs_com_proposta])
+
+                    # Card Bordered da Ação Setorial (Nível 2)
                     with st.container(border=True):
                         col_sh1, col_sh2, col_sh3 = st.columns([2, 1, 1])
                         with col_sh1:
                             st.markdown(f"##### 🏷️ **{cod_sec_puro}** — {nome_sec}")
+                            
+                            # Tag de Obrigatoriedade
+                            if eh_obrig_todas:
+                                tag_obrig = "<span style='background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-weight: 700;'>🚨 Obrigatória para Todas as 27 UFs</span>"
+                            elif ufs_obrig_set:
+                                ufs_obrig_txt = ", ".join(sorted(list(ufs_obrig_set)))
+                                tag_obrig = f"<span style='background-color: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-weight: 700;'>📌 Obrigatória para: {ufs_obrig_txt}</span>"
+                            else:
+                                tag_obrig = "<span style='background-color: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; font-weight: 500;'>Adesão Facultativa</span>"
+
                             st.markdown(
                                 f"<div style='font-size: 0.9em; color: #334155; line-height: 1.8;'>"
                                 f"📌 <strong>Modal / Tema:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600;'>{tema_sec}</span> | "
                                 f"👑 <strong>Especialista:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600;'>{dono_sec} ({uf_dono_sec})</span><br>"
-                                f"📈 <strong>Indicador Setorial:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600;'>{ind_sec}</span>"
+                                f"📈 <strong>Indicador Setorial:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600;'>{ind_sec}</span><br>"
+                                f"🏛️ <strong>Diretriz Ceneac:</strong> {tag_obrig}"
                                 f"</div>", 
                                 unsafe_allow_html=True
                             )
@@ -6230,18 +6311,21 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             else:
                                 st.metric("Orçamento Demandado", formatar_moeda_br(orc_dem_sec))
 
-                        # ALERTA DE GOVERNANÇA SETORIAL (VALIDAÇÃO DE TETO)
+                        # ALERTA DE GOVERNANÇA: TETOS OU PENDÊNCIAS OBRIGATÓRIAS
                         if tem_estouro_sec:
-                            st.error(f"⛔ **ESTOURO DE TETO SETORIAL:** A demanda das UFs ({formatar_moeda_br(orc_dem_sec)}) excedeu o teto pactuado da ação ({formatar_moeda_br(teto_orc_sec)}) em **{formatar_moeda_br(abs(saldo_orc_sec))}**.")
+                            st.error(f"⛔ **ESTOURO DE TETO SETORIAL:** A demanda das UFs ({formatar_moeda_br(orc_dem_sec)}) excedeu o teto pactuado ({formatar_moeda_br(teto_orc_sec)}) em **{formatar_moeda_br(abs(saldo_orc_sec))}**.")
                         elif teto_orc_sec > 0:
                             st.success(f"🟢 **Orçamento Setorial Equilibrado:** Saldo disponível de **{formatar_moeda_br(saldo_orc_sec)}** ({(orc_dem_sec/teto_orc_sec*100.0):.1f}% utilizado).")
+
+                        if ufs_obrig_faltantes:
+                            st.warning(f"⚠️ **Pendência de Governança:** {len(ufs_obrig_faltantes)} estado(s) de adesão obrigatória ainda não cadastraram proposta: **{', '.join(ufs_obrig_faltantes)}**.")
 
                         # =====================================================
                         # 7. PROPOSTAS DAS UFS (NÍVEL 3)
                         # =====================================================
                         tab_prop_ufs, tab_prop_pend = st.tabs([
                             f"🗺️ Propostas Recebidas ({len(df_prop_sec)} UFs)", 
-                            "⏳ Estados Sem Proposta Registrada"
+                            f"⏳ Estados Pendentes ({len(ufs_faltantes_total)} UFs)"
                         ])
 
                         with tab_prop_ufs:
@@ -6268,18 +6352,28 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                                 st.dataframe(df_tabela_propostas.reset_index(drop=True), use_container_width=True, hide_index=True)
 
                         with tab_prop_pend:
-                            ufs_com_proposta = df_prop_sec["UF_Acao_PNAPA"].dropna().unique().tolist() if not df_prop_sec.empty else []
-                            ufs_sem_proposta = sorted([u for u in todas_ufs_brasil if u not in ufs_com_proposta])
-
-                            if not ufs_sem_proposta:
+                            if not ufs_faltantes_total:
                                 st.success("🎉 Todas as 27 UFs já registraram propostas para esta Ação Setorial!")
                             else:
-                                st.caption(f"**{len(ufs_sem_proposta)} estados** ainda não cadastraram propostas para `{cod_sec_puro}`:")
-                                tags_html = " ".join([
-                                    f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600; font-size: 0.85em; margin-right: 4px; display: inline-block; margin-bottom: 4px;'>{u}</span>" 
-                                    for u in ufs_sem_proposta
-                                ])
-                                st.markdown(tags_html, unsafe_allow_html=True)
+                                # 🚨 Destaque 1: UFs Obrigatórias Pendentes
+                                if ufs_obrig_faltantes:
+                                    st.markdown(f"**🚨 Estados com Adesão Obrigatória Pendente ({len(ufs_obrig_faltantes)} UFs):**")
+                                    tags_obrig_html = " ".join([
+                                        f"<span style='background-color: #fee2e2; color: #991b1b; border: 1px solid #f87171; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.88em; margin-right: 4px; display: inline-block; margin-bottom: 4px;'>🚨 {u}</span>" 
+                                        for u in ufs_obrig_faltantes
+                                    ])
+                                    st.markdown(tags_obrig_html, unsafe_allow_html=True)
+                                    st.markdown("<br>", unsafe_allow_html=True)
+
+                                # ⚪ Destaque 2: UFs Facultativas Pendentes
+                                ufs_facult_faltantes = [u for u in ufs_faltantes_total if u not in ufs_obrig_set]
+                                if ufs_facult_faltantes:
+                                    st.markdown(f"**⚪ Demais Estados (Adesão Facultativa):**")
+                                    tags_facult_html = " ".join([
+                                        f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600; font-size: 0.85em; margin-right: 4px; display: inline-block; margin-bottom: 4px;'>{u}</span>" 
+                                        for u in ufs_facult_faltantes
+                                    ])
+                                    st.markdown(tags_facult_html, unsafe_allow_html=True)
 
 # --- TELA 7: MEUS FEEDBACKS (360º) ---
 elif modo == "⭐ Meus Feedbacks (360º)":
