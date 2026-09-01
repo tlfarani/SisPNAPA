@@ -981,61 +981,89 @@ st.markdown("""
             font-weight: 700 !important;
         }
         
-        /* 2. SELECTBOXES & MULTISELECTS (Fundo Branco Blindado em Todos os Níveis) */
+        /* 2. SELECTBOXES & MULTISELECTS (Fundo Branco Blindado em TODAS as camadas internas) */
+        div[data-testid="stSelectbox"],
+        div[data-testid="stSelectbox"] div,
+        div[data-testid="stMultiSelect"],
+        div[data-testid="stMultiSelect"] div,
         div[data-baseweb="select"],
-        div[data-baseweb="select"] > div,
-        div[data-testid="stSelectbox"] > div,
-        div[data-testid="stMultiSelect"] > div {
+        div[data-baseweb="select"] div,
+        div[data-baseweb="select"] > div {
             background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
-            border-radius: 6px !important;
+            color: #0f172a !important;
         }
 
-        /* Texto selecionado, opções e inputs dentro do Select/MultiSelect */
-        div[data-baseweb="select"] div,
+        /* Borda externa e formato dos campos Select e MultiSelect */
+        div[data-baseweb="select"] > div:first-child,
+        div[data-testid="stSelectbox"] > div > div,
+        div[data-testid="stMultiSelect"] > div > div {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+            background-color: #ffffff !important;
+        }
+
+        /* Texto das opções selecionadas e placeholder */
         div[data-baseweb="select"] span,
+        div[data-baseweb="select"] p,
         div[data-baseweb="select"] input {
             color: #0f172a !important;
             font-weight: 500 !important;
+            background-color: transparent !important;
         }
 
         div[data-baseweb="select"] input::placeholder {
             color: #64748b !important;
         }
 
+        /* Setas e Ícones de Dropdown */
+        div[data-baseweb="select"] svg,
+        div[data-testid="stSelectbox"] svg,
+        div[data-testid="stMultiSelect"] svg { 
+            fill: #0f172a !important; 
+            stroke: #0f172a !important;
+        }
+
         /* Tags / Chips das UFs Selecionadas no MultiSelect */
-        div[data-baseweb="tag"] {
+        div[data-baseweb="tag"],
+        div[data-baseweb="tag"] div,
+        div[data-baseweb="tag"] > div {
             background-color: #e2e8f0 !important;
             border: 1px solid #cbd5e1 !important;
             border-radius: 4px !important;
         }
-        div[data-baseweb="tag"] span {
+        div[data-baseweb="tag"] span,
+        div[data-baseweb="tag"] p {
             color: #0f172a !important;
             font-weight: 700 !important;
+            background-color: transparent !important;
         }
         div[data-baseweb="tag"] svg {
             fill: #475569 !important;
+            stroke: none !important;
         }
 
-        /* Setas e Ícones de Dropdown */
-        div[data-baseweb="select"] svg { 
-            fill: #0f172a !important; 
-        }
-
-        /* 3. Menus Suspensos / Opções Abertas (Popovers & Listas) */
+        /* 3. Menus Suspensos Abertos (Popovers, Dropdowns Flutuantes e Listas) */
         ul[data-testid="stSelectboxVirtualDropdown"],
+        div[data-baseweb="popover"],
+        div[data-baseweb="popover"] div,
         div[data-baseweb="popover"] ul,
-        div[data-baseweb="menu"] {
+        div[data-baseweb="menu"],
+        div[data-baseweb="menu"] div,
+        div[data-baseweb="menu"] ul {
             background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
+            color: #0f172a !important;
         }
+
         div[data-baseweb="popover"] li,
         div[data-baseweb="menu"] li {
             background-color: #ffffff !important;
             color: #0f172a !important;
         }
+
         div[data-baseweb="popover"] li:hover,
-        div[data-baseweb="menu"] li:hover {
+        div[data-baseweb="menu"] li:hover,
+        div[data-baseweb="popover"] li[aria-selected="true"],
+        div[data-baseweb="menu"] li[aria-selected="true"] {
             background-color: #f1f5f9 !important;
             color: #0f172a !important;
         }
