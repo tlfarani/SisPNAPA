@@ -988,32 +988,32 @@ st.markdown("""
             font-weight: 700 !important;
         }
 
-        /* 🔘 BOTÕES DA BARRA LATERAL (Atualizar Base, Trocar Senha, Calibrar Regras) */
+        /* 🔘 BOTÕES DA BARRA LATERAL (Verde Claro Idêntico ao Fundo da Página: #f2f5f3) */
         section[data-testid="stSidebar"] button,
         section[data-testid="stSidebar"] button[kind="secondary"],
         section[data-testid="stSidebar"] button[kind="primary"],
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
-            background-color: #cce3d4 !important;
-            border: 1px solid #9fc4ab !important;
+            background-color: #f2f5f3 !important;
+            border: 1px solid #cbd5e1 !important;
             border-radius: 6px !important;
-            color: #063319 !important;
+            color: #03170a !important;
             box-shadow: none !important;
             transition: all 0.2s ease-in-out !important;
         }
         section[data-testid="stSidebar"] button *,
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button *,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button * {
-            color: #063319 !important;
+            color: #03170a !important;
             font-weight: 700 !important;
             background-color: transparent !important;
         }
         section[data-testid="stSidebar"] button:hover,
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
-            background-color: #b8d9c2 !important;
-            border-color: #6ea47f !important;
-            color: #022410 !important;
+            background-color: #e2e8e5 !important;
+            border-color: #94a3b8 !important;
+            color: #03170a !important;
         }
 
         /* 📋 SELECTBOX DA BARRA LATERAL (Testar Perfil como: Branco com seta preta) */
