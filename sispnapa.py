@@ -974,7 +974,7 @@ def validar_senha(senha_digitada: str, token_armazenado: str, senha_padrao="pnap
 # =================================================================
 st.markdown("""
     <style>
-        /* 1. Barra Lateral (Sidebar Verde Escura com Textos Brancos) */
+        /* 1. Barra Lateral (Sidebar Verde Escura: #1c4029) */
         section[data-testid="stSidebar"] {
             background-color: #1c4029 !important;
         }
@@ -987,15 +987,37 @@ st.markdown("""
             color: #ffffff !important; 
             font-weight: 700 !important;
         }
+
+        /* 🔘 BOTÕES E POPOVERS DA BARRA LATERAL (Verde Mais Escuro: #0d2617 com Texto Branco) */
+        section[data-testid="stSidebar"] button,
+        section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
+            background-color: #0d2617 !important;
+            border: 1px solid #2d5a3e !important;
+            border-radius: 6px !important;
+            color: #ffffff !important;
+            transition: all 0.2s ease-in-out !important;
+        }
+        section[data-testid="stSidebar"] button *,
+        section[data-testid="stSidebar"] div[data-testid="stPopover"] > button * {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+            background-color: transparent !important;
+        }
+        section[data-testid="stSidebar"] button:hover,
+        section[data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
+            background-color: #153b24 !important;
+            border-color: #86efac !important;
+            color: #ffffff !important;
+        }
         
-        /* 2. Rótulos dos Campos na Área Principal (Transparentes sobre o fundo claro) */
+        /* 2. Rótulos dos Campos na Área Principal (Transparentes sobre o fundo da página) */
         div[data-testid="stAppViewContainer"] div[data-testid="stWidgetLabel"] p,
         div[data-testid="stAppViewContainer"] label p {
             color: #03170a !important;
             font-weight: 600 !important;
         }
 
-        /* 3. Caixas de Seleção, Textos, Números e Datas (Bordas e Fundo Branco) */
+        /* 3. Caixas de Seleção, Textos, Números e Datas (Fundo Branco Sólido e Bordas Cinzas) */
         div[data-testid="stTextInput"] input,
         div[data-testid="stTextArea"] textarea,
         div[data-testid="stNumberInput"] input,
@@ -1052,7 +1074,41 @@ st.markdown("""
             color: #03170a !important;
         }
 
-        /* 6. Abas, Cabeçalhos e Badges de Código */
+        /* 6. Botões na Área Principal (Primários e Secundários) */
+        div[data-testid="stAppViewContainer"] button[kind="primary"] {
+            background-color: #1c4029 !important;
+            border: 1px solid #1c4029 !important;
+            border-radius: 6px !important;
+            color: #ffffff !important;
+        }
+        div[data-testid="stAppViewContainer"] button[kind="primary"] * {
+            color: #ffffff !important;
+            font-weight: 700 !important;
+        }
+        div[data-testid="stAppViewContainer"] button[kind="primary"]:hover {
+            background-color: #285739 !important;
+            border-color: #285739 !important;
+        }
+
+        div[data-testid="stAppViewContainer"] div[data-testid="stPopover"] > button,
+        div[data-testid="stAppViewContainer"] button[kind="secondary"] {
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+            color: #03170a !important;
+        }
+        div[data-testid="stAppViewContainer"] div[data-testid="stPopover"] > button *,
+        div[data-testid="stAppViewContainer"] button[kind="secondary"] * {
+            color: #03170a !important;
+            font-weight: 600 !important;
+        }
+        div[data-testid="stAppViewContainer"] div[data-testid="stPopover"] > button:hover,
+        div[data-testid="stAppViewContainer"] button[kind="secondary"]:hover {
+            background-color: #f1f5f9 !important;
+            border-color: #94a3b8 !important;
+        }
+
+        /* 7. Abas, Cabeçalhos e Badges de Código */
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
         div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
@@ -1068,7 +1124,7 @@ st.markdown("""
             font-size: 0.88em !important;
         }
 
-        /* 7. Tooltips e Ícones de Ajuda (?) */
+        /* 8. Tooltips e Ícones de Ajuda (?) */
         [data-testid="stTooltipIcon"] svg * { stroke: #475569 !important; }
         div[data-baseweb="tooltip"] * { color: #ffffff !important; background-color: transparent !important; }
         div[data-baseweb="tooltip"] {
