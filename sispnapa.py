@@ -5916,12 +5916,15 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 f"📌 **{cod_m_puro}** — {nome_macro} | {badge_status_m} | Demandado: {formatar_moeda_br(orc_demandado_macro)}{alerta_estouro_macro}", 
                 expanded=False
             ):
-                # Informações Institucionais da Macro
+                # Informações Institucionais da Macro (Alto Contraste)
                 c_minf1, c_minf2, c_minf3 = st.columns([1.5, 1, 1])
                 with c_minf1:
                     st.markdown(
-                        f"👑 **Liderança Sede:** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{dono_macro} ({uf_dono_m})</span> | "
-                        f"🎯 **Ciclo:** `{obj_macro}`", 
+                        f"<div style='font-size: 0.92em; color: #334155; line-height: 1.8;'>"
+                        f"👑 <strong>Liderança Sede:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600;'>{dono_macro} ({uf_dono_m})</span> | "
+                        f"🎯 <strong>Ciclo:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600;'>{obj_macro}</span><br>"
+                        f"📈 <strong>Indicador Macro Consolidado:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600;'>{indicador_macro}</span>"
+                        f"</div>", 
                         unsafe_allow_html=True
                     )
                     st.markdown(
