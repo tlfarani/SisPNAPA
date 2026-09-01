@@ -984,80 +984,69 @@ st.markdown("""
             font-weight: 700 !important;
         }
         
-        /* =====================================================================
-           2. TÁTICA "WIPE & REBUILD": ELIMINAÇÃO TOTAL DO FUNDO VERDE HERDADO
-           ===================================================================== */
-        
-        /* A) Limpa TUDO dentro dos componentes para MATAR qualquer verde profundo */
-        div[data-testid="stSelectbox"] *,
-        div[data-testid="stMultiSelect"] *,
-        div[data-testid="stTextInput"] *,
-        div[data-testid="stNumberInput"] *,
-        div[data-testid="stDateInput"] *,
-        div[data-testid="stTextArea"] * {
+        /* 2. Rótulos e Títulos dos Campos (Transparentes sobre o fundo da página) */
+        div[data-testid="stWidgetLabel"],
+        div[data-testid="stWidgetLabel"] *,
+        label,
+        label * {
             background-color: transparent !important;
             color: #03170a !important;
+            font-weight: 600 !important;
         }
 
-        /* B) Reconstrói a caixa de input estritamente com fundo branco */
-        div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:first-child,
-        div[data-testid="stMultiSelect"] div[data-baseweb="select"] > div:first-child,
-        div[data-testid="stTextInput"] > div:nth-of-type(1),
-        div[data-testid="stNumberInput"] > div:nth-of-type(1),
-        div[data-testid="stDateInput"] > div:nth-of-type(1),
-        div[data-testid="stTextArea"] > div:nth-of-type(1) {
+        /* 3. CAIXAS DE ENTRADA (Fundo Branco Unificado para Textos, Datas, Números e Selects) */
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stTextArea"] textarea,
+        div[data-testid="stNumberInput"] input,
+        div[data-testid="stDateInput"] input,
+        div[data-baseweb="select"] > div {
             background-color: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
             border-radius: 6px !important;
-        }
-
-        /* C) Mantém os rótulos (labels) visíveis sobre o fundo claro da página */
-        div[data-testid="stSelectbox"] label p,
-        div[data-testid="stMultiSelect"] label p,
-        div[data-testid="stTextInput"] label p,
-        div[data-testid="stNumberInput"] label p,
-        div[data-testid="stDateInput"] label p,
-        div[data-testid="stTextArea"] label p {
-            font-weight: 600 !important;
             color: #03170a !important;
         }
 
-        /* D) Restaura cores de ícones, setas e botões +/ - */
-        div[data-baseweb="select"] svg { fill: #03170a !important; stroke: none !important; }
-        div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; border-radius: 4px !important; }
-        div[data-testid="stDateInput"] svg { fill: #03170a !important; }
+        /* Anula qualquer camada intermediária que sobreponha cor dentro do Select */
+        div[data-baseweb="select"] > div * {
+            background-color: transparent !important;
+            color: #03170a !important;
+            font-weight: 500 !important;
+        }
+
+        /* 4. Ícones, Setas e Placeholders */
+        div[data-baseweb="select"] svg,
+        div[data-testid="stDateInput"] svg { 
+            fill: #03170a !important; 
+            background-color: transparent !important; 
+        }
         
-        /* E) Textos invisíveis de Placeholder */
+        div[data-testid="stNumberInput"] button { 
+            background-color: #f1f5f9 !important; 
+            border: 1px solid #cbd5e1 !important; 
+            border-radius: 4px !important; 
+        }
+
         div[data-baseweb="select"] input::placeholder,
-        div[data-testid="stTextInput"] input::placeholder,
-        div[data-testid="stTextArea"] textarea::placeholder {
+        div[data-testid="stTextInput"] input::placeholder {
             color: #94a3b8 !important;
         }
 
-        /* F) Chips do MultiSelect (Ex: UFs Obrigatórias em Cinza Claro) */
+        /* 5. Chips / Tags das UFs Selecionadas no MultiSelect (Cinza Claro) */
         div[data-testid="stMultiSelect"] span[data-baseweb="tag"],
         div[data-testid="stMultiSelect"] span[data-baseweb="tag"] * {
             background-color: #e2e8f0 !important;
             color: #0f172a !important;
-            border: none !important;
+            font-weight: 700 !important;
         }
         div[data-testid="stMultiSelect"] span[data-baseweb="tag"] {
             border: 1px solid #cbd5e1 !important;
             border-radius: 4px !important;
         }
-        div[data-testid="stMultiSelect"] span[data-baseweb="tag"] svg { fill: #475569 !important; }
-
-        /* =====================================================================
-           3. MENUS SUSPENSOS (Drop-downs flutuantes ao clicar)
-           ===================================================================== */
-        div[data-baseweb="popover"],
-        div[data-baseweb="popover"] *,
-        ul[data-testid="stSelectboxVirtualDropdown"],
-        ul[data-testid="stSelectboxVirtualDropdown"] * {
-            background-color: transparent !important;
-            color: #03170a !important;
+        div[data-testid="stMultiSelect"] span[data-baseweb="tag"] svg { 
+            fill: #475569 !important; 
         }
-        
+
+        /* 6. Menus Suspensos / Dropdown Aberto ao Clicar */
         div[data-baseweb="popover"],
         ul[data-testid="stSelectboxVirtualDropdown"] {
             background-color: #ffffff !important;
@@ -1065,30 +1054,25 @@ st.markdown("""
             border-radius: 6px !important;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
         }
-        
         div[data-baseweb="popover"] li,
         ul[data-testid="stSelectboxVirtualDropdown"] li {
             background-color: #ffffff !important;
+            color: #03170a !important;
             padding: 8px 12px !important;
         }
-        
         div[data-baseweb="popover"] li:hover,
-        div[data-baseweb="popover"] li:hover *,
         ul[data-testid="stSelectboxVirtualDropdown"] li:hover,
-        ul[data-testid="stSelectboxVirtualDropdown"] li:hover *,
         ul[data-testid="stSelectboxVirtualDropdown"] li[aria-selected="true"] {
             background-color: #f1f5f9 !important;
+            color: #03170a !important;
         }
 
-        /* =====================================================================
-           4. ACABAMENTOS FINAIS (Abas, Headers, Tooltips e Badges)
-           ===================================================================== */
+        /* 7. Abas, Cabeçalhos e Badges */
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
         div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
         h2, h3, [data-testid="stHeader"] { color: #03170a !important; font-weight: 700 !important; }
 
-        /* Badges de IDs (Ex: ID: 104) */
         code {
             background-color: #e2e8f0 !important;
             color: #0f172a !important;
@@ -1099,7 +1083,7 @@ st.markdown("""
             font-size: 0.88em !important;
         }
 
-        /* Tooltips e ícones de interrogação (?) */
+        /* 8. Tooltips */
         [data-testid="stTooltipIcon"] svg * { stroke: #475569 !important; }
         div[data-baseweb="tooltip"] * { color: #ffffff !important; background-color: transparent !important; }
         div[data-baseweb="tooltip"] {
