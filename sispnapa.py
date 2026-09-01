@@ -655,45 +655,63 @@ def calcular_capacidade_equipes_uf(df_atual, df_srv_base, ano_alvo):
     """
     Calcula a capacidade agregada em dias de esforço por UF/Sede para o ciclo Pré-PNAPA.
     Regra Universal:
-      - Elegibilidade estrita: 'Faz parte da Equipe de Emergências' == 'Sim'.
+      - Elegibilidade estrita: 'Equipe_Emergencias' == 'Sim'.
       - Sede: 'UF_Servidor' == 'DF' (90 dias de teto).
-      - UFs: Titular (90d), Substituto (60d) e Membro (40d).
+      - UFs: Titular/Chefe/Ponto Focal (90d), Substituto/Suplente (60d) e Membro (40d).
     """
     resumo_ufs = {}
     todas_ufs = sorted(list(set(LISTA_UFS_COMPLETA + ["DF"])))
     
-    # 1. Mapeamento dos Servidores Elegíveis e seus Tetos Individuais
+    # 1. Identificação Flexível e Blindada das Colunas de df_servidores
     mapa_servidores_teto = {}
     if df_srv_base is not None and not df_srv_base.empty:
-        col_srv = "Servidor" if "Servidor" in df_srv_base.columns else "Nome"
-        col_uf = "UF_Servidor" if "UF_Servidor" in df_srv_base.columns else ("UF" if "UF" in df_srv_base.columns else "")
-        col_lot = "Lotacao" if "Lotacao" in df_srv_base.columns else ("Lotação" if "Lotação" in df_srv_base.columns else "")
-        col_func = "Funcao" if "Funcao" in df_srv_base.columns else ("Função" if "Função" in df_srv_base.columns else "Papel")
-        col_eq = "Faz parte da Equipe de Emergências" if "Faz parte da Equipe de Emergências" in df_srv_base.columns else "Equipe_Emergencia"
+        # Busca flexível que aceita variações de maiúsculas, espaços e underlines
+        cols_base = list(df_srv_base.columns)
+        
+        def achar_coluna(candidatos):
+            for c in candidatos:
+                if c in cols_base:
+                    return c
+            # Normalização tolerante a acentos e formatação
+            norm_map = {col.lower().replace(" ", "").replace("_", "").replace("ç", "c").replace("ã", "a").replace("é", "e"): col for col in cols_base}
+            for c in candidatos:
+                c_norm = c.lower().replace(" ", "").replace("_", "").replace("ç", "c").replace("ã", "a").replace("é", "e")
+                if c_norm in norm_map:
+                    return norm_map[c_norm]
+            return ""
+
+        col_srv = achar_coluna(["Servidor", "Nome", "Nome_Servidor"])
+        col_uf = achar_coluna(["UF_Servidor", "UF", "Estado"])
+        col_lot = achar_coluna(["Lotacao", "Lotação", "Unidade"])
+        col_func = achar_coluna(["Funcao", "Função", "Papel", "Cargo"])
+        col_eq = achar_coluna(["Equipe_Emergencias", "Equipe_Emergencia", "Faz parte da Equipe de Emergências", "Equipe"])
 
         for _, s_row in df_srv_base.iterrows():
-            nome_s = str(s_row.get(col_srv, "")).strip()
-            if not nome_s or nome_s.lower() in ["nan", "none"]:
+            nome_s = str(s_row.get(col_srv, "")).strip() if col_srv else ""
+            if not nome_s or nome_s.lower() in ["nan", "none", ""]:
                 continue
             
-            eq_s = str(s_row.get(col_eq, "")).strip().capitalize()
+            eq_s = str(s_row.get(col_eq, "")).strip().capitalize() if col_eq else ""
 
-            # 🛡️ FILTRO UNIVERSAL: Apenas integrantes oficiais da emergência
+            # 🛡️ FILTRO UNIVERSAL: Apenas integrantes oficiais da emergência ("Sim")
             if eq_s != "Sim":
                 continue
 
-            uf_s = str(s_row.get(col_uf, "DF")).strip().upper()
-            func_s = str(s_row.get(col_func, "")).strip().upper()
-            lot_s = str(s_row.get(col_lot, "")).strip().upper()
+            uf_s = str(s_row.get(col_uf, "DF")).strip().upper() if col_uf else "DF"
+            func_s = str(s_row.get(col_func, "")).strip().upper() if col_func else ""
+            lot_s = str(s_row.get(col_lot, "")).strip().upper() if col_lot else ""
 
             # Definição do Teto Individual
             is_sede = (uf_s == "DF")
-            if is_sede or any(k in func_s for k in ["TITULAR", "CHEFE", "COORDENADOR", "PONTO FOCAL", "RESPONSAVEL"]):
+            if is_sede:
                 teto_ind = 90.0
-                papel_label = "Titular / Sede" if is_sede else "Titular Regional"
+                papel_label = "Titular / Sede"
             elif any(k in func_s for k in ["SUBSTITUTO", "SUPLENTE"]):
                 teto_ind = 60.0
                 papel_label = "Substituto"
+            elif any(k in func_s for k in ["TITULAR", "CHEFE", "COORDENADOR", "PONTO FOCAL", "RESPONSAVEL"]):
+                teto_ind = 90.0
+                papel_label = "Titular Regional"
             else:
                 teto_ind = 40.0
                 papel_label = "Membro da Equipe"
