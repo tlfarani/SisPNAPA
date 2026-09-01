@@ -5298,7 +5298,9 @@ elif modo == "👥 Gerenciar Equipes":
                 st.success(f"Acesso revogado com sucesso!")
                 st.rerun()
 
+# =================================================================
 # --- TELA 5: GERENCIAR AÇÕES PNAPA (ESTRATÉGICAS E SETORIAIS) ---
+# =================================================================
 elif modo == "🗂️ Gerenciar Ações PNAPA":
     st.markdown("<h3 style='color: #03170a;'>🗂️ Catálogo Oficial de Ações PNAPA</h3>", unsafe_allow_html=True)
     st.caption("Catálogo corporativo para governança nacional, calibração de tetos e padronização das Ações Estratégicas (Macro) e Setoriais (Táticas).")
@@ -5354,6 +5356,30 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             df_grid_styled = df_grid[cols_exib_validas].copy()
             df_grid_styled["Meta_Nacional"] = df_grid_styled["Meta_Nacional"].apply(lambda v: formatar_numero_br(v, 1))
             df_grid_styled["Orcamento_Nacional"] = df_grid_styled["Orcamento_Nacional"].apply(formatar_moeda_br)
+
+            # 🚀 Agregação dinâmica das UFs Obrigatórias para Ações Macro
+            def compilar_ufs_grid(row):
+                niv = str(row.get("Nivel_Catalogo", "")).strip()
+                obrig_raw = str(row.get("UFs_Obrigatorias", "")).strip()
+                if niv == "Estratégica (Macro)":
+                    cod_m = str(row.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+                    df_filhas = df_pnapas[
+                        (df_pnapas["Ano_Num"] == int(f_ano_vis)) &
+                        (
+                            (df_pnapas["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == cod_m) |
+                            (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper().str.startswith(f"{cod_m}."))
+                        )
+                    ]
+                    set_ufs = set()
+                    for u_raw in df_filhas.get("UFs_Obrigatorias", pd.Series()).dropna():
+                        set_ufs.update(obter_lista_ufs_obrigatorias(u_raw))
+                    
+                    if set_ufs:
+                        return "TODAS" if len(set_ufs) == len(LISTA_UFS_COMPLETA) else ", ".join(sorted(list(set_ufs)))
+                    return "—"
+                return obrig_raw if (obrig_raw and obrig_raw.lower() not in ["nan", "none"]) else "—"
+
+            df_grid_styled["UFs_Obrigatorias"] = df_grid.apply(compilar_ufs_grid, axis=1)
 
             st.dataframe(
                 df_grid_styled.rename(columns={
@@ -5420,8 +5446,8 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             
                 cod_mae_final = ""
                 nivel_final = "Estratégica (Macro)"
-                nova_importancia = "Estratégica"  # 💎 Fixa para Nível 1
-                novo_tema_pna = "Multimodal / Geral"  # 🚀 Padrão automático para Macro
+                nova_importancia = "Estratégica"
+                novo_tema_pna = "Multimodal / Geral"
                 
                 novo_obj_pna = st.selectbox(
                     "Objetivo Estratégico Predominante:", 
@@ -5429,6 +5455,9 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     key="cad_macro_obj_predominante",
                     help="Define o ciclo da gestão de risco atendido por esta Ação PNAPA."
                 )
+                
+                # 🚀 Para Macro, UFs obrigatórias são consolidadas a partir das filhas
+                ufs_obrig_para_salvar_novo = ""
 
             else:
                 # Ação Setorial (Nível 2)
@@ -5452,7 +5481,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     macro_escolhida_lbl = st.selectbox("Vincular à Ação PNAPA Mãe:", list(opcoes_macro_dict.keys()), key="cad_setorial_macro_mae_sel")
                     cod_mae_final = opcoes_macro_dict[macro_escolhida_lbl]
                 with c_sm2:
-                    # 🚀 GERAÇÃO AUTOMÁTICA REATIVA: chave dinâmica força a atualização do campo
                     cod_sugerido_setorial = gerar_proximo_codigo_setorial(df_pnapas, cod_mae_final, novo_ano_pna)
                     novo_num_pna = st.text_input(
                         "Código Setorial (Gerado Automaticamente):", 
@@ -5480,17 +5508,13 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             
                 nivel_final = "Setorial (Tática)"
                 
-                # 🚀 Resgata a linha completa da Ação Mãe selecionada
                 linha_macro_mae = macros_existentes[macros_existentes["Num_Acao_PNAPA"].astype(str).str.split("-").str[0].str.strip() == cod_mae_final].iloc[0]
-                
-                # Herda automaticamente o objetivo da Ação Mãe
                 novo_obj_pna = str(linha_macro_mae.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
 
                 c_st1, c_st2, c_st3 = st.columns(3)
                 with c_st1:
                     novo_tema_pna = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, key=f"cad_set_tema_{cod_mae_final}")
                 with c_st2:
-                    # 🔒 Exibição travada: Herança direta da Ação Mãe
                     st.text_input("Objetivo (Herdado da Ação Mãe):", value=novo_obj_pna, disabled=True, key=f"cad_set_obj_dis_{cod_mae_final}")
                 with c_st3:
                     nova_importancia = st.selectbox(
@@ -5517,15 +5541,18 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 srvs_dono_disp = df_servidores[df_servidores["UF_Servidor"] == novo_uf_dono]["Servidor"].dropna().unique().tolist() if not df_servidores.empty else []
                 novo_dono_acao = st.selectbox("Especialista Responsável (Sede/Liderança):", srvs_dono_disp if srvs_dono_disp else lista_servidores_global, key="cad_gen_dono_acao_sel")
 
-            # 🚨 >>> NOVO CAMPO: UFS OBRIGATÓRIAS (DIRETRIZ CENEAC) <<<
-            sel_ufs_obrig_novo = st.multiselect(
-                "UFs com Adesão Obrigatória (Diretriz Ceneac):",
-                options=["TODAS"] + LISTA_UFS_COMPLETA,
-                default=[],
-                help="Selecione 'TODAS' ou as siglas dos estados que devem obrigatoriamente registrar propostas para esta ação.",
-                key="cad_gen_ufs_obrig_sel"
-            )
-            ufs_obrig_para_salvar_novo = "TODAS" if "TODAS" in sel_ufs_obrig_novo else ", ".join(sel_ufs_obrig_novo)
+            # 🚨 UFS OBRIGATÓRIAS: Exibido estritamente para Ações Setoriais (Nível 2)
+            if "Ação Setorial" in tipo_iniciativa:
+                sel_ufs_obrig_novo = st.multiselect(
+                    "UFs com Adesão Obrigatória (Diretriz Ceneac):",
+                    options=["TODAS"] + LISTA_UFS_COMPLETA,
+                    default=[],
+                    help="Selecione 'TODAS' ou as siglas dos estados que devem obrigatoriamente registrar propostas para esta ação setorial.",
+                    key="cad_gen_ufs_obrig_sel"
+                )
+                ufs_obrig_para_salvar_novo = "TODAS" if "TODAS" in sel_ufs_obrig_novo else ", ".join(sel_ufs_obrig_novo)
+            else:
+                st.info("💡 **Diretriz Federativa:** As UFs participantes desta Ação Macro serão compiladas automaticamente a partir das Ações Setoriais (Nível 2) vinculadas.")
 
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🚀 Gravar Ação no Catálogo Oficial", type="primary", key="btn_gravar_catalogo_oficial"):
@@ -5538,7 +5565,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                 else:
                     chave_acao_ano = f"{novo_num_pna}-{novo_ano_pna}"
                     
-                    # Valida duplicidade de código no mesmo ano
                     ja_existe = df_pnapas[
                         (df_pnapas["Ano_Num"] == int(novo_ano_pna)) &
                         (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() == novo_num_pna)
@@ -5568,7 +5594,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             "Nivel_Catalogo": str(nivel_final),
                             "Tema_Padrao": str(novo_tema_pna),
                             "Objetivo_Padrao": str(novo_obj_pna),
-                            "UFs_Obrigatorias": str(ufs_obrig_para_salvar_novo)  # 🚀 Gravando no SharePoint
+                            "UFs_Obrigatorias": str(ufs_obrig_para_salvar_novo)
                         }
 
                         with st.spinner("Gravando iniciativa no catálogo do SharePoint..."):
@@ -5596,7 +5622,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
             ].copy()
 
             if not df_pna_edt_pool.empty:
-                # 🚀 1. FILTROS DE TOPO (ANO E NÍVEL DA AÇÃO)
                 c_fano_edt, c_fniv_edt = st.columns([1, 1.5])
                 with c_fano_edt:
                     anos_disp_edt = ["Todos"] + sorted([str(int(a)) for a in df_pna_edt_pool["Ano_Num"].unique() if a > 0], reverse=True)
@@ -5654,9 +5679,13 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     val_atual_nivel = str(dados_alvo_edt.get("Nivel_Catalogo", "Estratégica (Macro)")).strip()
                     val_atual_tema = str(dados_alvo_edt.get("Tema_Padrao", "Outros temas")).strip()
                     val_atual_obj = str(dados_alvo_edt.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
-                    val_atual_obrig = str(dados_alvo_edt.get("UFs_Obrigatorias", "")).strip()  # 🚀 Resgata valor atual
+                    val_atual_obrig = str(dados_alvo_edt.get("UFs_Obrigatorias", "")).strip()
                     
-                    st.markdown(f"#### 🗂️ Ficha da Ação: **{val_atual_num}** `(ID: {id_pna_edit})`")
+                    st.markdown(
+                        f"#### 🗂️ Ficha da Ação: **{val_atual_num}** "
+                        f"<span style='background-color: #e2e8f0; color: #0f172a; border: 1px solid #cbd5e1; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.8em;'>ID: {id_pna_edit}</span>", 
+                        unsafe_allow_html=True
+                    )
 
                     c_e_ano, c_e_num, c_e_niv = st.columns([1, 1, 1.2])
                     with c_e_ano:
@@ -5667,7 +5696,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         idx_niv = 1 if "Setorial" in val_atual_nivel else 0
                         e_nivel = st.selectbox("Nível:", ["Estratégica (Macro)", "Setorial (Tática)"], index=idx_niv, key=f"edt_pna_niv_{id_pna_edit}")
 
-                    # 🚀 2. TÍTULO (70 CHARS) E DESCRIÇÃO / ESCOPO (400 CHARS)
                     c_en1, c_en2 = st.columns([1.5, 2.5])
                     with c_en1:
                         e_apelido = st.text_input(
@@ -5686,7 +5714,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                             key=f"edt_pna_comp_{id_pna_edit}"
                         ).strip()
 
-                    # 🚀 3. CLASSIFICAÇÃO OFICIAL E HERANÇA
                     c_et1, c_et2, c_et3 = st.columns(3)
                     with c_et1:
                         idx_tema = LISTA_TEMAS.index(val_atual_tema) if val_atual_tema in LISTA_TEMAS else 0
@@ -5725,23 +5752,41 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                     e_ind = st.text_input("Indicador Associado:", value=val_atual_ind, key=f"edt_pna_ind_{id_pna_edit}").strip()
                     e_mae = st.text_input("Código Ação Mãe (Vazio se for Ação PNAPA):", value=val_atual_mae, key=f"edt_pna_mae_{id_pna_edit}").strip().upper()
 
-                    # 🚨 >>> NOVO CAMPO: UFS OBRIGATÓRIAS NA EDIÇÃO <<<
-                    lista_obrig_init = []
-                    if "TODAS" in val_atual_obrig.upper():
-                        lista_obrig_init = ["TODAS"]
-                    else:
-                        import re
-                        ufs_enc = re.findall(r'\b[A-Z]{2}\b', val_atual_obrig.upper())
-                        lista_obrig_init = [u for u in ufs_enc if u in LISTA_UFS_COMPLETA]
+                    # 🚨 COMPORTAMENTO CONDICIONAL DAS UFS OBRIGATÓRIAS
+                    if e_nivel == "Setorial (Tática)":
+                        lista_obrig_init = []
+                        if "TODAS" in val_atual_obrig.upper():
+                            lista_obrig_init = ["TODAS"]
+                        else:
+                            import re
+                            ufs_enc = re.findall(r'\b[A-Z]{2}\b', val_atual_obrig.upper())
+                            lista_obrig_init = [u for u in ufs_enc if u in LISTA_UFS_COMPLETA]
 
-                    sel_ufs_obrig_edt = st.multiselect(
-                        "UFs com Adesão Obrigatória (Diretriz Ceneac):",
-                        options=["TODAS"] + LISTA_UFS_COMPLETA,
-                        default=lista_obrig_init,
-                        help="Selecione 'TODAS' ou as siglas das UFs com participação compulsória.",
-                        key=f"edt_pna_obrig_{id_pna_edit}"
-                    )
-                    e_ufs_obrig = "TODAS" if "TODAS" in sel_ufs_obrig_edt else ", ".join(sel_ufs_obrig_edt)
+                        sel_ufs_obrig_edt = st.multiselect(
+                            "UFs com Adesão Obrigatória (Diretriz Ceneac):",
+                            options=["TODAS"] + LISTA_UFS_COMPLETA,
+                            default=lista_obrig_init,
+                            help="Selecione 'TODAS' ou as siglas das UFs com participação compulsória nesta ação setorial.",
+                            key=f"edt_pna_obrig_{id_pna_edit}"
+                        )
+                        e_ufs_obrig = "TODAS" if "TODAS" in sel_ufs_obrig_edt else ", ".join(sel_ufs_obrig_edt)
+                    else:
+                        # Para Macroações: compila as UFs das filhas e exibe como informativo
+                        df_filhas_desta = df_pna_edt_pool[
+                            (df_pna_edt_pool["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == val_atual_num) |
+                            (df_pna_edt_pool["Num_Acao_PNAPA"].astype(str).str.strip().str.upper().str.startswith(f"{val_atual_num}."))
+                        ]
+                        set_ufs_filhas = set()
+                        for ufs_raw in df_filhas_desta.get("UFs_Obrigatorias", pd.Series()).dropna():
+                            set_ufs_filhas.update(obter_lista_ufs_obrigatorias(ufs_raw))
+                        
+                        if set_ufs_filhas:
+                            txt_ufs_filhas = "TODAS (27 UFs)" if len(set_ufs_filhas) == len(LISTA_UFS_COMPLETA) else ", ".join(sorted(list(set_ufs_filhas)))
+                        else:
+                            txt_ufs_filhas = "Nenhuma UF obrigatória cadastrada nas Ações Setoriais filhas."
+
+                        st.info(f"🏛️ **UFs Participantes da Macroação (Compilado das Setoriais):** `{txt_ufs_filhas}`")
+                        e_ufs_obrig = ""
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     from concurrent.futures import ThreadPoolExecutor
@@ -5772,7 +5817,7 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                                 "Nivel_Catalogo": str(e_nivel),
                                 "Tema_Padrao": str(e_tema),
                                 "Objetivo_Padrao": str(e_obj),
-                                "UFs_Obrigatorias": str(e_ufs_obrig)  # 🚀 Gravando a alteração
+                                "UFs_Obrigatorias": str(e_ufs_obrig)
                             }
 
                             with st.spinner(f"1/2 Atualizando Ação '{nova_chave_acao_ano}' no Catálogo..."):
@@ -5781,7 +5826,6 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                                 except Exception as e:
                                     st.error(f"Erro ao conectar ao catálogo: {e}")
 
-                            # Sincronização em cascata na planilha principal
                             cod_antigo_acao_ano = str(dados_alvo_edt.get("Acao_Ano", "")).strip()
                             cod_antigo_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip()
 
