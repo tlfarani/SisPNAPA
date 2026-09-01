@@ -981,7 +981,7 @@ st.markdown("""
             font-weight: 700 !important;
         }
         
-        /* 2. Rótulos e Cabeçalhos dos Campos (100% Transparentes sobre o fundo original) */
+        /* 2. Rótulos transparentes (Preserva o fundo verde-claro da página) */
         div[data-testid="stWidgetLabel"],
         div[data-testid="stWidgetLabel"] *,
         label,
@@ -991,71 +991,69 @@ st.markdown("""
             font-weight: 600 !important;
         }
 
-        /* 3. SELECTBOXES & MULTISELECTS (Fundo Branco em TODAS as camadas internas da caixa) */
-        div[data-testid="stSelectbox"],
-        div[data-testid="stMultiSelect"] {
-            background-color: transparent !important;
-        }
-
-        div[data-baseweb="select"],
-        div[data-baseweb="select"] * {
+        /* 3. CAIXAS DE SELEÇÃO: SOLUÇÃO DEFINITIVA (Selectbox e Multiselect) */
+        /* a. Container principal da caixa: Fundo branco e borda */
+        div[data-baseweb="select"] > div:first-of-type {
             background-color: #ffffff !important;
-            color: #0f172a !important;
-        }
-
-        /* Borda Externa e Arredondamento do Campo */
-        div[data-baseweb="select"] > div:first-child {
             border: 1px solid #cbd5e1 !important;
             border-radius: 6px !important;
         }
+        
+        /* b. Anula qualquer fundo verde herdado dos sub-containers internos do Streamlit */
+        div[data-baseweb="select"] > div:first-of-type div {
+            background-color: transparent !important;
+        }
 
-        /* Placeholder do Select/MultiSelect */
+        /* c. Força a cor preta em todos os textos da caixa de seleção */
+        div[data-baseweb="select"] > div:first-of-type * {
+            color: #0f172a !important;
+            font-weight: 500 !important;
+        }
+
+        /* d. Placeholder text (Ex: 'Choose an option') */
         div[data-baseweb="select"] input::placeholder {
             color: #64748b !important;
         }
 
-        /* Ícones e Setas do Dropdown */
+        /* e. Ícones da caixa (setas e X) */
         div[data-baseweb="select"] svg { 
             fill: #0f172a !important; 
             stroke: #0f172a !important;
             background-color: transparent !important;
         }
 
-        /* 4. Chips / Tags das UFs Selecionadas no MultiSelect */
-        div[data-baseweb="tag"],
-        div[data-baseweb="tag"] * {
+        /* 4. MULTISELECT: Tags / Chips de opções selecionadas */
+        span[data-baseweb="tag"] {
             background-color: #e2e8f0 !important;
-            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
             border-radius: 4px !important;
+        }
+        span[data-baseweb="tag"] * {
+            background-color: transparent !important;
+            color: #0f172a !important;
             font-weight: 700 !important;
         }
-        div[data-baseweb="tag"] {
-            border: 1px solid #cbd5e1 !important;
-        }
-        div[data-baseweb="tag"] svg {
+        span[data-baseweb="tag"] svg {
             fill: #475569 !important;
             stroke: none !important;
-            background-color: transparent !important;
         }
 
-        /* 5. Menus Suspensos Abertos (Popovers, Dropdowns Flutuantes e Listas) */
+        /* 5. Menus Suspensos (Lista de opções ao clicar) */
         ul[data-testid="stSelectboxVirtualDropdown"],
-        div[data-baseweb="popover"],
-        div[data-baseweb="popover"] *,
-        div[data-baseweb="menu"],
-        div[data-baseweb="menu"] * {
+        div[data-baseweb="popover"] ul,
+        div[data-baseweb="menu"] {
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+        div[data-baseweb="popover"] li,
+        div[data-baseweb="menu"] li {
             background-color: #ffffff !important;
             color: #0f172a !important;
         }
-
         div[data-baseweb="popover"] li:hover,
-        div[data-baseweb="popover"] li:hover *,
         div[data-baseweb="menu"] li:hover,
-        div[data-baseweb="menu"] li:hover *,
         div[data-baseweb="popover"] li[aria-selected="true"],
-        div[data-baseweb="popover"] li[aria-selected="true"] *,
-        div[data-baseweb="menu"] li[aria-selected="true"],
-        div[data-baseweb="menu"] li[aria-selected="true"] * {
+        div[data-baseweb="menu"] li[aria-selected="true"] {
             background-color: #f1f5f9 !important;
             color: #0f172a !important;
         }
