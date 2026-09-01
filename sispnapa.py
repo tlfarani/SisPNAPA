@@ -974,9 +974,9 @@ def validar_senha(senha_digitada: str, token_armazenado: str, senha_padrao="pnap
 # =================================================================
 st.markdown("""
     <style>
-        /* 1. BARRA LATERAL (Sidebar: #63783D) */
+        /* 1. BARRA LATERAL (Sidebar: #344D0E) */
         section[data-testid="stSidebar"] {
-            background-color: #63783D !important;
+            background-color: #344D0E !important;
         }
         section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
