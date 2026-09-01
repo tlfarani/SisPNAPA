@@ -5926,11 +5926,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                         f"📈 <strong>Indicador Macro Consolidado:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600;'>{indicador_macro}</span>"
                         f"</div>", 
                         unsafe_allow_html=True
-                    )
-                    st.markdown(
-                        f"📈 **Indicador Macro Consolidado:** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{indicador_macro}</span>", 
-                        unsafe_allow_html=True
-                    )
+                    )                    
                 with c_minf2:
                     st.metric("Meta Física Nacional (Macro)", f"{meta_nacional_macro:.1f}")
                 with c_minf3:
