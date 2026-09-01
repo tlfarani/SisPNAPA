@@ -848,7 +848,7 @@ def carregar_bases_vias_power_automate():
         "ID_PNAPA", "Ano", "Num_Acao_PNAPA", "Acao_Ano", "Nome_Acao_Completo", 
         "Nome_Acao_Apelido", "Importância", "Indicador", "UF_Dono", "Dono_Acao", 
         "Meta_Nacional", "Orcamento_Nacional", "Acao_Mae",
-        "Nivel_Catalogo", "Tema_Padrao", "Objetivo_Padrao"
+        "Nivel_Catalogo", "Tema_Padrao", "Objetivo_Padrao", "UFs_Obrigatorias"
     ]
     df_pna = pd.DataFrame(dados_pna) if dados_pna else pd.DataFrame(columns=cols_pna_padrao)
     for c in cols_pna_padrao:
@@ -892,6 +892,9 @@ df_pnapas_op = df_pnapas[
 
 # 🛡️ SANITIZAÇÃO DE TIPOS E HIERARQUIA NO CATÁLOGO DE AÇÕES PNAPA
 if not df_pnapas.empty:
+    if "UFs_Obrigatorias" not in df_pnapas.columns:
+        df_pnapas["UFs_Obrigatorias"] = ""
+        
     if "Ano" in df_pnapas.columns:
         df_pnapas["Ano_Num"] = pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int)
     else:
@@ -981,7 +984,7 @@ st.markdown("""
             font-weight: 700 !important;
         }
         
-        /* 2. Rótulos transparentes (Preserva o fundo verde-claro da página) */
+        /* 2. Rótulos e Cabeçalhos dos Campos (100% Transparentes sobre o fundo da página) */
         div[data-testid="stWidgetLabel"],
         div[data-testid="stWidgetLabel"] *,
         label,
@@ -991,69 +994,94 @@ st.markdown("""
             font-weight: 600 !important;
         }
 
-        /* 3. CAIXAS DE SELEÇÃO: SOLUÇÃO DEFINITIVA (Selectbox e Multiselect) */
-        /* a. Container principal da caixa: Fundo branco e borda */
-        div[data-baseweb="select"] > div:first-of-type {
-            background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
-            border-radius: 6px !important;
-        }
-        
-        /* b. Anula qualquer fundo verde herdado dos sub-containers internos do Streamlit */
-        div[data-baseweb="select"] > div:first-of-type div {
+        /* 3. SELECTBOXES & MULTISELECTS (Fundo Branco em TODAS as Camadas Internas) */
+        div[data-testid="stSelectbox"],
+        div[data-testid="stMultiSelect"] {
             background-color: transparent !important;
         }
 
-        /* c. Força a cor preta em todos os textos da caixa de seleção */
-        div[data-baseweb="select"] > div:first-of-type * {
+        [data-baseweb="select"],
+        [data-baseweb="select"] > div,
+        [data-baseweb="select"] div,
+        [data-baseweb="select"] span,
+        [data-baseweb="select"] input,
+        div[data-testid="stSelectbox"] [data-baseweb="select"],
+        div[data-testid="stSelectbox"] [data-baseweb="select"] *,
+        div[data-testid="stMultiSelect"] [data-baseweb="select"],
+        div[data-testid="stMultiSelect"] [data-baseweb="select"] * {
+            background-color: #ffffff !important;
             color: #0f172a !important;
-            font-weight: 500 !important;
         }
 
-        /* d. Placeholder text (Ex: 'Choose an option') */
-        div[data-baseweb="select"] input::placeholder {
+        /* Borda Externa e Formato das Caixas de Seleção */
+        [data-baseweb="select"] > div:first-child,
+        div[data-testid="stSelectbox"] [data-baseweb="select"] > div:first-child,
+        div[data-testid="stMultiSelect"] [data-baseweb="select"] > div:first-child {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+            background-color: #ffffff !important;
+        }
+
+        /* Placeholder Text (Ex: 'Choose an option') */
+        [data-baseweb="select"] input::placeholder,
+        div[data-testid="stSelectbox"] input::placeholder,
+        div[data-testid="stMultiSelect"] input::placeholder {
             color: #64748b !important;
         }
 
-        /* e. Ícones da caixa (setas e X) */
-        div[data-baseweb="select"] svg { 
+        /* Ícones e Setas de Dropdown */
+        [data-baseweb="select"] svg,
+        div[data-testid="stSelectbox"] svg,
+        div[data-testid="stMultiSelect"] svg { 
             fill: #0f172a !important; 
             stroke: #0f172a !important;
             background-color: transparent !important;
         }
 
-        /* 4. MULTISELECT: Tags / Chips de opções selecionadas */
-        span[data-baseweb="tag"] {
+        /* 4. MULTISELECT: Tags / Chips das UFs Selecionadas (Cinza Neutro) */
+        [data-baseweb="tag"],
+        [data-baseweb="tag"] *,
+        div[data-testid="stMultiSelect"] [data-baseweb="tag"],
+        div[data-testid="stMultiSelect"] [data-baseweb="tag"] * {
             background-color: #e2e8f0 !important;
+            color: #0f172a !important;
+        }
+
+        [data-baseweb="tag"],
+        div[data-testid="stMultiSelect"] [data-baseweb="tag"] {
             border: 1px solid #cbd5e1 !important;
             border-radius: 4px !important;
         }
-        span[data-baseweb="tag"] * {
-            background-color: transparent !important;
-            color: #0f172a !important;
+
+        [data-baseweb="tag"] span,
+        [data-baseweb="tag"] p {
             font-weight: 700 !important;
         }
-        span[data-baseweb="tag"] svg {
+
+        [data-baseweb="tag"] svg {
             fill: #475569 !important;
             stroke: none !important;
+            background-color: transparent !important;
         }
 
-        /* 5. Menus Suspensos (Lista de opções ao clicar) */
+        /* 5. Menus Suspensos Abertos (Popovers, Dropdowns Flutuantes e Listas) */
         ul[data-testid="stSelectboxVirtualDropdown"],
-        div[data-baseweb="popover"] ul,
-        div[data-baseweb="menu"] {
-            background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
-        }
-        div[data-baseweb="popover"] li,
-        div[data-baseweb="menu"] li {
+        [data-baseweb="popover"],
+        [data-baseweb="popover"] *,
+        [data-baseweb="menu"],
+        [data-baseweb="menu"] * {
             background-color: #ffffff !important;
             color: #0f172a !important;
         }
-        div[data-baseweb="popover"] li:hover,
-        div[data-baseweb="menu"] li:hover,
-        div[data-baseweb="popover"] li[aria-selected="true"],
-        div[data-baseweb="menu"] li[aria-selected="true"] {
+
+        [data-baseweb="popover"] li:hover,
+        [data-baseweb="popover"] li:hover *,
+        [data-baseweb="menu"] li:hover,
+        [data-baseweb="menu"] li:hover *,
+        [data-baseweb="popover"] li[aria-selected="true"],
+        [data-baseweb="popover"] li[aria-selected="true"] *,
+        [data-baseweb="menu"] li[aria-selected="true"],
+        [data-baseweb="menu"] li[aria-selected="true"] * {
             background-color: #f1f5f9 !important;
             color: #0f172a !important;
         }
@@ -1113,7 +1141,7 @@ st.markdown("""
             font-weight: 700 !important; 
         }
 
-        /* 9. 🛡️ FORMATAÇÃO UNIVERSAL DE TAGS DE CÓDIGO (BADGES / IDs) */
+        /* 9. FORMATAÇÃO UNIVERSAL DE TAGS DE CÓDIGO (BADGES / IDs) */
         code {
             background-color: #e2e8f0 !important;
             color: #0f172a !important;
@@ -6173,21 +6201,17 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             indicador_macro = str(macro_row.get("Indicador", "Entregas Concluídas")).strip()
             obj_macro = str(macro_row.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
 
-            # Filtro de Dono
             if filtro_dono != "Todos os Especialistas" and dono_macro != filtro_dono:
                 continue
 
-            # Identifica as Ações Setoriais filhas desta Macroação
             df_setoriais_filhas = df_setoriais_pool[
                 (df_setoriais_pool["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == cod_m_puro) |
                 (df_setoriais_pool["Num_Acao_PNAPA"].astype(str).str.strip().str.upper().str.startswith(f"{cod_m_puro}."))
             ].copy()
 
-            # Se for uma ação única/sem filhas, ela própria atua como a setorial
             if df_setoriais_filhas.empty:
                 df_setoriais_filhas = pd.DataFrame([macro_row])
 
-            # Filtro de Busca Textual
             if busca_pact:
                 match_macro = (busca_pact in cod_m_puro.lower()) or (busca_pact in nome_macro.lower()) or (busca_pact in obj_macro.lower())
                 match_filhas = df_setoriais_filhas[
@@ -6198,9 +6222,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 if not match_macro and match_filhas.empty:
                     continue
 
-            # -------------------------------------------------------------
-            # Agregações Consolidadas da Macroação (Soma das Setoriais)
-            # -------------------------------------------------------------
+            # Agregações Consolidadas da Macroação
             meta_macro_propria = float(pd.to_numeric(macro_row.get("Meta_Nacional", 0.0), errors='coerce') or 0.0)
             meta_macro_soma_filhas = pd.to_numeric(df_setoriais_filhas["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
             meta_nacional_macro = meta_macro_propria if meta_macro_propria > 0 else meta_macro_soma_filhas
@@ -6209,7 +6231,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             teto_macro_soma_filhas = pd.to_numeric(df_setoriais_filhas["Orcamento_Nacional"], errors='coerce').fillna(0.0).sum()
             teto_nacional_macro = teto_macro_proprio if teto_macro_proprio > 0 else teto_macro_soma_filhas
 
-            # Coleta todas as chaves de busca de todas as filhas desta macro
             chaves_todas_filhas = set()
             for _, r_f in df_setoriais_filhas.iterrows():
                 c_f_num = str(r_f.get("Num_Acao_PNAPA", "")).strip().upper()
@@ -6218,15 +6239,12 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 if c_f_ano: chaves_todas_filhas.add(c_f_ano)
                 if c_f_num: chaves_todas_filhas.add(f"{c_f_num}-{ano_pact_sel}")
 
-            # Filtra todas as propostas estaduais pertencentes a esta Macro
             df_propostas_macro = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_todas_filhas)].copy() if not df_acoes_cadastradas.empty else pd.DataFrame()
 
             meta_demandada_macro = df_propostas_macro["Meta_Num"].sum() if not df_propostas_macro.empty else 0.0
             orc_demandado_macro = df_propostas_macro["Rec_Plan_Num"].sum() if not df_propostas_macro.empty else 0.0
-
             pct_fisico_m = (meta_demandada_macro / meta_nacional_macro * 100.0) if meta_nacional_macro > 0 else (100.0 if meta_demandada_macro > 0 else 0.0)
 
-            # Classificação semafórica da Macroação
             if meta_demandada_macro == 0:
                 badge_status_m = "⚪ Sem Adesão (0%)"
             elif pct_fisico_m < 100:
@@ -6236,7 +6254,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             else:
                 badge_status_m = f"🔵 Superávit Físico ({pct_fisico_m:.0f}%)"
 
-            # Filtro de Status de Alinhamento
             if status_pact_filtro != "Todas as Macroações":
                 if "Déficit Físico" in status_pact_filtro and (pct_fisico_m >= 100 or meta_demandada_macro == 0): continue
                 if "Meta Física Atingida" in status_pact_filtro and pct_fisico_m != 100: continue
@@ -6244,16 +6261,12 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 if "Orçamento Estourado" in status_pact_filtro and (teto_nacional_macro == 0 or orc_demandado_macro <= teto_nacional_macro): continue
                 if "Sem Adesão" in status_pact_filtro and meta_demandada_macro > 0: continue
 
-            # =================================================================
-            # RENDERIZAÇÃO DO EXPANDER DA MACROAÇÃO (NÍVEL 1)
-            # =================================================================
             alerta_estouro_macro = " 🚨 [Teto Excedido]" if (teto_nacional_macro > 0 and orc_demandado_macro > teto_nacional_macro) else ""
             
             with st.expander(
                 f"📌 **{cod_m_puro}** — {nome_macro} | {badge_status_m} | Demandado: {formatar_moeda_br(orc_demandado_macro)}{alerta_estouro_macro}", 
                 expanded=False
             ):
-                # Informações Institucionais da Macro (Alto Contraste)
                 c_minf1, c_minf2, c_minf3 = st.columns([1.5, 1, 1])
                 with c_minf1:
                     st.markdown(
@@ -6263,7 +6276,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                         f"📈 <strong>Indicador Macro Consolidado:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600;'>{indicador_macro}</span>"
                         f"</div>", 
                         unsafe_allow_html=True
-                    )                    
+                    )
                 with c_minf2:
                     st.metric("Meta Física Nacional (Macro)", f"{meta_nacional_macro:.1f}")
                 with c_minf3:
@@ -6271,7 +6284,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # BARRAS DE PROCESSO CONSOLIDADAS DA MACROAÇÃO
                 pct_bar_m_fisico = min(100.0, max(0.0, pct_fisico_m))
                 cor_barra_m_fisica = "#15803d" if pct_fisico_m <= 100 else "#2563eb"
                 
@@ -6328,18 +6340,15 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     meta_nac_sec = float(pd.to_numeric(sec_row.get("Meta_Nacional", 0.0), errors='coerce') or 0.0)
                     teto_orc_sec = float(pd.to_numeric(sec_row.get("Orcamento_Nacional", 0.0), errors='coerce') or 0.0)
 
-                    # 🚨 Identificação das UFs com Adesão Obrigatória
                     ufs_obrig_set = obter_lista_ufs_obrigatorias(sec_row.get("UFs_Obrigatorias", ""))
                     eh_obrig_todas = (len(ufs_obrig_set) == len(LISTA_UFS_COMPLETA))
 
-                    # Chaves de identificação da Setorial nas propostas estaduais
                     chaves_desta_sec = {cod_sec_puro, cod_sec_ano, f"{cod_sec_puro}-{ano_pact_sel}"} - {""}
                     df_prop_sec = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_desta_sec)].copy() if not df_acoes_cadastradas.empty else pd.DataFrame()
 
                     meta_dem_sec = df_prop_sec["Meta_Num"].sum() if not df_prop_sec.empty else 0.0
                     orc_dem_sec = df_prop_sec["Rec_Plan_Num"].sum() if not df_prop_sec.empty else 0.0
 
-                    # 🛡️ Validação de Teto e Pendências
                     tem_estouro_sec = (teto_orc_sec > 0 and orc_dem_sec > teto_orc_sec)
                     saldo_orc_sec = teto_orc_sec - orc_dem_sec
 
@@ -6347,13 +6356,11 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     ufs_faltantes_total = sorted([u for u in todas_ufs_brasil if u not in ufs_com_proposta])
                     ufs_obrig_faltantes = sorted([u for u in ufs_obrig_set if u not in ufs_com_proposta])
 
-                    # Card Bordered da Ação Setorial (Nível 2)
                     with st.container(border=True):
                         col_sh1, col_sh2, col_sh3 = st.columns([2, 1, 1])
                         with col_sh1:
                             st.markdown(f"##### 🏷️ **{cod_sec_puro}** — {nome_sec}")
                             
-                            # Tag de Obrigatoriedade
                             if eh_obrig_todas:
                                 tag_obrig = "<span style='background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-weight: 700;'>🚨 Obrigatória para Todas as 27 UFs</span>"
                             elif ufs_obrig_set:
@@ -6384,7 +6391,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             else:
                                 st.metric("Orçamento Demandado", formatar_moeda_br(orc_dem_sec))
 
-                        # ALERTA DE GOVERNANÇA: TETOS OU PENDÊNCIAS OBRIGATÓRIAS
                         if tem_estouro_sec:
                             st.error(f"⛔ **ESTOURO DE TETO SETORIAL:** A demanda das UFs ({formatar_moeda_br(orc_dem_sec)}) excedeu o teto pactuado ({formatar_moeda_br(teto_orc_sec)}) em **{formatar_moeda_br(abs(saldo_orc_sec))}**.")
                         elif teto_orc_sec > 0:
@@ -6393,9 +6399,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                         if ufs_obrig_faltantes:
                             st.warning(f"⚠️ **Pendência de Governança:** {len(ufs_obrig_faltantes)} estado(s) de adesão obrigatória ainda não cadastraram proposta: **{', '.join(ufs_obrig_faltantes)}**.")
 
-                        # =====================================================
-                        # 7. PROPOSTAS DAS UFS (NÍVEL 3)
-                        # =====================================================
                         tab_prop_ufs, tab_prop_pend = st.tabs([
                             f"🗺️ Propostas Recebidas ({len(df_prop_sec)} UFs)", 
                             f"⏳ Estados Pendentes ({len(ufs_faltantes_total)} UFs)"
@@ -6428,7 +6431,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             if not ufs_faltantes_total:
                                 st.success("🎉 Todas as 27 UFs já registraram propostas para esta Ação Setorial!")
                             else:
-                                # 🚨 Destaque 1: UFs Obrigatórias Pendentes
                                 if ufs_obrig_faltantes:
                                     st.markdown(f"**🚨 Estados com Adesão Obrigatória Pendente ({len(ufs_obrig_faltantes)} UFs):**")
                                     tags_obrig_html = " ".join([
@@ -6438,7 +6440,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                                     st.markdown(tags_obrig_html, unsafe_allow_html=True)
                                     st.markdown("<br>", unsafe_allow_html=True)
 
-                                # ⚪ Destaque 2: UFs Facultativas Pendentes
                                 ufs_facult_faltantes = [u for u in ufs_faltantes_total if u not in ufs_obrig_set]
                                 if ufs_facult_faltantes:
                                     st.markdown(f"**⚪ Demais Estados (Adesão Facultativa):**")
