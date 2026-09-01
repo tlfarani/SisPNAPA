@@ -619,7 +619,7 @@ def calcular_termometro_carga(
 
     # Validação D: Trava Anti-Rotina (50% Ordinárias)
     if dias_ord_proj > teto_ordinarias:
-        msg = f"Cota de ordinárias ({fase_registro}) excedida: Projetado {dias_ord_proj:.1f} d / Máximo {teto_ordinarias:.0f} d ({int(pct_ord*100)}%)."
+        msg = f"Cota de Rotina ({fase_registro}) excedida: Projetado {dias_ord_proj:.1f} d / Máximo {teto_ordinarias:.0f} d ({int(pct_ord*100)}%)."
         if eh_planejamento_rigido: mensagens_erro.append(msg)
         else: mensagens_aviso.append(msg + " (Priorize ações estratégicas/prioritárias).")
 
@@ -650,6 +650,123 @@ def calcular_termometro_carga(
         "mensagens_aviso": mensagens_aviso,
         "eh_planejamento_rigido": eh_planejamento_rigido
     }
+
+def calcular_capacidade_equipes_uf(df_atual, df_srv_base, ano_alvo):
+    """
+    Calcula a capacidade agregada em dias de esforço por UF/Sede para o ciclo Pré-PNAPA.
+    Regra Universal:
+      - Elegibilidade estrita: 'Faz parte da Equipe de Emergências' == 'Sim'.
+      - Sede: 'UF_Servidor' == 'DF' (90 dias de teto).
+      - UFs: Titular (90d), Substituto (60d) e Membro (40d).
+    """
+    resumo_ufs = {}
+    todas_ufs = sorted(list(set(LISTA_UFS_COMPLETA + ["DF"])))
+    
+    # 1. Mapeamento dos Servidores Elegíveis e seus Tetos Individuais
+    mapa_servidores_teto = {}
+    if df_srv_base is not None and not df_srv_base.empty:
+        col_srv = "Servidor" if "Servidor" in df_srv_base.columns else "Nome"
+        col_uf = "UF_Servidor" if "UF_Servidor" in df_srv_base.columns else ("UF" if "UF" in df_srv_base.columns else "")
+        col_lot = "Lotacao" if "Lotacao" in df_srv_base.columns else ("Lotação" if "Lotação" in df_srv_base.columns else "")
+        col_func = "Funcao" if "Funcao" in df_srv_base.columns else ("Função" if "Função" in df_srv_base.columns else "Papel")
+        col_eq = "Faz parte da Equipe de Emergências" if "Faz parte da Equipe de Emergências" in df_srv_base.columns else "Equipe_Emergencia"
+
+        for _, s_row in df_srv_base.iterrows():
+            nome_s = str(s_row.get(col_srv, "")).strip()
+            if not nome_s or nome_s.lower() in ["nan", "none"]:
+                continue
+            
+            eq_s = str(s_row.get(col_eq, "")).strip().capitalize()
+
+            # 🛡️ FILTRO UNIVERSAL: Apenas integrantes oficiais da emergência
+            if eq_s != "Sim":
+                continue
+
+            uf_s = str(s_row.get(col_uf, "DF")).strip().upper()
+            func_s = str(s_row.get(col_func, "")).strip().upper()
+            lot_s = str(s_row.get(col_lot, "")).strip().upper()
+
+            # Definição do Teto Individual
+            is_sede = (uf_s == "DF")
+            if is_sede or any(k in func_s for k in ["TITULAR", "CHEFE", "COORDENADOR", "PONTO FOCAL", "RESPONSAVEL"]):
+                teto_ind = 90.0
+                papel_label = "Titular / Sede" if is_sede else "Titular Regional"
+            elif any(k in func_s for k in ["SUBSTITUTO", "SUPLENTE"]):
+                teto_ind = 60.0
+                papel_label = "Substituto"
+            else:
+                teto_ind = 40.0
+                papel_label = "Membro da Equipe"
+
+            mapa_servidores_teto[nome_s] = {
+                "UF": uf_s if uf_s else "DF",
+                "Teto": teto_ind,
+                "Papel": papel_label,
+                "Lotacao": lot_s
+            }
+
+    # 2. Inicialização dos Contadores por UF
+    for uf in todas_ufs:
+        servidores_uf = [k for k, v in mapa_servidores_teto.items() if v["UF"] == uf]
+        teto_total_uf = sum([mapa_servidores_teto[k]["Teto"] for k in servidores_uf])
+        resumo_ufs[uf] = {
+            "UF": uf,
+            "Qtd_Servidores": len(servidores_uf),
+            "Servidores_Lista": servidores_uf,
+            "Capacidade_Total_Dias": teto_total_uf,
+            "Dias_Planejados": 0.0,
+            "Saldo_Dias": teto_total_uf,
+            "Pct_Uso": 0.0,
+            "Status": "⚪ Sem Equipe Cadastrada" if teto_total_uf == 0 else "🟢 Disponível"
+        }
+
+    # 3. Consolidação dos Dias Planejados em df_atual no Ano Selecionado
+    if df_atual is not None and not df_atual.empty:
+        df_ano = df_atual[df_atual["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_alvo)].copy()
+        
+        for _, r_atv in df_ano.iterrows():
+            dias_p = float(pd.to_numeric(r_atv.get("Dias_Gastos_Plan", 0), errors='coerce') or 0.0)
+            if dias_p <= 0:
+                continue
+
+            nome_srv_atv = str(r_atv.get("Servidor", "")).strip()
+            uf_srv_atv = str(r_atv.get("UF_Servidor", "")).strip().upper()
+            uf_acao = str(r_atv.get("UF_Acao_PNAPA", "")).strip().upper()
+
+            # Atribuição da carga à UF de lotação real do servidor
+            if nome_srv_atv in mapa_servidores_teto:
+                uf_alvo = mapa_servidores_teto[nome_srv_atv]["UF"]
+            elif uf_srv_atv in resumo_ufs:
+                uf_alvo = uf_srv_atv
+            elif uf_acao in resumo_ufs:
+                uf_alvo = uf_acao
+            else:
+                uf_alvo = "DF"
+
+            if uf_alvo in resumo_ufs:
+                resumo_ufs[uf_alvo]["Dias_Planejados"] += dias_p
+
+    # 4. Apuração Final de Saldo e Semáforo
+    for uf, dados in resumo_ufs.items():
+        cap = dados["Capacidade_Total_Dias"]
+        plan = dados["Dias_Planejados"]
+        saldo = cap - plan
+        dados["Saldo_Dias"] = saldo
+        
+        if cap > 0:
+            pct = (plan / cap) * 100.0
+            dados["Pct_Uso"] = pct
+            if pct <= 80.0:
+                dados["Status"] = "🟢 Folga Operacional"
+            elif pct <= 100.0:
+                dados["Status"] = "🟡 Quase no Limite"
+            else:
+                dados["Status"] = "⛔ Capacidade Esgotada"
+        else:
+            dados["Pct_Uso"] = 0.0
+            dados["Status"] = "⚪ Sem Equipe Cadastrada"
+
+    return resumo_ufs
 
 # =================================================================
 # FUNÇÕES UTILITÁRIAS DE FORMATAÇÃO NO PADRÃO BRASILEIRO (BRL)
@@ -3700,6 +3817,8 @@ elif modo == "➕ Inserir Nova Linha":
         uf_filtro_pna = uf_usuario if uf_usuario != "Acesso Restrito" else "SP"
         st.text_input("UF da Ação/Atividade (Sua UF):", value=uf_filtro_pna, disabled=True)
 
+    uf_acao = uf_filtro_pna  # 🛡️ Garante que uf_acao sempre exista para o payload
+
     st.markdown("#### 🔗 Vinculação com o Catálogo de Ações Setoriais")
     
     if not df_pnapas_op.empty:
@@ -3757,6 +3876,19 @@ elif modo == "➕ Inserir Nova Linha":
             ponto_focal_estado, papel_estado_acao = obter_ponto_focal_acao(df_atual, val_num_acao, uf_filtro_pna)
 
             st.info(f"👑 **Especialista Sede:** `{dono_nacional} ({uf_dono_nac})` | **Meta Nacional:** `{meta_nac_info}`  \n📍 **Governança em {uf_filtro_pna}:** Papel: `{papel_estado_acao}` | Ponto Focal Estadual: `{ponto_focal_estado if ponto_focal_estado else 'Não Definido'}`")
+
+            # 🚀 >>> NOVO: FEEDBACK DE CAPACIDADE COLETIVA DA EQUIPE (NUPAEM / SEDE) <<<
+            res_cap_temp = calcular_capacidade_equipes_uf(df_atual, df_servidores, val_ano)
+            info_uf_sel = res_cap_temp.get(uf_filtro_pna, {})
+            cap_uf_val = info_uf_sel.get("Capacidade_Total_Dias", 0.0)
+            saldo_uf_val = info_uf_sel.get("Saldo_Dias", 0.0)
+            uso_uf_val = info_uf_sel.get("Pct_Uso", 0.0)
+
+            if cap_uf_val > 0:
+                if saldo_uf_val >= 0:
+                    st.info(f"ℹ️ **Capacidade da Equipe {uf_filtro_pna}:** {saldo_uf_val:.1f} dias disponíveis de {cap_uf_val:.0f} dias no ciclo Pré-PNAPA ({uso_uf_val:.1f}% comprometido).")
+                else:
+                    st.warning(f"⚠️ **Atenção:** A equipe de {uf_filtro_pna} já atingiu 100% da sua capacidade pactuada (Saldo negativo de {abs(saldo_uf_val):.1f} dias).")
         else:
             st.warning("⚠️ Nenhuma Ação Setorial (Nível 2) cadastrada para este ano no catálogo auxiliar.")
             val_ano, val_num_acao, val_nome_acao, val_indicador, importancia = None, "", "", "", "Finalística"
@@ -5786,6 +5918,58 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         )
 
         # LINHA 2: RESUMO E ADESÃO FEDERATIVA
+        # =====================================================================
+        # 4.1 PAINEL DE CAPACIDADE DA FORÇA DE TRABALHO POR UF / NUPAEM / SEDE
+        # =====================================================================
+        resumo_capacidade_ufs = calcular_capacidade_equipes_uf(df_atual, df_servidores, ano_pact_sel)
+
+        with st.expander("📊 **Capacidade da Força de Trabalho por Equipe (Nupaem & Sede Ceneac)**", expanded=False):
+            st.markdown(
+                "Acompanhamento da carga horária limite das equipes de emergência. "
+                "Tetos aplicados: **90 dias** (Titular/Sede), **60 dias** (Substituto) e **40 dias** (Membro de Equipe)."
+            )
+
+            # Montagem do DataFrame de Exibição
+            lista_tabela_cap = []
+            for uf_key, d_uf in resumo_capacidade_ufs.items():
+                if d_uf["Capacidade_Total_Dias"] > 0 or d_uf["Dias_Planejados"] > 0:
+                    lista_tabela_cap.append({
+                        "UF / Sede": uf_key,
+                        "Agentes na Equipe": d_uf["Qtd_Servidores"],
+                        "Capacidade Total (Dias)": d_uf["Capacidade_Total_Dias"],
+                        "Dias Comprometidos": d_uf["Dias_Planejados"],
+                        "Saldo Disponível (Dias)": d_uf["Saldo_Dias"],
+                        "Ocupação (%)": d_uf["Pct_Uso"],
+                        "Status de Carga": d_uf["Status"]
+                    })
+
+            if lista_tabela_cap:
+                df_tab_cap = pd.DataFrame(lista_tabela_cap).sort_values(by="Ocupação (%)", ascending=False)
+                
+                # KPIs rápidos do painel
+                total_cap_br = df_tab_cap["Capacidade Total (Dias)"].sum()
+                total_plan_br = df_tab_cap["Dias Comprometidos"].sum()
+                saldo_br = total_cap_br - total_plan_br
+                
+                col_cp1, col_cp2, col_cp3, col_cp4 = st.columns(4)
+                col_cp1.metric("Capacidade Nacional (Dias)", f"{total_cap_br:,.0f} d")
+                col_cp2.metric("Dias Alocados no Plano", f"{total_plan_br:,.0f} d")
+                col_cp3.metric("Saldo Global da Força de Trabalho", f"{saldo_br:,.0f} d")
+                col_cp4.metric("Taxa Média de Ocupação", f"{(total_plan_br/total_cap_br*100.0 if total_cap_br > 0 else 0):.1f}%")
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Formatação dos dados para exibição na tabela
+                df_tab_cap_view = df_tab_cap.copy()
+                df_tab_cap_view["Capacidade Total (Dias)"] = df_tab_cap_view["Capacidade Total (Dias)"].apply(lambda v: f"{v:,.0f} d")
+                df_tab_cap_view["Dias Comprometidos"] = df_tab_cap_view["Dias Comprometidos"].apply(lambda v: f"{v:,.1f} d")
+                df_tab_cap_view["Saldo Disponível (Dias)"] = df_tab_cap_view["Saldo Disponível (Dias)"].apply(lambda v: f"{v:,.1f} d")
+                df_tab_cap_view["Ocupação (%)"] = df_tab_cap_view["Ocupação (%)"].apply(lambda v: f"{v:.1f}%")
+
+                st.dataframe(df_tab_cap_view, use_container_width=True, hide_index=True)
+            else:
+                st.info("Nenhuma equipe de emergência ou servidor ativo encontrado no cadastro de servidores.")
+        
         c_sub1, c_sub2, c_sub3 = st.columns([1, 1.5, 1.5])
         with c_sub1:
             st.markdown(
