@@ -988,26 +988,26 @@ st.markdown("""
             font-weight: 700 !important;
         }
 
-        /* 🔘 BOTÕES E POPOVERS DA BARRA LATERAL (Verde Mais Escuro: #0d2617 com Texto Branco) */
+        /* 🔘 BOTÕES DA BARRA LATERAL (Verde Intermediário / Sálvia Corporativo) */
         section[data-testid="stSidebar"] button,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
-            background-color: #0d2617 !important;
-            border: 1px solid #2d5a3e !important;
+            background-color: #cce3d4 !important;
+            border: 1px solid #9fc4ab !important;
             border-radius: 6px !important;
-            color: #ffffff !important;
+            color: #063319 !important;
             transition: all 0.2s ease-in-out !important;
         }
         section[data-testid="stSidebar"] button *,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button * {
-            color: #ffffff !important;
-            font-weight: 600 !important;
+            color: #063319 !important;
+            font-weight: 700 !important;
             background-color: transparent !important;
         }
         section[data-testid="stSidebar"] button:hover,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
-            background-color: #153b24 !important;
-            border-color: #86efac !important;
-            color: #ffffff !important;
+            background-color: #b8d9c2 !important;
+            border-color: #6ea47f !important;
+            color: #022410 !important;
         }
         
         /* 2. Rótulos dos Campos na Área Principal (Transparentes sobre o fundo da página) */
