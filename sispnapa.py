@@ -988,32 +988,32 @@ st.markdown("""
             font-weight: 700 !important;
         }
 
-        /* 🔘 BOTÕES DA BARRA LATERAL (#C4E477 com Texto Escuro: #03170a) */
+        /* 🔘 BOTÕES DA BARRA LATERAL (#76993D com Texto Branco #ffffff) */
         section[data-testid="stSidebar"] button,
         section[data-testid="stSidebar"] button[kind="secondary"],
         section[data-testid="stSidebar"] button[kind="primary"],
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
-            background-color: #C4E477 !important;
-            border: 1px solid #a4c957 !important;
+            background-color: #76993D !important;
+            border: 1px solid #8cae53 !important;
             border-radius: 6px !important;
-            color: #03170a !important;
+            color: #ffffff !important;
             box-shadow: none !important;
             transition: all 0.2s ease-in-out !important;
         }
         section[data-testid="stSidebar"] button *,
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button *,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button * {
-            color: #03170a !important;
+            color: #ffffff !important;
             font-weight: 700 !important;
             background-color: transparent !important;
         }
         section[data-testid="stSidebar"] button:hover,
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
-            background-color: #b2d75f !important;
-            border-color: #5c7b2a !important;
-            color: #03170a !important;
+            background-color: #8bb34b !important;
+            border-color: #a4cc62 !important;
+            color: #ffffff !important;
         }
 
         /* 📋 SELECTBOX DA BARRA LATERAL (Testar Perfil como: Fundo Branco) */
@@ -1101,8 +1101,8 @@ st.markdown("""
         /* 6. BOTÕES DA ÁREA PRINCIPAL */
         section.main button[kind="primary"],
         div[data-testid="stMain"] button[kind="primary"] {
-            background-color: #76993D !important;
-            border: 1px solid #76993D !important;
+            background-color: #293D09 !important;
+            border: 1px solid #293D09 !important;
             border-radius: 6px !important;
             color: #ffffff !important;
         }
@@ -1113,8 +1113,8 @@ st.markdown("""
         }
         section.main button[kind="primary"]:hover,
         div[data-testid="stMain"] button[kind="primary"]:hover {
-            background-color: #617f2f !important;
-            border-color: #617f2f !important;
+            background-color: #3b570e !important;
+            border-color: #3b570e !important;
         }
 
         section.main div[data-testid="stPopover"] > button,
