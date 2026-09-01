@@ -977,46 +977,89 @@ st.markdown("""
         section[data-testid="stSidebar"] label p,
         section[data-testid="stSidebar"] p,
         section[data-testid="stSidebar"] div[data-testid="stRadio"] label p {
-            color: #ffffff !important; font-weight: 700 !important;
+            color: #ffffff !important; 
+            font-weight: 700 !important;
         }
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] > div,
+        section[data-testid="stSidebar"] div[data-testid="stMultiSelect"] > div,
         section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
-            background-color: #ffffff !important; border: 1px solid #cbd5e1 !important;
+            background-color: #ffffff !important; 
+            border: 1px solid #cbd5e1 !important;
         }
         section[data-testid="stSidebar"] div[data-testid="stSelectbox"] *,
+        section[data-testid="stSidebar"] div[data-testid="stMultiSelect"] *,
         section[data-testid="stSidebar"] div[data-baseweb="select"] * {
-            color: #03170a !important; font-weight: bold !important;
+            color: #03170a !important; 
+            font-weight: bold !important;
         }
         
-        /* 2. Selectboxes (Corpo Branco e Setinhas Escuras) */
+        /* 2. Selectboxes & MultiSelects (Corpo Branco, Tags e Setinhas Escuras) */
         div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] > div,
+        div[data-testid="stAppViewContainer"] div[data-testid="stMultiSelect"] > div,
         div[data-testid="stAppViewContainer"] div[data-baseweb="select"] > div,
         div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] > div,
+        div[data-testid="stPopoverBody"] div[data-testid="stMultiSelect"] > div,
         div[data-testid="stPopoverBody"] div[data-baseweb="select"] > div {
-            background-color: #ffffff !important; border: 1px solid #cbd5e1 !important;
+            background-color: #ffffff !important; 
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
         }
-        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] *,
-        div[data-testid="stAppViewContainer"] div[data-baseweb="select"] *,
-        div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] *,
-        div[data-testid="stPopoverBody"] div[data-baseweb="select"] * {
-            color: #03170a !important; background-color: transparent !important;
+        div[data-testid="stAppViewContainer"] div[data-testid="stSelectbox"] input,
+        div[data-testid="stAppViewContainer"] div[data-testid="stMultiSelect"] input,
+        div[data-testid="stPopoverBody"] div[data-testid="stSelectbox"] input,
+        div[data-testid="stPopoverBody"] div[data-testid="stMultiSelect"] input {
+            color: #03170a !important;
+        }
+        div[data-testid="stMultiSelect"] input::placeholder {
+            color: #64748b !important;
         }
         
-        /* Aplica cor preta estritamente na seta do dropdown (sem atingir labels nem tooltips) */
+        /* Tags/Chips das UFs Selecionadas no MultiSelect */
+        div[data-baseweb="tag"] {
+            background-color: #e2e8f0 !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 4px !important;
+        }
+        div[data-baseweb="tag"] span {
+            color: #0f172a !important;
+            font-weight: 600 !important;
+        }
+        div[data-baseweb="tag"] svg {
+            fill: #475569 !important;
+        }
+        
+        /* Setas e Ícones de Dropdown */
         div[data-baseweb="select"] svg,
         section[data-testid="stSidebar"] div[data-baseweb="select"] svg { 
             fill: #03170a !important; 
         }
         
-        /* 3. Popovers & Menus Suspensos */
-        div[data-baseweb="popover"] ul { background-color: #ffffff !important; }
-        div[data-baseweb="popover"] ul li { color: #03170a !important; background-color: transparent !important; }
-        div[data-baseweb="popover"] ul li:hover { background-color: #f1f5f9 !important; }
+        /* 3. Popovers & Menus Suspensos de Seleção */
+        div[data-baseweb="popover"] ul { 
+            background-color: #ffffff !important; 
+        }
+        div[data-baseweb="popover"] ul li { 
+            color: #03170a !important; 
+            background-color: transparent !important; 
+        }
+        div[data-baseweb="popover"] ul li:hover { 
+            background-color: #f1f5f9 !important; 
+        }
         
         /* 4. Entradas Numéricas (Number Input) */
-        div[data-testid="stNumberInput"] input { background-color: #ffffff !important; color: #03170a !important; }
-        div[data-testid="stNumberInput"] > div { border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; }
-        div[data-testid="stNumberInput"] button { background-color: #f1f5f9 !important; color: #03170a !important; border: 1px solid #cbd5e1 !important; }
+        div[data-testid="stNumberInput"] input { 
+            background-color: #ffffff !important; 
+            color: #03170a !important; 
+        }
+        div[data-testid="stNumberInput"] > div { 
+            border: 1px solid #cbd5e1 !important; 
+            background-color: #ffffff !important; 
+        }
+        div[data-testid="stNumberInput"] button { 
+            background-color: #f1f5f9 !important; 
+            color: #03170a !important; 
+            border: 1px solid #cbd5e1 !important; 
+        }
         
         /* 5. Caixas de Data (Date Input) */
         div[data-testid="stDateInput"] > div,
@@ -1034,22 +1077,37 @@ st.markdown("""
             fill: #03170a !important;
         }
         
-        /* 6. Abas e Títulos */
-        button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
-        button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
-        div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
+        /* 6. Abas, Inputs de Texto e Cabeçalhos */
+        button[data-baseweb="tab"] p { 
+            color: #4a5568 !important; 
+            font-weight: 500; 
+        }
+        button[aria-selected="true"] p { 
+            color: #03170a !important; 
+            font-weight: 700 !important; 
+        }
+        div[data-baseweb="tab-highlight"] { 
+            background-color: #4d6b53 !important; 
+        }
         
-        div[data-testid="stTextInput"] input, div[data-testid="stTextArea"] textarea {
-            border: 1px solid #cbd5e1 !important; background-color: #ffffff !important; color: #03170a !important;
+        div[data-testid="stTextInput"] input, 
+        div[data-testid="stTextArea"] textarea {
+            border: 1px solid #cbd5e1 !important; 
+            background-color: #ffffff !important; 
+            color: #03170a !important;
         }
         
         div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p,
         div[data-testid="stPopoverBody"] label[data-testid="stWidgetLabel"] p { 
-            color: #03170a !important; font-weight: 500; 
+            color: #03170a !important; 
+            font-weight: 500; 
         }
-        h2, h3, [data-testid="stHeader"] { color: #03170a !important; font-weight: 700 !important; }
+        h2, h3, [data-testid="stHeader"] { 
+            color: #03170a !important; 
+            font-weight: 700 !important; 
+        }
 
-        /* 7. 💡 ÍCONES DE AJUDA (?) - TRAÇADO NATIVO NÍTIDO SEM PREENCHIMENTO ESCURO */
+        /* 7. Ícones de Ajuda (?) */
         [data-testid="stTooltipIcon"] {
             color: #475569 !important;
         }
@@ -1059,7 +1117,7 @@ st.markdown("""
             stroke: #475569 !important;
         }
 
-        /* 8. 💬 BALÃO FLUTUANTE DE TEXTO DO TOOLTIP */
+        /* 8. Balão Flutuante de Texto do Tooltip */
         div[data-baseweb="tooltip"],
         div[data-testid="stTooltipContent"] {
             background-color: #1e293b !important;
