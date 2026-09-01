@@ -6003,12 +6003,19 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     tem_estouro_sec = (teto_orc_sec > 0 and orc_dem_sec > teto_orc_sec)
                     saldo_orc_sec = teto_orc_sec - orc_dem_sec
 
-                    # Card Bordered da Ação Setorial (Nível 2)
+                    # Card Bordered da Ação Setorial (Nível 2) com Alto Contraste
                     with st.container(border=True):
                         col_sh1, col_sh2, col_sh3 = st.columns([2, 1, 1])
                         with col_sh1:
                             st.markdown(f"##### 🏷️ **{cod_sec_puro}** — {nome_sec}")
-                            st.caption(f"Modal: **{tema_sec}** | Especialista: **{dono_sec} ({uf_dono_sec})** | Indicador: `{ind_sec}`")
+                            st.markdown(
+                                f"<div style='font-size: 0.9em; color: #334155; line-height: 1.8;'>"
+                                f"📌 <strong>Modal / Tema:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600;'>{tema_sec}</span> | "
+                                f"👑 <strong>Especialista:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600;'>{dono_sec} ({uf_dono_sec})</span><br>"
+                                f"📈 <strong>Indicador Setorial:</strong> <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600;'>{ind_sec}</span>"
+                                f"</div>", 
+                                unsafe_allow_html=True
+                            )
                         with col_sh2:
                             st.metric("Meta Setorial (UFs vs Nac.)", f"{meta_dem_sec:.1f} / {meta_nac_sec:.1f}", delta=f"{meta_dem_sec - meta_nac_sec:+.1f}")
                         with col_sh3:
