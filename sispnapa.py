@@ -974,9 +974,9 @@ def validar_senha(senha_digitada: str, token_armazenado: str, senha_padrao="pnap
 # =================================================================
 st.markdown("""
     <style>
-        /* 1. BARRA LATERAL (Sidebar: #1c4029) */
+        /* 1. BARRA LATERAL (Sidebar: #76993D) */
         section[data-testid="stSidebar"] {
-            background-color: #1c4029 !important;
+            background-color: #76993D !important;
         }
         section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
@@ -988,14 +988,14 @@ st.markdown("""
             font-weight: 700 !important;
         }
 
-        /* 🔘 BOTÕES DA BARRA LATERAL (Verde Claro Idêntico ao Fundo da Página: #f2f5f3) */
+        /* 🔘 BOTÕES DA BARRA LATERAL (#C4E477 com Texto Escuro: #03170a) */
         section[data-testid="stSidebar"] button,
         section[data-testid="stSidebar"] button[kind="secondary"],
         section[data-testid="stSidebar"] button[kind="primary"],
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
-            background-color: #f2f5f3 !important;
-            border: 1px solid #cbd5e1 !important;
+            background-color: #C4E477 !important;
+            border: 1px solid #a4c957 !important;
             border-radius: 6px !important;
             color: #03170a !important;
             box-shadow: none !important;
@@ -1011,12 +1011,12 @@ st.markdown("""
         section[data-testid="stSidebar"] button:hover,
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
-            background-color: #e2e8e5 !important;
-            border-color: #94a3b8 !important;
+            background-color: #b2d75f !important;
+            border-color: #5c7b2a !important;
             color: #03170a !important;
         }
 
-        /* 📋 SELECTBOX DA BARRA LATERAL (Testar Perfil como: Branco com seta preta) */
+        /* 📋 SELECTBOX DA BARRA LATERAL (Testar Perfil como: Fundo Branco) */
         section[data-testid="stSidebar"] div[data-baseweb="select"],
         section[data-testid="stSidebar"] div[data-baseweb="select"] * {
             background-color: #ffffff !important;
@@ -1041,7 +1041,7 @@ st.markdown("""
             background-color: transparent !important;
         }
 
-        /* 3. CAMPOS DE ENTRADA NA ÁREA PRINCIPAL (Fundo Branco) */
+        /* 3. CAMPOS DE ENTRADA NA ÁREA PRINCIPAL (Fundo Branco Sólido) */
         div[data-testid="stTextInput"] input,
         div[data-testid="stTextArea"] textarea,
         div[data-testid="stNumberInput"] input,
@@ -1098,11 +1098,11 @@ st.markdown("""
             color: #03170a !important;
         }
 
-        /* 6. BOTÕES DA ÁREA PRINCIPAL (Exclusivos da tela) */
+        /* 6. BOTÕES DA ÁREA PRINCIPAL */
         section.main button[kind="primary"],
         div[data-testid="stMain"] button[kind="primary"] {
-            background-color: #1c4029 !important;
-            border: 1px solid #1c4029 !important;
+            background-color: #76993D !important;
+            border: 1px solid #76993D !important;
             border-radius: 6px !important;
             color: #ffffff !important;
         }
@@ -1113,8 +1113,8 @@ st.markdown("""
         }
         section.main button[kind="primary"]:hover,
         div[data-testid="stMain"] button[kind="primary"]:hover {
-            background-color: #285739 !important;
-            border-color: #285739 !important;
+            background-color: #617f2f !important;
+            border-color: #617f2f !important;
         }
 
         section.main div[data-testid="stPopover"] > button,
@@ -1137,7 +1137,7 @@ st.markdown("""
         /* 7. ABAS, CABEÇALHOS E BADGES */
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
-        div[data-baseweb="tab-highlight"] { background-color: #4d6b53 !important; }
+        div[data-baseweb="tab-highlight"] { background-color: #76993D !important; }
         h2, h3, [data-testid="stHeader"] { color: #03170a !important; font-weight: 700 !important; }
 
         code {
