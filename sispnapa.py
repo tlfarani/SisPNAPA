@@ -5589,26 +5589,31 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
 
 
 # =====================================================================
-# --- TELA 6: PACTUAÇÃO PRÉ-PNAPA (DUPLO MATCHMAKER: FÍSICO & FINANCEIRO) ---
+# --- TELA 6: PACTUAÇÃO PRÉ-PNAPA EM CASCATA (ÁRVORE N1 -> N2 -> N3) ---
 # =====================================================================
 elif modo == "🤝 Pactuação Pré-PNAPA":
-    st.markdown("<h3 style='color: #03170a;'>🤝 Painel de Pactuação Pré-PNAPA (Físico & Orçamentário)</h3>", unsafe_allow_html=True)
-    st.caption("Pactuação estratégica entre as Metas e Tetos Globais do Ceneac (Top-Down) e as demandas inseridas pelos Estados (Bottom-Up).")
+    st.markdown("<h3 style='color: #03170a;'>🤝 Painel de Pactuação Pré-PNAPA em Cascata</h3>", unsafe_allow_html=True)
+    st.caption("Pactuação estratégica e orçamentária em 3 níveis: Macroações Estratégicas (N1) ➔ Ações Setoriais (N2) ➔ Propostas dos Estados (N3).")
 
     if df_pnapas.empty:
         st.warning("⚠️ O Catálogo de Ações PNAPA está vazio. Cadastre ações no catálogo para iniciar a pactuação.")
     else:
-        # 1. RECUPERAÇÃO E FILTRAGEM DO TETO GLOBAL DIPRO (OPÇÃO 1)
-        if not df_pnapas.empty and "Ano" in df_pnapas.columns:
-            anos_disponiveis = sorted(df_pnapas["Ano"].dropna().astype(int).unique().tolist(), reverse=True)
+        # =====================================================================
+        # 1. FILTROS E RECUPERAÇÃO DO TETO GLOBAL DIPRO
+        # =====================================================================
+        if "Ano_Num" in df_pnapas.columns:
+            anos_disponiveis = sorted([int(a) for a in df_pnapas["Ano_Num"].unique() if a > 0], reverse=True)
         else:
             anos_disponiveis = [2027, 2026]
 
-        c_topo1, c_topo2, c_topo3 = st.columns([1, 1.3, 1.3])
-        with c_topo1:
-            ano_pact_sel = st.selectbox("📅 Ano de Planejamento:", anos_disponiveis, key="pact_ano_sel")
+        if not anos_disponiveis:
+            anos_disponiveis = [2027, 2026]
 
-        # 1.1 Resgata a linha de configuração DIPRO_GLOBAL para o ano
+        c_topo1, c_topo2, c_topo3, c_topo4 = st.columns([1, 1.2, 1.2, 1.2])
+        with c_topo1:
+            ano_pact_sel = st.selectbox("📅 Exercício:", anos_disponiveis, key="pact_ano_sel")
+
+        # 1.1 Resgata o Teto Global DIPRO do ano
         linha_dipro_ano = df_pnapas[
             (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() == "DIPRO_GLOBAL") &
             (pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel))
@@ -5621,21 +5626,21 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
         st.session_state["teto_global_dipro"] = teto_dipro_atual
 
-        # 1.2 Filtra apenas ações operacionais (ocultando a linha de metadados DIPRO_GLOBAL)
+        # 1.2 Filtra ações do catálogo para o ano (ocultando a linha de sistema DIPRO_GLOBAL)
         df_pna_ano = df_pnapas[
             (pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_pact_sel)) &
             (df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL")
         ].copy()
 
         with c_topo2:
-            donos_disponiveis = ["Todos os Especialistas"] + sorted([d for d in df_pna_ano["Dono_Acao"].dropna().unique() if str(d).strip()])
-            filtro_dono = st.selectbox("👑 Filtrar por Dono da Ação (Sede):", donos_disponiveis, key="pact_dono_sel")
+            donos_disponiveis = ["Todos os Especialistas"] + sorted([str(d).strip() for d in df_pna_ano["Dono_Acao"].dropna().unique() if str(d).strip()])
+            filtro_dono = st.selectbox("👑 Especialista Sede:", donos_disponiveis, key="pact_dono_sel")
 
         with c_topo3:
             status_pact_filtro = st.selectbox(
-                "⚖️ Filtro de Alinhamento:", 
+                "⚖️ Alinhamento Geral:", 
                 [
-                    "Todas as Ações", 
+                    "Todas as Macroações", 
                     "Déficit Físico (<100%)", 
                     "Meta Física Atingida (100%)", 
                     "Superávit Físico (>100%)", 
@@ -5645,9 +5650,12 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 key="pact_status_filtro"
             )
 
-        # 1.3 Popover com Gravação Persistente no SharePoint (Administrador)
+        with c_topo4:
+            busca_pact = st.text_input("🔍 Buscar Macro, Setorial ou Tema:", key="pact_busca_txt").strip().lower()
+
+        # 1.3 Popover para calibração do Teto Global DIPRO (Exclusivo Administrador)
         if perfil_usuario == "Administrador":
-            with st.popover("⚙️ Calibrar Orçamento Global Aprovado pela DIPRO", use_container_width=True):
+            with st.popover("⚙️ Calibrar Envelope Orçamentário DIPRO (Global)", use_container_width=True):
                 st.markdown("#### 🏛️ Envelope Orçamentário da Emergência Ambiental (DIPRO)")
                 novo_teto_dipro = st.number_input(
                     f"Teto Orçamentário Global Autorizado pela DIPRO para {ano_pact_sel} (R$):",
@@ -5658,7 +5666,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     key=f"input_teto_dipro_persist_{ano_pact_sel}"
                 )
                 
-                if st.button("💾 Salvar Teto Global DIPRO no SharePoint", type="primary", key="btn_salvar_teto_dipro_db"):
+                if st.button("💾 Gravar Teto Global DIPRO no SharePoint", type="primary", key="btn_salvar_teto_dipro_db"):
                     col_id_pna = "ID_PNAPA" if "ID_PNAPA" in df_pnapas.columns else "Id"
                     if not linha_dipro_ano.empty:
                         id_dipro_ref = int(float(linha_dipro_ano.iloc[0][col_id_pna]))
@@ -5699,10 +5707,9 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                         except Exception as e:
                             st.error(f"❌ Erro de comunicação: {e}")
 
-        if filtro_dono != "Todos os Especialistas":
-            df_pna_ano = df_pna_ano[df_pna_ano["Dono_Acao"] == filtro_dono]
-
-        # 2. CRUZAMENTO SEGURO DE DADOS COM AS AÇÕES ESTADUAIS / SETORIAIS (df_atual)
+        # =====================================================================
+        # 2. RESGATE DAS PROPOSTAS ESTADUAIS (NÍVEL 3 / df_atual)
+        # =====================================================================
         df_acoes_cadastradas = df_atual[
             (df_atual["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
             (df_atual["Ano da Ação"].astype(str).str.split('.').str[0] == str(ano_pact_sel))
@@ -5715,78 +5722,92 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             r_p = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Passagens", 0), errors='coerce').fillna(0.0)
             r_o = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Outras_Despesas", 0), errors='coerce').fillna(0.0)
             df_acoes_cadastradas["Rec_Plan_Num"] = r_d + r_p + r_o
-            
-            # 🚀 Chave normalizada para cruzamento exato
+            df_acoes_cadastradas["Dias_Plan_Num"] = pd.to_numeric(df_acoes_cadastradas.get("Dias_Gastos_Plan", 0), errors='coerce').fillna(0.0)
             df_acoes_cadastradas["Num_Pna_Limpo"] = df_acoes_cadastradas["Número da Ação PNAPA"].astype(str).str.strip().str.upper()
         else:
+            df_acoes_cadastradas["Meta_Num"] = []
+            df_acoes_cadastradas["Rec_Plan_Num"] = []
+            df_acoes_cadastradas["Dias_Plan_Num"] = []
             df_acoes_cadastradas["Num_Pna_Limpo"] = []
 
-        # 3. CONSOLIDAÇÃO GLOBAL DO BALANÇO ORÇAMENTÁRIO E METAS
-        total_acoes_catalogo = len(df_pna_ano)
-        meta_fisica_global = pd.to_numeric(df_pna_ano["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
-        
-        col_orc_nac = "Orcamento_Nacional" if "Orcamento_Nacional" in df_pna_ano.columns else ""
-        teto_total_distribuido_ceneac = pd.to_numeric(df_pna_ano[col_orc_nac], errors='coerce').fillna(0.0).sum() if col_orc_nac else 0.0
+        # =====================================================================
+        # 3. SEPARAÇÃO HIERÁRQUICA: MACROAÇÕES (N1) E AÇÕES SETORIAIS (N2)
+        # =====================================================================
+        df_macros = df_pna_ano[
+            (df_pna_ano["Nivel_Catalogo"] == "Estratégica (Macro)") |
+            (
+                (df_pna_ano["Acao_Mae"].isna() | (df_pna_ano["Acao_Mae"].astype(str).str.strip().isin(["", "nan", "None"]))) &
+                (~df_pna_ano["Num_Acao_PNAPA"].astype(str).str.contains(r"\.")) &
+                (df_pna_ano["Num_Acao_PNAPA"].astype(str).str.len() <= 5)
+            )
+        ].copy()
 
-        # Mapeamento de todas as chaves válidas do catálogo para este ano
-        todas_chaves_catalogo = set()
-        for _, r_pna in df_pna_ano.iterrows():
-            c_num = str(r_pna.get("Num_Acao_PNAPA", "")).strip().upper()
-            c_ano = str(r_pna.get("Acao_Ano", "")).strip().upper()
-            if c_num: todas_chaves_catalogo.add(c_num)
-            if c_ano: todas_chaves_catalogo.add(c_ano)
-            if c_num: todas_chaves_catalogo.add(f"{c_num}-{ano_pact_sel}")
+        df_setoriais_pool = df_pna_ano[
+            (df_pna_ano["Nivel_Catalogo"] == "Setorial (Tática)") |
+            (df_pna_ano["Acao_Mae"].notna() & (~df_pna_ano["Acao_Mae"].astype(str).str.strip().isin(["", "nan", "None"]))) |
+            (df_pna_ano["Num_Acao_PNAPA"].astype(str).str.contains(r"\."))
+        ].copy()
 
-        df_pactuado_filtrado = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(todas_chaves_catalogo)] if not df_acoes_cadastradas.empty else pd.DataFrame()
+        # Se não houver macros explícitas (ex: antes da harmonização), trata todas como N1
+        if df_macros.empty:
+            df_macros = df_pna_ano.copy()
+
+        # =====================================================================
+        # 4. BALANÇO ORÇAMENTÁRIO TRIPLO (DIPRO -> CENEAC -> ESTADOS)
+        # =====================================================================
+        teto_total_distribuido_ceneac = pd.to_numeric(df_pna_ano["Orcamento_Nacional"], errors='coerce').fillna(0.0).sum()
+        orcamento_total_demandado_ufs = df_acoes_cadastradas["Rec_Plan_Num"].sum() if not df_acoes_cadastradas.empty else 0.0
+        meta_fisica_global_catalogo = pd.to_numeric(df_pna_ano["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
+        meta_fisica_total_ufs = df_acoes_cadastradas["Meta_Num"].sum() if not df_acoes_cadastradas.empty else 0.0
         
-        meta_fisica_demandada = df_pactuado_filtrado["Meta_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
-        orcamento_total_demandado_ufs = df_pactuado_filtrado["Rec_Plan_Num"].sum() if not df_pactuado_filtrado.empty else 0.0
-        
-        taxa_adesao_fisica = (meta_fisica_demandada / meta_fisica_global * 100.0) if meta_fisica_global > 0 else 0.0
         saldo_dipro_restante = teto_dipro_atual - orcamento_total_demandado_ufs
+        taxa_cobertura_global = (meta_fisica_total_ufs / meta_fisica_global_catalogo * 100.0) if meta_fisica_global_catalogo > 0 else 0.0
 
         st.markdown("---")
-        # LINHA 1: BALANÇO ORÇAMENTÁRIO TRIPLO (DIPRO -> CENEAC -> ESTADOS)
-        c_m1, c_m2, c_m3, c_m4 = st.columns(4)
-        c_m1.metric("🏛️ Teto Global DIPRO", formatar_moeda_br(teto_dipro_atual))
-        c_m2.metric(
+        
+        # LINHA 1: CARDS ORÇAMENTÁRIOS PRINCIPAIS
+        c_kpi1, c_kpi2, c_kpi3, c_kpi4 = st.columns(4)
+        c_kpi1.metric("🏛️ Teto Global DIPRO", formatar_moeda_br(teto_dipro_atual))
+        c_kpi2.metric(
             "📋 Teto Alocado Ceneac", 
-            formatar_moeda_br(teto_total_distribuido_ceneac), 
-            delta=f"{formatar_moeda_br(teto_dipro_atual - teto_total_distribuido_ceneac)} do teto DIPRO"
+            formatar_moeda_br(teto_total_distribuido_ceneac),
+            delta=f"{formatar_moeda_br(teto_dipro_atual - teto_total_distribuido_ceneac)} da DIPRO"
         )
-        c_m3.metric(
+        c_kpi3.metric(
             "💰 Demandado pelas UFs", 
-            formatar_moeda_br(orcamento_total_demandado_ufs), 
+            formatar_moeda_br(orcamento_total_demandado_ufs),
             delta=f"{(orcamento_total_demandado_ufs/teto_dipro_atual*100.0 if teto_dipro_atual > 0 else 0):.1f}% da DIPRO"
         )
-        c_m4.metric(
+        c_kpi4.metric(
             "⚖️ Saldo Restante DIPRO", 
-            formatar_moeda_br(saldo_dipro_restante), 
-            delta="Dentro do Limite" if saldo_dipro_restante >= 0 else "⚠️ Estouro de Teto",
+            formatar_moeda_br(saldo_dipro_restante),
+            delta="Dentro do Envelope" if saldo_dipro_restante >= 0 else "⚠️ Estouro de Teto",
             delta_color="normal" if saldo_dipro_restante >= 0 else "inverse"
         )
-        
-        # LINHA 2: COBERTURA FÍSICA E ADESÃO (ALTO CONTRASTE)
+
+        # LINHA 2: RESUMO E ADESÃO FEDERATIVA
         c_sub1, c_sub2, c_sub3 = st.columns([1, 1.5, 1.5])
         with c_sub1:
             st.markdown(
                 f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
-                f"🎯 <strong>Ações Analisadas:</strong> "
-                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{total_acoes_catalogo}</span>"
+                f"🎯 <strong>Macroações:</strong> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{len(df_macros)}</span> | "
+                f"🏷️ <strong>Setoriais:</strong> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{len(df_setoriais_pool)}</span>"
                 f"</div>", 
                 unsafe_allow_html=True
             )
         with c_sub2:
             st.markdown(
                 f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
-                f"📊 <strong>Cobertura Física Nacional:</strong> "
-                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{taxa_adesao_fisica:.1f}%</span> "
-                f"<span style='color: #64748b; font-weight: 500;'>({meta_fisica_demandada:.1f} de {meta_fisica_global:.1f})</span>"
+                f"📊 <strong>Cobertura Física Global:</strong> "
+                f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 700;'>{taxa_cobertura_global:.1f}%</span> "
+                f"<span style='color: #64748b; font-weight: 500;'>({meta_fisica_total_ufs:.1f} de {meta_fisica_global_catalogo:.1f})</span>"
                 f"</div>", 
                 unsafe_allow_html=True
             )
         with c_sub3:
-            ufs_part_count = len(df_pactuado_filtrado["UF_Acao_PNAPA"].dropna().unique()) if not df_pactuado_filtrado.empty else 0
+            ufs_part_count = len(df_acoes_cadastradas["UF_Acao_PNAPA"].dropna().unique()) if not df_acoes_cadastradas.empty else 0
             pct_part_uf = (ufs_part_count / 27.0 * 100.0)
             st.markdown(
                 f"<div style='font-size: 0.88em; color: #334155; margin-top: 4px;'>"
@@ -5796,151 +5817,261 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 f"</div>", 
                 unsafe_allow_html=True
             )
-            
-        st.markdown("---")
 
-        # 4. CARDS POR AÇÃO COM DUPLA BARRA (FÍSICO + FINANCEIRO)
+        st.markdown("---")
+        st.markdown("### 🌳 Árvore de Pactuação por Macroação & Validação de Tetos Setoriais")
+
         todas_ufs_brasil = sorted(LISTA_UFS_COMPLETA)
 
-        for _, acao_row in df_pna_ano.iterrows():
-            cod_num = str(acao_row.get("Num_Acao_PNAPA", "")).strip().upper()
-            cod_ano = str(acao_row.get("Acao_Ano", f"{cod_num}-{ano_pact_sel}")).strip().upper()
-            chave_acao_ano = cod_ano if cod_ano else f"{cod_num}-{ano_pact_sel}"
+        # =====================================================================
+        # 5. LOOP PRINCIPAL: MACROAÇÕES (NÍVEL 1)
+        # =====================================================================
+        for _, macro_row in df_macros.iterrows():
+            cod_m_puro = str(macro_row.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+            cod_m_ano = str(macro_row.get("Acao_Ano", f"{cod_m_puro}-{ano_pact_sel}")).strip().upper()
             
-            nome_acao = str(acao_row.get("Nome_Acao_Apelido", acao_row.get("Nome_Acao_Completo", "")))
-            dono_acao = str(acao_row.get("Dono_Acao", "Ceneac"))
-            uf_dono = str(acao_row.get("UF_Dono", "Ceneac"))
-            indicador_acao = str(acao_row.get("Indicador", "Não informado"))
-            
-            # Metas e Tetos Nacionais (Top-Down)
-            meta_nacional_fisica = float(pd.to_numeric(acao_row.get("Meta_Nacional", 0.0), errors='coerce') or 0.0)
-            teto_nacional_orc = float(pd.to_numeric(acao_row.get(col_orc_nac, 0.0), errors='coerce') or 0.0) if col_orc_nac else 0.0
+            nome_macro = str(macro_row.get("Nome_Acao_Apelido", macro_row.get("Nome_Acao_Completo", ""))).strip()
+            dono_macro = str(macro_row.get("Dono_Acao", "Ceneac")).strip()
+            uf_dono_m = str(macro_row.get("UF_Dono", "DF")).strip()
+            indicador_macro = str(macro_row.get("Indicador", "Entregas Concluídas")).strip()
+            obj_macro = str(macro_row.get("Objetivo_Padrao", "Prevenção e Gestão de Riscos")).strip()
 
-            # 🚀 FILTRAGEM EXATA: Apenas propostas vinculadas a ESTA AÇÃO
-            chaves_desta_acao = {cod_num, cod_ano, f"{cod_num}-{ano_pact_sel}"} - {""}
-            
-            if not df_acoes_cadastradas.empty:
-                df_propostas_ufs = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_desta_acao)].copy()
+            # Filtro de Dono
+            if filtro_dono != "Todos os Especialistas" and dono_macro != filtro_dono:
+                continue
+
+            # Identifica as Ações Setoriais filhas desta Macroação
+            df_setoriais_filhas = df_setoriais_pool[
+                (df_setoriais_pool["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == cod_m_puro) |
+                (df_setoriais_pool["Num_Acao_PNAPA"].astype(str).str.strip().str.upper().str.startswith(f"{cod_m_puro}."))
+            ].copy()
+
+            # Se for uma ação única/sem filhas, ela própria atua como a setorial
+            if df_setoriais_filhas.empty:
+                df_setoriais_filhas = pd.DataFrame([macro_row])
+
+            # Filtro de Busca Textual
+            if busca_pact:
+                match_macro = (busca_pact in cod_m_puro.lower()) or (busca_pact in nome_macro.lower()) or (busca_pact in obj_macro.lower())
+                match_filhas = df_setoriais_filhas[
+                    df_setoriais_filhas["Num_Acao_PNAPA"].astype(str).str.lower().str.contains(busca_pact) |
+                    df_setoriais_filhas["Nome_Acao_Apelido"].astype(str).str.lower().str.contains(busca_pact) |
+                    df_setoriais_filhas["Tema_Padrao"].astype(str).str.lower().str.contains(busca_pact)
+                ]
+                if not match_macro and match_filhas.empty:
+                    continue
+
+            # -------------------------------------------------------------
+            # Agregações Consolidadas da Macroação (Soma das Setoriais)
+            # -------------------------------------------------------------
+            meta_macro_propria = float(pd.to_numeric(macro_row.get("Meta_Nacional", 0.0), errors='coerce') or 0.0)
+            meta_macro_soma_filhas = pd.to_numeric(df_setoriais_filhas["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
+            meta_nacional_macro = meta_macro_propria if meta_macro_propria > 0 else meta_macro_soma_filhas
+
+            teto_macro_proprio = float(pd.to_numeric(macro_row.get("Orcamento_Nacional", 0.0), errors='coerce') or 0.0)
+            teto_macro_soma_filhas = pd.to_numeric(df_setoriais_filhas["Orcamento_Nacional"], errors='coerce').fillna(0.0).sum()
+            teto_nacional_macro = teto_macro_proprio if teto_macro_proprio > 0 else teto_macro_soma_filhas
+
+            # Coleta todas as chaves de busca de todas as filhas desta macro
+            chaves_todas_filhas = set()
+            for _, r_f in df_setoriais_filhas.iterrows():
+                c_f_num = str(r_f.get("Num_Acao_PNAPA", "")).strip().upper()
+                c_f_ano = str(r_f.get("Acao_Ano", f"{c_f_num}-{ano_pact_sel}")).strip().upper()
+                if c_f_num: chaves_todas_filhas.add(c_f_num)
+                if c_f_ano: chaves_todas_filhas.add(c_f_ano)
+                if c_f_num: chaves_todas_filhas.add(f"{c_f_num}-{ano_pact_sel}")
+
+            # Filtra todas as propostas estaduais pertencentes a esta Macro
+            df_propostas_macro = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_todas_filhas)].copy() if not df_acoes_cadastradas.empty else pd.DataFrame()
+
+            meta_demandada_macro = df_propostas_macro["Meta_Num"].sum() if not df_propostas_macro.empty else 0.0
+            orc_demandado_macro = df_propostas_macro["Rec_Plan_Num"].sum() if not df_propostas_macro.empty else 0.0
+
+            pct_fisico_m = (meta_demandada_macro / meta_nacional_macro * 100.0) if meta_nacional_macro > 0 else (100.0 if meta_demandada_macro > 0 else 0.0)
+
+            # Classificação semafórica da Macroação
+            if meta_demandada_macro == 0:
+                badge_status_m = "⚪ Sem Adesão (0%)"
+            elif pct_fisico_m < 100:
+                badge_status_m = f"🟡 Déficit Físico ({pct_fisico_m:.0f}%)"
+            elif pct_fisico_m == 100:
+                badge_status_m = "🟢 Meta Alinhada (100%)"
             else:
-                df_propostas_ufs = pd.DataFrame()
+                badge_status_m = f"🔵 Superávit Físico ({pct_fisico_m:.0f}%)"
+
+            # Filtro de Status de Alinhamento
+            if status_pact_filtro != "Todas as Macroações":
+                if "Déficit Físico" in status_pact_filtro and (pct_fisico_m >= 100 or meta_demandada_macro == 0): continue
+                if "Meta Física Atingida" in status_pact_filtro and pct_fisico_m != 100: continue
+                if "Superávit Físico" in status_pact_filtro and pct_fisico_m <= 100: continue
+                if "Orçamento Estourado" in status_pact_filtro and (teto_nacional_macro == 0 or orc_demandado_macro <= teto_nacional_macro): continue
+                if "Sem Adesão" in status_pact_filtro and meta_demandada_macro > 0: continue
+
+            # =================================================================
+            # RENDERIZAÇÃO DO EXPANDER DA MACROAÇÃO (NÍVEL 1)
+            # =================================================================
+            alerta_estouro_macro = " 🚨 [Teto Excedido]" if (teto_nacional_macro > 0 and orc_demandado_macro > teto_nacional_macro) else ""
             
-            meta_demandada_ufs = df_propostas_ufs["Meta_Num"].sum() if not df_propostas_ufs.empty else 0.0
-            orc_demandado_ufs = df_propostas_ufs["Rec_Plan_Num"].sum() if not df_propostas_ufs.empty else 0.0
-            
-            # % Físico
-            pct_fisico = (meta_demandada_ufs / meta_nacional_fisica * 100.0) if meta_nacional_fisica > 0 else (100.0 if meta_demandada_ufs > 0 else 0.0)
-
-            # Classificação Semafórica da Meta Física
-            if meta_demandada_ufs == 0:
-                badge_status = "⚪ Sem Adesão (0%)"
-            elif pct_fisico < 100:
-                badge_status = f"🟡 Déficit Físico ({pct_fisico:.0f}%)"
-            elif pct_fisico == 100:
-                badge_status = "🟢 Meta Pactuada (100%)"
-            else:
-                badge_status = f"🔵 Superávit Físico ({pct_fisico:.0f}%)"
-
-            # Filtros de Alinhamento
-            if status_pact_filtro != "Todas as Ações":
-                if "Déficit Físico" in status_pact_filtro and (pct_fisico >= 100 or meta_demandada_ufs == 0): continue
-                if "Meta Física Atingida" in status_pact_filtro and pct_fisico != 100: continue
-                if "Superávit Físico" in status_pact_filtro and pct_fisico <= 100: continue
-                if "Orçamento Estourado" in status_pact_filtro and (teto_nacional_orc == 0 or orc_demandado_ufs <= teto_nacional_orc): continue
-                if "Sem Adesão" in status_pact_filtro and meta_demandada_ufs > 0: continue
-
-            # RENDERIZAÇÃO DO EXPANDER DA AÇÃO COM ALTO CONTRASTE
-            with st.expander(f"📌 **{chave_acao_ano}** — {nome_acao}  |  {badge_status}  |  Demandado: {formatar_moeda_br(orc_demandado_ufs)}", expanded=False):
-                c_inf1, c_inf2, c_inf3 = st.columns([1.5, 1, 1])
-                with c_inf1:
+            with st.expander(
+                f"📌 **{cod_m_puro}** — {nome_macro} | {badge_status_m} | Demandado: {formatar_moeda_br(orc_demandado_macro)}{alerta_estouro_macro}", 
+                expanded=False
+            ):
+                # Informações Institucionais da Macro
+                c_minf1, c_minf2, c_minf3 = st.columns([1.5, 1, 1])
+                with c_minf1:
                     st.markdown(
-                        f"👑 **Especialista Sede (Dono):** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{dono_acao} ({uf_dono})</span>", 
+                        f"👑 **Liderança Sede:** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{dono_macro} ({uf_dono_m})</span> | "
+                        f"🎯 **Ciclo:** `{obj_macro}`", 
                         unsafe_allow_html=True
                     )
                     st.markdown(
-                        f"📈 **Indicador Oficial:** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{indicador_acao}</span>", 
+                        f"📈 **Indicador Macro Consolidado:** <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.9em;'>{indicador_macro}</span>", 
                         unsafe_allow_html=True
                     )
-                with c_inf2:
-                    st.metric("Meta Física Nacional", f"{meta_nacional_fisica:.1f}")
-                with c_inf3:
-                    st.metric("Meta Física Demandada (UFs)", f"{meta_demandada_ufs:.1f}", delta=f"{meta_demandada_ufs - meta_nacional_fisica:+.1f}")
+                with c_minf2:
+                    st.metric("Meta Física Nacional (Macro)", f"{meta_nacional_macro:.1f}")
+                with c_minf3:
+                    st.metric("Meta Demandada (UFs)", f"{meta_demandada_macro:.1f}", delta=f"{meta_demandada_macro - meta_nacional_macro:+.1f}")
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                
-                # --- BARRA 1: PACTUAÇÃO FÍSICA ---
-                pct_bar_fisico = min(100.0, max(0.0, pct_fisico))
-                cor_barra_fisica = "#15803d" if pct_fisico <= 100 else "#2563eb"
+
+                # BARRAS DE PROCESSO CONSOLIDADAS DA MACROAÇÃO
+                pct_bar_m_fisico = min(100.0, max(0.0, pct_fisico_m))
+                cor_barra_m_fisica = "#15803d" if pct_fisico_m <= 100 else "#2563eb"
                 
                 st.markdown(f"""
-                <div style='margin-bottom: 6px;'>
-                    <strong>🎯 Alinhamento de Metas Físicas:</strong> 
-                    <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{pct_fisico:.1f}%</span> 
-                    <span style='color: #475569; font-size: 0.92em; font-weight: 500;'>({meta_demandada_ufs:.1f} de {meta_nacional_fisica:.1f})</span>
+                <div style='margin-bottom: 4px;'>
+                    <strong>🎯 Alinhamento de Metas Físicas da Macroação:</strong> 
+                    <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{pct_fisico_m:.1f}%</span> 
+                    <span style='color: #475569; font-size: 0.92em; font-weight: 500;'>({meta_demandada_macro:.1f} de {meta_nacional_macro:.1f})</span>
                 </div>
-                <div style='width: 100%; background-color: #e2e8f0; border-radius: 8px; height: 14px; overflow: hidden; margin-bottom: 16px;'>
-                    <div style='width: {pct_bar_fisico}%; background-color: {cor_barra_fisica}; height: 100%; border-radius: 8px; transition: width 0.4s ease;'></div>
+                <div style='width: 100%; background-color: #e2e8f0; border-radius: 8px; height: 12px; overflow: hidden; margin-bottom: 14px;'>
+                    <div style='width: {pct_bar_m_fisico}%; background-color: {cor_barra_m_fisica}; height: 100%; border-radius: 8px;'></div>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # --- BARRA 2: PACTUAÇÃO FINANCEIRA ---
-                if teto_nacional_orc > 0:
-                    pct_orc = (orc_demandado_ufs / teto_nacional_orc) * 100.0
-                    pct_bar_orc = min(100.0, max(0.0, pct_orc))
-                    cor_barra_orc = "#03170a" if pct_orc <= 100 else "#b91c1c"
+                if teto_nacional_macro > 0:
+                    pct_orc_m = (orc_demandado_macro / teto_nacional_macro) * 100.0
+                    pct_bar_m_orc = min(100.0, max(0.0, pct_orc_m))
+                    cor_barra_m_orc = "#03170a" if pct_orc_m <= 100 else "#b91c1c"
                     
                     st.markdown(f"""
-                    <div style='margin-bottom: 6px;'>
-                        <strong>💰 Demanda Orçamentária vs Teto Ceneac:</strong> 
-                        <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{pct_orc:.1f}%</span> 
-                        <span style='color: #475569; font-size: 0.92em; font-weight: 500;'>({formatar_moeda_br(orc_demandado_ufs)} de {formatar_moeda_br(teto_nacional_orc)})</span>
+                    <div style='margin-bottom: 4px;'>
+                        <strong>💰 Alinhamento Orçamentário da Macroação:</strong> 
+                        <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{pct_orc_m:.1f}%</span> 
+                        <span style='color: #475569; font-size: 0.92em; font-weight: 500;'>({formatar_moeda_br(orc_demandado_macro)} de {formatar_moeda_br(teto_nacional_macro)})</span>
                     </div>
-                    <div style='width: 100%; background-color: #e2e8f0; border-radius: 8px; height: 14px; overflow: hidden; margin-bottom: 16px;'>
-                        <div style='width: {pct_bar_orc}%; background-color: {cor_barra_orc}; height: 100%; border-radius: 8px; transition: width 0.4s ease;'></div>
+                    <div style='width: 100%; background-color: #e2e8f0; border-radius: 8px; height: 12px; overflow: hidden; margin-bottom: 16px;'>
+                        <div style='width: {pct_bar_m_orc}%; background-color: {cor_barra_m_orc}; height: 100%; border-radius: 8px;'></div>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div style='margin-bottom: 16px;'>
-                        <strong>💰 Demanda Orçamentária Total Acumulada das UFs:</strong> 
-                        <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{formatar_moeda_br(orc_demandado_ufs)}</span> 
-                        <em style='color: #64748b; font-size: 0.9em;'>(Teto Ceneac não fixado no catálogo)</em>
+                    <div style='margin-bottom: 14px;'>
+                        <strong>💰 Orçamento Total Demandado para a Macro:</strong> 
+                        <span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.9em;'>{formatar_moeda_br(orc_demandado_macro)}</span> 
+                        <em style='color: #64748b; font-size: 0.9em;'>(Teto global Ceneac não fixado)</em>
                     </div>
                     """, unsafe_allow_html=True)
 
-                st.markdown("<br>", unsafe_allow_html=True)
-                t_pact_ufs, t_pact_pend = st.tabs(["🗺️ Propostas dos Estados (Físico & Orçamento)", "⏳ Estados Sem Proposta Registrada"])
+                st.markdown("---")
+                st.markdown(f"#### 🏷️ Ações Setoriais Vinculadas ({len(df_setoriais_filhas)} iniciativas)")
 
-                with t_pact_ufs:
-                    if df_propostas_ufs.empty:
-                        st.info("Nenhuma UF registrou proposta de planejamento para esta ação.")
-                    else:
-                        df_exibir_pact = df_propostas_ufs[[
-                            "UF_Acao_PNAPA", "Papel_Institucional", "Servidor", 
-                            "Meta_Indicador", "Rec_Plan_Diarias", "Rec_Plan_Passagens", 
-                            "Rec_Plan_Outras_Despesas", "Rec_Plan_Num", "Andamento"
-                        ]].copy()
-                        
-                        df_exibir_pact.columns = [
-                            "UF", "Papel", "Ponto Focal Estadual", 
-                            "Meta Proposta", "Diárias (R$)", "Passagens (R$)", 
-                            "Outras Desp. (R$)", "Total Previsto (R$)", "Situação"
-                        ]
-                        
-                        for col_moeda in ["Diárias (R$)", "Passagens (R$)", "Outras Desp. (R$)", "Total Previsto (R$)"]:
-                            df_exibir_pact[col_moeda] = df_exibir_pact[col_moeda].apply(formatar_moeda_br)
-                        
-                        st.dataframe(df_exibir_pact.reset_index(drop=True), use_container_width=True, hide_index=True)
+                # =============================================================
+                # 6. LOOP DE AÇÕES SETORIAIS (NÍVEL 2)
+                # =============================================================
+                for idx_sec, sec_row in df_setoriais_filhas.iterrows():
+                    cod_sec_puro = str(sec_row.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+                    cod_sec_ano = str(sec_row.get("Acao_Ano", f"{cod_sec_puro}-{ano_pact_sel}")).strip().upper()
+                    nome_sec = str(sec_row.get("Nome_Acao_Apelido", sec_row.get("Nome_Acao_Completo", ""))).strip()
+                    tema_sec = str(sec_row.get("Tema_Padrao", "Outros temas")).strip()
+                    ind_sec = str(sec_row.get("Indicador", "Não informado")).strip()
+                    dono_sec = str(sec_row.get("Dono_Acao", dono_macro)).strip()
+                    uf_dono_sec = str(sec_row.get("UF_Dono", uf_dono_m)).strip()
 
-                with t_pact_pend:
-                    ufs_aderiram = df_propostas_ufs["UF_Acao_PNAPA"].dropna().unique().tolist() if not df_propostas_ufs.empty else []
-                    ufs_faltantes = sorted([u for u in todas_ufs_brasil if u not in ufs_aderiram])
-                    
-                    if not ufs_faltantes:
-                        st.success("🎉 Todas as 27 UFs já enviaram propostas para esta Ação!")
-                    else:
-                        st.warning(f"⚠️ **{len(ufs_faltantes)} estado(s)** ainda não cadastraram proposta:")
-                        tags_estados = " ".join([f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.85em; margin-right: 4px;'>{u}</span>" for u in ufs_faltantes])
-                        st.markdown(tags_estados, unsafe_allow_html=True)
+                    meta_nac_sec = float(pd.to_numeric(sec_row.get("Meta_Nacional", 0.0), errors='coerce') or 0.0)
+                    teto_orc_sec = float(pd.to_numeric(sec_row.get("Orcamento_Nacional", 0.0), errors='coerce') or 0.0)
+
+                    # Chaves de identificação da Setorial nas propostas estaduais
+                    chaves_desta_sec = {cod_sec_puro, cod_sec_ano, f"{cod_sec_puro}-{ano_pact_sel}"} - {""}
+                    df_prop_sec = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_desta_sec)].copy() if not df_acoes_cadastradas.empty else pd.DataFrame()
+
+                    meta_dem_sec = df_prop_sec["Meta_Num"].sum() if not df_prop_sec.empty else 0.0
+                    orc_dem_sec = df_prop_sec["Rec_Plan_Num"].sum() if not df_prop_sec.empty else 0.0
+
+                    # 🛡️ VALIDAÇÃO DE TETO ORÇAMENTÁRIO SETORIAL
+                    tem_estouro_sec = (teto_orc_sec > 0 and orc_dem_sec > teto_orc_sec)
+                    saldo_orc_sec = teto_orc_sec - orc_dem_sec
+
+                    # Card Bordered da Ação Setorial (Nível 2)
+                    with st.container(border=True):
+                        col_sh1, col_sh2, col_sh3 = st.columns([2, 1, 1])
+                        with col_sh1:
+                            st.markdown(f"##### 🏷️ **{cod_sec_puro}** — {nome_sec}")
+                            st.caption(f"Modal: **{tema_sec}** | Especialista: **{dono_sec} ({uf_dono_sec})** | Indicador: `{ind_sec}`")
+                        with col_sh2:
+                            st.metric("Meta Setorial (UFs vs Nac.)", f"{meta_dem_sec:.1f} / {meta_nac_sec:.1f}", delta=f"{meta_dem_sec - meta_nac_sec:+.1f}")
+                        with col_sh3:
+                            if teto_orc_sec > 0:
+                                st.metric(
+                                    "Teto Setorial Ceneac", 
+                                    formatar_moeda_br(orc_dem_sec), 
+                                    delta=f"Teto: {formatar_moeda_br(teto_orc_sec)}",
+                                    delta_color="normal" if not tem_estouro_sec else "inverse"
+                                )
+                            else:
+                                st.metric("Orçamento Demandado", formatar_moeda_br(orc_dem_sec))
+
+                        # ALERTA DE GOVERNANÇA SETORIAL (VALIDAÇÃO DE TETO)
+                        if tem_estouro_sec:
+                            st.error(f"⛔ **ESTOURO DE TETO SETORIAL:** A demanda das UFs ({formatar_moeda_br(orc_dem_sec)}) excedeu o teto pactuado da ação ({formatar_moeda_br(teto_orc_sec)}) em **{formatar_moeda_br(abs(saldo_orc_sec))}**.")
+                        elif teto_orc_sec > 0:
+                            st.success(f"🟢 **Orçamento Setorial Equilibrado:** Saldo disponível de **{formatar_moeda_br(saldo_orc_sec)}** ({(orc_dem_sec/teto_orc_sec*100.0):.1f}% utilizado).")
+
+                        # =====================================================
+                        # 7. PROPOSTAS DAS UFS (NÍVEL 3)
+                        # =====================================================
+                        tab_prop_ufs, tab_prop_pend = st.tabs([
+                            f"🗺️ Propostas Recebidas ({len(df_prop_sec)} UFs)", 
+                            "⏳ Estados Sem Proposta Registrada"
+                        ])
+
+                        with tab_prop_ufs:
+                            if df_prop_sec.empty:
+                                st.info("Nenhum estado cadastrou proposta para esta Ação Setorial.")
+                            else:
+                                df_tabela_propostas = df_prop_sec[[
+                                    "UF_Acao_PNAPA", "Papel_Institucional", "Servidor", 
+                                    "Meta_Indicador", "Rec_Plan_Diarias", "Rec_Plan_Passagens", 
+                                    "Rec_Plan_Outras_Despesas", "Rec_Plan_Num", "Dias_Plan_Num", "Andamento"
+                                ]].copy()
+
+                                df_tabela_propostas.columns = [
+                                    "UF", "Papel", "Ponto Focal Estadual", 
+                                    "Meta", "Diárias (R$)", "Passagens (R$)", 
+                                    "Outras Desp. (R$)", "Total Previsto (R$)", "Dias (Esforço)", "Situação"
+                                ]
+
+                                df_tabela_propostas["Meta"] = df_tabela_propostas["Meta"].apply(lambda v: formatar_numero_br(v, 1))
+                                df_tabela_propostas["Dias (Esforço)"] = df_tabela_propostas["Dias (Esforço)"].apply(lambda v: formatar_numero_br(v, 1))
+                                for col_m in ["Diárias (R$)", "Passagens (R$)", "Outras Desp. (R$)", "Total Previsto (R$)"]:
+                                    df_tabela_propostas[col_m] = df_tabela_propostas[col_m].apply(formatar_moeda_br)
+
+                                st.dataframe(df_tabela_propostas.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+                        with tab_prop_pend:
+                            ufs_com_proposta = df_prop_sec["UF_Acao_PNAPA"].dropna().unique().tolist() if not df_prop_sec.empty else []
+                            ufs_sem_proposta = sorted([u for u in todas_ufs_brasil if u not in ufs_com_proposta])
+
+                            if not ufs_sem_proposta:
+                                st.success("🎉 Todas as 27 UFs já registraram propostas para esta Ação Setorial!")
+                            else:
+                                st.caption(f"**{len(ufs_sem_proposta)} estados** ainda não cadastraram propostas para `{cod_sec_puro}`:")
+                                tags_html = " ".join([
+                                    f"<span style='background-color: #e2e8f0; color: #0f172a; padding: 2px 7px; border-radius: 4px; font-weight: 600; font-size: 0.85em; margin-right: 4px; display: inline-block; margin-bottom: 4px;'>{u}</span>" 
+                                    for u in ufs_sem_proposta
+                                ])
+                                st.markdown(tags_html, unsafe_allow_html=True)
 
 # --- TELA 7: MEUS FEEDBACKS (360º) ---
 elif modo == "⭐ Meus Feedbacks (360º)":
