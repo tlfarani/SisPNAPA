@@ -988,14 +988,14 @@ st.markdown("""
             font-weight: 700 !important;
         }
 
-        /* 🔘 BOTÕES DA BARRA LATERAL (Fundo #76993D com Texto Cinza Claro #e2e8f0) */
+        /* 🔘 BOTÕES DA BARRA LATERAL (Verde-Oliva Intermediário #506B23 com Texto Cinza Claro #e2e8f0) */
         section[data-testid="stSidebar"] button,
         section[data-testid="stSidebar"] button[kind="secondary"],
         section[data-testid="stSidebar"] button[kind="primary"],
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
-            background-color: #76993D !important;
-            border: 1px solid #8cae53 !important;
+            background-color: #506B23 !important;
+            border: 1px solid #668730 !important;
             border-radius: 6px !important;
             color: #e2e8f0 !important;
             box-shadow: none !important;
@@ -1011,8 +1011,8 @@ st.markdown("""
         section[data-testid="stSidebar"] button:hover,
         section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover,
         section[data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
-            background-color: #8bb34b !important;
-            border-color: #a4cc62 !important;
+            background-color: #61822c !important;
+            border-color: #799e3a !important;
             color: #ffffff !important;
         }
 
@@ -1137,7 +1137,7 @@ st.markdown("""
         /* 7. ABAS, CABEÇALHOS E BADGES */
         button[data-baseweb="tab"] p { color: #4a5568 !important; font-weight: 500; }
         button[aria-selected="true"] p { color: #03170a !important; font-weight: 700 !important; }
-        div[data-baseweb="tab-highlight"] { background-color: #76993D !important; }
+        div[data-baseweb="tab-highlight"] { background-color: #506B23 !important; }
         h2, h3, [data-testid="stHeader"] { color: #03170a !important; font-weight: 700 !important; }
 
         code {
