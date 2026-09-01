@@ -981,34 +981,33 @@ st.markdown("""
             font-weight: 700 !important;
         }
         
-        /* 2. SELECTBOXES & MULTISELECTS (Fundo Branco Blindado em TODAS as camadas internas) */
+        /* 2. Rótulos e Cabeçalhos de Campos (Sempre Transparentes) */
+        div[data-testid="stWidgetLabel"],
+        div[data-testid="stWidgetLabel"] *,
+        label,
+        label * {
+            background-color: transparent !important;
+            color: #03170a !important;
+            font-weight: 600 !important;
+        }
+
+        /* 3. SELECTBOXES & MULTISELECTS (Fundo Branco Estrito na Caixa de Entrada) */
         div[data-testid="stSelectbox"],
-        div[data-testid="stSelectbox"] div,
-        div[data-testid="stMultiSelect"],
-        div[data-testid="stMultiSelect"] div,
-        div[data-baseweb="select"],
-        div[data-baseweb="select"] div,
+        div[data-testid="stMultiSelect"] {
+            background-color: transparent !important;
+        }
+
         div[data-baseweb="select"] > div {
             background-color: #ffffff !important;
-            color: #0f172a !important;
-        }
-
-        /* Borda externa e formato dos campos Select e MultiSelect */
-        div[data-baseweb="select"] > div:first-child,
-        div[data-testid="stSelectbox"] > div > div,
-        div[data-testid="stMultiSelect"] > div > div {
             border: 1px solid #cbd5e1 !important;
             border-radius: 6px !important;
-            background-color: #ffffff !important;
         }
 
-        /* Texto das opções selecionadas e placeholder */
+        div[data-baseweb="select"] div,
         div[data-baseweb="select"] span,
-        div[data-baseweb="select"] p,
         div[data-baseweb="select"] input {
             color: #0f172a !important;
             font-weight: 500 !important;
-            background-color: transparent !important;
         }
 
         div[data-baseweb="select"] input::placeholder {
@@ -1016,23 +1015,18 @@ st.markdown("""
         }
 
         /* Setas e Ícones de Dropdown */
-        div[data-baseweb="select"] svg,
-        div[data-testid="stSelectbox"] svg,
-        div[data-testid="stMultiSelect"] svg { 
+        div[data-baseweb="select"] svg { 
             fill: #0f172a !important; 
             stroke: #0f172a !important;
         }
 
         /* Tags / Chips das UFs Selecionadas no MultiSelect */
-        div[data-baseweb="tag"],
-        div[data-baseweb="tag"] div,
-        div[data-baseweb="tag"] > div {
+        div[data-baseweb="tag"] {
             background-color: #e2e8f0 !important;
             border: 1px solid #cbd5e1 !important;
             border-radius: 4px !important;
         }
-        div[data-baseweb="tag"] span,
-        div[data-baseweb="tag"] p {
+        div[data-baseweb="tag"] span {
             color: #0f172a !important;
             font-weight: 700 !important;
             background-color: transparent !important;
@@ -1042,24 +1036,18 @@ st.markdown("""
             stroke: none !important;
         }
 
-        /* 3. Menus Suspensos Abertos (Popovers, Dropdowns Flutuantes e Listas) */
+        /* 4. Menus Suspensos Abertos (Popovers e Listas Virtuais) */
         ul[data-testid="stSelectboxVirtualDropdown"],
-        div[data-baseweb="popover"],
-        div[data-baseweb="popover"] div,
         div[data-baseweb="popover"] ul,
-        div[data-baseweb="menu"],
-        div[data-baseweb="menu"] div,
-        div[data-baseweb="menu"] ul {
+        div[data-baseweb="menu"] {
             background-color: #ffffff !important;
-            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
         }
-
         div[data-baseweb="popover"] li,
         div[data-baseweb="menu"] li {
             background-color: #ffffff !important;
             color: #0f172a !important;
         }
-
         div[data-baseweb="popover"] li:hover,
         div[data-baseweb="menu"] li:hover,
         div[data-baseweb="popover"] li[aria-selected="true"],
@@ -1068,7 +1056,7 @@ st.markdown("""
             color: #0f172a !important;
         }
 
-        /* 4. Entradas Numéricas (Number Input) */
+        /* 5. Entradas Numéricas (Number Input) */
         div[data-testid="stNumberInput"] input { 
             background-color: #ffffff !important; 
             color: #03170a !important; 
@@ -1083,7 +1071,7 @@ st.markdown("""
             border: 1px solid #cbd5e1 !important; 
         }
 
-        /* 5. Caixas de Data (Date Input) */
+        /* 6. Caixas de Data (Date Input) */
         div[data-testid="stDateInput"] > div,
         div[data-testid="stDateInput"] div[data-baseweb="input"],
         div[data-testid="stDateInput"] div[data-baseweb="base-input"] {
@@ -1098,7 +1086,7 @@ st.markdown("""
             fill: #03170a !important;
         }
 
-        /* 6. Inputs de Texto, TextAreas, Abas e Cabeçalhos */
+        /* 7. Inputs de Texto, TextAreas, Abas e Cabeçalhos */
         div[data-testid="stTextInput"] input, 
         div[data-testid="stTextArea"] textarea {
             border: 1px solid #cbd5e1 !important; 
@@ -1118,17 +1106,23 @@ st.markdown("""
             background-color: #4d6b53 !important; 
         }
         
-        div[data-testid="stAppViewContainer"] label[data-testid="stWidgetLabel"] p,
-        div[data-testid="stPopoverBody"] label[data-testid="stWidgetLabel"] p { 
-            color: #03170a !important; 
-            font-weight: 500; 
-        }
         h2, h3, [data-testid="stHeader"] { 
             color: #03170a !important; 
             font-weight: 700 !important; 
         }
 
-        /* 7. Ícones de Ajuda (?) */
+        /* 8. 🛡️ FORMATAÇÃO UNIVERSAL DE TAGS DE CÓDIGO (BADGES / IDs) */
+        code {
+            background-color: #e2e8f0 !important;
+            color: #0f172a !important;
+            font-weight: 600 !important;
+            padding: 2px 7px !important;
+            border-radius: 4px !important;
+            border: 1px solid #cbd5e1 !important;
+            font-size: 0.88em !important;
+        }
+
+        /* 9. Ícones de Ajuda (?) */
         [data-testid="stTooltipIcon"] {
             color: #475569 !important;
         }
@@ -1138,7 +1132,7 @@ st.markdown("""
             stroke: #475569 !important;
         }
 
-        /* 8. Balão Flutuante de Tooltip */
+        /* 10. Balão Flutuante de Tooltip */
         div[data-baseweb="tooltip"],
         div[data-testid="stTooltipContent"] {
             background-color: #1e293b !important;
