@@ -5942,6 +5942,199 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
         todas_ufs_brasil = sorted(LISTA_UFS_COMPLETA)
 
+
+        # =====================================================================
+        # 4.3 PAINEL RETRÁTIL: MATRIZ DE ALOCAÇÃO DE ESFORÇO & RECURSOS
+        # =====================================================================
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("📊 **Matriz de Alocação de Esforço (Dias) e Recursos (R$) por Ação**", expanded=True):
+            st.markdown("##### 💼 Distribuição de Dias de Campo e Recursos Financeiros")
+            st.caption("Consolidado analítico das propostas pactuadas com indicadores visuais de consumo de capacidade e orçamento.")
+
+            if df_acoes_cadastradas.empty:
+                st.info("Nenhuma proposta setorial registrada para o exercício.")
+            else:
+                df_matriz = df_acoes_cadastradas.copy()
+                
+                # Seletor local de UF para a Matriz (ou herda de uf_usuario / filtro geral)
+                lista_ufs_matriz = ["🇧🇷 Todas as UFs (Nacional)"] + sorted(df_matriz["UF_Acao_PNAPA"].dropna().unique().tolist())
+                idx_uf_padrao_mat = 0
+                if 'uf_usuario' in locals() and uf_usuario in lista_ufs_matriz:
+                    idx_uf_padrao_mat = lista_ufs_matriz.index(uf_usuario)
+                
+                col_sel_mat, _ = st.columns([1.5, 2.5])
+                with col_sel_mat:
+                    uf_visao_sel = st.selectbox("Filtrar Matriz por UF:", lista_ufs_matriz, index=idx_uf_padrao_mat, key="pact_uf_visao_matriz")
+
+                # Aplica o filtro de UF se selecionado
+                rotulo_escopo = "Nacional" if uf_visao_sel == "🇧🇷 Todas as UFs (Nacional)" else f"da UF {uf_visao_sel}"
+                if uf_visao_sel != "🇧🇷 Todas as UFs (Nacional)":
+                    df_matriz = df_matriz[df_matriz["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_visao_sel]
+
+                if df_matriz.empty:
+                    st.warning(f"A UF **{uf_visao_sel}** ainda não possui propostas cadastradas para este exercício.")
+                else:
+                    # Totais de referência para cálculo percentual (100% da UF ou do País)
+                    tot_dias_ref = float(df_matriz["Dias_Plan_Num"].sum())
+                    tot_orc_ref = float(df_matriz["Rec_Plan_Num"].sum())
+
+                    # Configuração das Barras de Progresso Nativas do Streamlit
+                    col_config_barras = {
+                        "% Esforço": st.column_config.ProgressColumn(
+                            "% Esforço",
+                            help=f"Percentual do esforço em dias em relação ao total {rotulo_escopo} ({tot_dias_ref:.1f} d)",
+                            format="%.1f%%",
+                            min_value=0.0,
+                            max_value=100.0
+                        ),
+                        "% Orçamento": st.column_config.ProgressColumn(
+                            "% Orçamento",
+                            help=f"Percentual do recurso financeiro em relação ao total {rotulo_escopo} ({formatar_moeda_br(tot_orc_ref)})",
+                            format="%.1f%%",
+                            min_value=0.0,
+                            max_value=100.0
+                        )
+                    }
+
+                    tab_mat_macro, tab_mat_set, tab_mat_det = st.tabs([
+                        "🎯 Consolidado por Macroação (N1)",
+                        "📈 Consolidado por Ação Setorial (N2)", 
+                        "📋 Detalhamento Analítico (Propostas)"
+                    ])
+
+                    # ---------------------------------------------------------
+                    # ABA 1: CONSOLIDADO POR MACROAÇÃO (NÍVEL 1)
+                    # ---------------------------------------------------------
+                    with tab_mat_macro:
+                        mapa_macro_info = {}
+                        for _, rm in df_macros.iterrows():
+                            c_m = str(rm.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+                            mapa_macro_info[c_m] = {
+                                "Nome": str(rm.get("Nome_Acao_Apelido", rm.get("Nome_Acao_Completo", ""))).strip(),
+                                "Lideranca": f"{rm.get('Dono_Acao', '')} ({rm.get('UF_Dono', '')})".strip()
+                            }
+
+                        df_matriz["Cod_Macro"] = df_matriz["Num_Pna_Limpo"].apply(lambda x: str(x).split(".")[0].split("-")[0].strip().upper())
+                        
+                        agg_macro = df_matriz.groupby("Cod_Macro").agg(
+                            Qtd_Setoriais=("Num_Pna_Limpo", "nunique"),
+                            Qtd_Propostas=("Id", "count"),
+                            Dias_Totais=("Dias_Plan_Num", "sum"),
+                            Orcamento_Total=("Rec_Plan_Num", "sum")
+                        ).reset_index()
+
+                        agg_macro["Macroação Estratégica"] = agg_macro["Cod_Macro"].apply(
+                            lambda c: mapa_macro_info.get(c, {}).get("Nome", f"Macroação {c}")
+                        )
+                        agg_macro["Liderança Sede"] = agg_macro["Cod_Macro"].apply(
+                            lambda c: mapa_macro_info.get(c, {}).get("Lideranca", "Sede Ceneac")
+                        )
+
+                        agg_macro["% Esforço"] = (agg_macro["Dias_Totais"] / tot_dias_ref * 100.0) if tot_dias_ref > 0 else 0.0
+                        agg_macro["% Orçamento"] = (agg_macro["Orcamento_Total"] / tot_orc_ref * 100.0) if tot_orc_ref > 0 else 0.0
+                        agg_macro["Total Dias"] = agg_macro["Dias_Totais"].apply(lambda v: f"{formatar_numero_br(v, 1)} d")
+                        agg_macro["Total Demandado (R$)"] = agg_macro["Orcamento_Total"].apply(formatar_moeda_br)
+
+                        cols_macro_show = [
+                            "Cod_Macro", "Macroação Estratégica", "Liderança Sede", 
+                            "Qtd_Setoriais", "Qtd_Propostas", "Total Dias", "% Esforço", 
+                            "Total Demandado (R$)", "% Orçamento"
+                        ]
+                        renomear_macro = {
+                            "Cod_Macro": "Código PNAPA",
+                            "Qtd_Setoriais": "Setoriais",
+                            "Qtd_Propostas": "Propostas"
+                        }
+                        
+                        st.dataframe(
+                            agg_macro[cols_macro_show].rename(columns=renomear_macro),
+                            column_config=col_config_barras,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                    # ---------------------------------------------------------
+                    # ABA 2: CONSOLIDADO POR AÇÃO SETORIAL (NÍVEL 2)
+                    # ---------------------------------------------------------
+                    with tab_mat_set:
+                        agg_setoriais = df_matriz.groupby(["Num_Pna_Limpo", "Nome da Ação PNAPA"]).agg(
+                            Qtd_Propostas=("Id", "count"),
+                            UFs_Participantes=("UF_Acao_PNAPA", lambda x: ", ".join(sorted(list(set(x))))),
+                            Dias_Totais=("Dias_Plan_Num", "sum"),
+                            Orcamento_Total=("Rec_Plan_Num", "sum")
+                        ).reset_index()
+
+                        agg_setoriais["Macro (Mãe)"] = agg_setoriais["Num_Pna_Limpo"].apply(lambda x: str(x).split(".")[0].split("-")[0].strip().upper())
+                        agg_setoriais["% Esforço"] = (agg_setoriais["Dias_Totais"] / tot_dias_ref * 100.0) if tot_dias_ref > 0 else 0.0
+                        agg_setoriais["% Orçamento"] = (agg_setoriais["Orcamento_Total"] / tot_orc_ref * 100.0) if tot_orc_ref > 0 else 0.0
+                        
+                        agg_setoriais["Total Dias"] = agg_setoriais["Dias_Totais"].apply(lambda v: f"{formatar_numero_br(v, 1)} d")
+                        agg_setoriais["Total Demandado (R$)"] = agg_setoriais["Orcamento_Total"].apply(formatar_moeda_br)
+
+                        cols_set_show = [
+                            "Num_Pna_Limpo", "Nome da Ação PNAPA", "Macro (Mãe)", 
+                            "Qtd_Propostas", "UFs_Participantes", "Total Dias", "% Esforço", 
+                            "Total Demandado (R$)", "% Orçamento"
+                        ]
+                        renomear_set = {
+                            "Num_Pna_Limpo": "Código Setorial",
+                            "Nome da Ação PNAPA": "Título da Ação",
+                            "Qtd_Propostas": "Propostas",
+                            "UFs_Participantes": "UFs"
+                        }
+                        
+                        st.dataframe(
+                            agg_setoriais[cols_set_show].rename(columns=renomear_set),
+                            column_config=col_config_barras,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                    # ---------------------------------------------------------
+                    # ABA 3: DETALHAMENTO ANALÍTICO ITEMIZADO (COM UF_COORDENADORA)
+                    # ---------------------------------------------------------
+                    with tab_mat_det:
+                        df_det_view = pd.DataFrame({
+                            "Ação Setorial": df_matriz["Num_Pna_Limpo"],
+                            "Título": df_matriz["Nome da Ação PNAPA"],
+                            "UF Proponente": df_matriz["UF_Acao_PNAPA"],
+                            "Papel": df_matriz.apply(
+                                lambda r: f"Apoio (em {str(r.get('UF_Coordenadora', '')).strip().upper()})" 
+                                if str(r.get("Papel_Institucional", "")).strip() == "Apoio" 
+                                else "Coordenação", axis=1
+                            ),
+                            "Responsável": df_matriz.apply(
+                                lambda r: f"Equipe Nupaem-{r['UF_Acao_PNAPA']}" 
+                                if str(r.get("Papel_Institucional", "")).strip() == "Apoio" and (not r.get("Servidor") or str(r.get("Servidor")).lower() in ["nan", "none", ""])
+                                else str(r.get("Servidor", "Não Designado")), axis=1
+                            ),
+                            "Meta": df_matriz.apply(
+                                lambda r: "— (Apoio)" if str(r.get("Papel_Institucional", "")).strip() == "Apoio" 
+                                else formatar_numero_br(r.get("Meta_Num", 0.0), 1), axis=1
+                            ),
+                            "Dias (Esforço)": df_matriz["Dias_Plan_Num"].apply(lambda v: f"{formatar_numero_br(v, 1)} d"),
+                            "Diárias (R$)": df_matriz["Rec_Plan_Diarias"].apply(formatar_moeda_br),
+                            "Passagens (R$)": df_matriz["Rec_Plan_Passagens"].apply(formatar_moeda_br),
+                            "Outras Desp. (R$)": df_matriz["Rec_Plan_Outras_Despesas"].apply(formatar_moeda_br),
+                            "Total Previsto (R$)": df_matriz["Rec_Plan_Num"].apply(formatar_moeda_br)
+                        })
+                        st.dataframe(df_det_view.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+                    # KPIs de Totais da Matriz
+                    st.markdown("---")
+                    tot_dias_m = df_matriz["Dias_Plan_Num"].sum()
+                    tot_diarias_m = df_matriz["Rec_Plan_Diarias"].sum()
+                    tot_pass_m = df_matriz["Rec_Plan_Passagens"].sum()
+                    tot_outras_m = df_matriz["Rec_Plan_Outras_Despesas"].sum()
+                    tot_geral_m = df_matriz["Rec_Plan_Num"].sum()
+
+                    c_tm1, c_tm2, c_tm3, c_tm4, c_tm5 = st.columns(5)
+                    c_tm1.metric("Esforço de Campo", f"{tot_dias_m:.1f} dias")
+                    c_tm2.metric("Total Diárias", formatar_moeda_br(tot_diarias_m))
+                    c_tm3.metric("Total Passagens", formatar_moeda_br(tot_pass_m))
+                    c_tm4.metric("Total Outras", formatar_moeda_br(tot_outras_m))
+                    c_tm5.metric("Orçamento Total", formatar_moeda_br(tot_geral_m))
+        
         # =====================================================================
         # 5. LOOP PRINCIPAL: MACROAÇÕES (NÍVEL 1)
         # =====================================================================
