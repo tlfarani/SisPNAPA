@@ -2406,7 +2406,20 @@ elif modo == "📊 Visualizar Base":
             num = pd.to_numeric(val, errors='coerce')
             return 0.0 if pd.isna(num) else float(num)
 
-        # Função universal de filtragem cruzada (responsiva)
+        # 🚀 Padronização universal de ID (Remove o ".0" fantasma do Pandas)
+        def normalizar_id_t1(val):
+            if pd.isna(val) or val is None: return ""
+            s = str(val).strip()
+            if s.endswith(".0"): s = s[:-2]
+            return s
+
+        # 🚀 Inicialização defensiva dos dicionários de seleção
+        if "selecoes_acoes" not in st.session_state:
+            st.session_state["selecoes_acoes"] = {}
+        if "selecoes_atividades" not in st.session_state:
+            st.session_state["selecoes_atividades"] = {}
+
+        # Função universal de filtragem cruzada
         def aplicar_filtros_responsivos(df_orig, dict_filtros, chave_ignorar=None):
             df_res = df_orig.copy()
             for k, (col_nome, val) in dict_filtros.items():
@@ -2435,15 +2448,13 @@ elif modo == "📊 Visualizar Base":
             return df_res
 
         df_trabalho = df_atual.copy()
-        
-        # Garante a existência de todas as colunas
         for col_nec in COLUNAS_PNAPA:
             if col_nec not in df_trabalho.columns: df_trabalho[col_nec] = ""
 
         df_trabalho["Data_Inicio_Datetime"] = df_trabalho["Data de Início"].apply(limpar_e_converter_data)
         df_trabalho["Data_Termino_Datetime"] = df_trabalho["Data de Término"].apply(limpar_e_converter_data)
+        df_trabalho["Id_Str"] = df_trabalho["Id"].apply(normalizar_id_t1)
 
-        # 🚀 DIVISÃO EM DUAS SUBPÁGINAS DEDICADAS
         tab_sub_acoes, tab_sub_atividades = st.tabs([
             "🎯 Ações Setoriais (Planejamento & Metas)", 
             "📌 Atividades de Campo (Operações & Execução)"
@@ -2452,10 +2463,9 @@ elif modo == "📊 Visualizar Base":
         pode_editar = (perfil_usuario in ["Administrador", "Editor Regional"]) and acesso_liberado
 
         # =====================================================================
-        # SUBPÁGINA 1: AÇÕES ESTADUAIS
+        # SUBPÁGINA 1: AÇÕES SETORIAIS
         # =====================================================================
         with tab_sub_acoes:
-            # Captura tanto os registros antigos ("Ação") quanto os novos ("Ação Setorial")
             df_base_acoes = df_trabalho[
                 (df_trabalho["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
                 (df_trabalho["Número da Ação PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL")
@@ -2465,17 +2475,13 @@ elif modo == "📊 Visualizar Base":
             if df_base_acoes.empty:
                 st.info("Nenhuma Ação Estadual cadastrada na base.")
             else:
-                # 1. CÁLCULO E PROPAGAÇÃO DO RESULTADO SEGMENTADO (EXIGE SEI)
                 df_atv_temp = df_trabalho[df_trabalho["Nível"].astype(str).str.strip() == "Atividade"].copy()
                 
-                # 🚀 Filtra apenas atividades concluídas COM processo SEI
                 def atv_homologada_t1(row):
                     andamento = str(row.get("Andamento", "")).strip()
                     doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
-                    if andamento != "Concluída":
-                        return False
-                    if not doc or doc.lower() in ["nan", "none", "null"]:
-                        return False
+                    if andamento != "Concluída": return False
+                    if not doc or doc.lower() in ["nan", "none", "null"]: return False
                     return True
 
                 atv_concluidas_temp = df_atv_temp[df_atv_temp.apply(atv_homologada_t1, axis=1)].copy()
@@ -2489,25 +2495,26 @@ elif modo == "📊 Visualizar Base":
                     Dias_Exec_Agregado=('Dias_Gastos_Exec', lambda x: pd.to_numeric(x, errors='coerce').fillna(0).sum())
                 ).reset_index()
                 
-                df_base_acoes = pd.merge(
-                    df_base_acoes, 
-                    agg_atv_pna, 
-                    on=["Número da Ação PNAPA", "UF_Acao_PNAPA", "Tema da Atividade"], 
-                    how="left"
-                )
+                df_base_acoes = pd.merge(df_base_acoes, agg_atv_pna, on=["Número da Ação PNAPA", "UF_Acao_PNAPA", "Tema da Atividade"], how="left")
                 df_base_acoes["Resultado_Agregado"] = df_base_acoes["Resultado_Agregado"].fillna(0.0)
                 df_base_acoes["Dias_Exec_Agregado"] = df_base_acoes["Dias_Exec_Agregado"].fillna(0.0)
                 df_base_acoes["Resultado_Indicador"] = df_base_acoes["Resultado_Agregado"]
 
                 def calc_pct_exec_acao_t1(row):
+                    papel = str(row.get("Papel_Institucional", "Coordenação")).strip()
+                    dias_plan = float(pd.to_numeric(row.get("Dias_Gastos_Plan", 0), errors='coerce') or 0.0)
+                    dias_exec = float(pd.to_numeric(row.get("Dias_Exec_Agregado", 0), errors='coerce') or 0.0)
                     meta = float(pd.to_numeric(row.get("Meta_Indicador", 0), errors='coerce') or 0.0)
                     res = float(pd.to_numeric(row.get("Resultado_Agregado", 0), errors='coerce') or 0.0)
-                    dias_exec = float(pd.to_numeric(row.get("Dias_Exec_Agregado", 0), errors='coerce') or 0.0)
-                    if meta > 0:
-                        return (res / meta) * 100.0
-                    elif meta == 0 and (dias_exec > 0 or res > 0):
-                        return 100.0
-                    return 0.0
+
+                    if papel == "Apoio":
+                        if dias_plan > 0: return (dias_exec / dias_plan) * 100.0
+                        elif dias_plan == 0 and dias_exec > 0: return 100.0
+                        return 0.0
+                    else:
+                        if meta > 0: return (res / meta) * 100.0
+                        elif meta == 0 and (dias_exec > 0 or res > 0): return 100.0
+                        return 0.0
 
                 df_base_acoes["% de Execução da Ação"] = df_base_acoes.apply(calc_pct_exec_acao_t1, axis=1)
 
@@ -2517,31 +2524,29 @@ elif modo == "📊 Visualizar Base":
                     if justif.lower() in ["nan", "none", "null"]: justif = ""
                     dt_fim = row.get("Data_Termino_Datetime")
                     
+                    papel = str(row.get("Papel_Institucional", "Coordenação")).strip()
+                    dias_plan = float(pd.to_numeric(row.get("Dias_Gastos_Plan", 0), errors='coerce') or 0.0)
+                    dias_exec = float(row.get("Dias_Exec_Agregado", 0.0) or 0.0)
                     meta = float(pd.to_numeric(row.get("Meta_Indicador", 0), errors='coerce') or 0.0)
                     res = float(row.get("Resultado_Agregado", 0.0) or 0.0)
-                    dias_exec = float(row.get("Dias_Exec_Agregado", 0.0) or 0.0)
                     
-                    if andamento in ["Não Demandada", "Não demandada", "Não_demandada"]:
-                        return "🟡 Não Demandada"
-                    if andamento == "Cancelada":
-                        return "🔴 Cancelada - Sem Justificativa" if justif == "" else "🟡 Cancelada (Justificada)"
+                    if andamento in ["Não Demandada", "Não demandada", "Não_demandada"]: return "🟡 Não Demandada"
+                    if andamento == "Cancelada": return "🔴 Cancelada - Sem Justificativa" if justif == "" else "🟡 Cancelada (Justificada)"
                         
                     atingiu = False
-                    if meta > 0:
-                        if (res / meta) >= 0.8:
-                            atingiu = True
-                    elif meta == 0 and (dias_exec > 0 or res > 0):
-                        atingiu = True
+                    if papel == "Apoio":
+                        if dias_plan > 0 and (dias_exec / dias_plan) >= 0.8: atingiu = True
+                        elif dias_plan == 0 and dias_exec > 0: atingiu = True
+                    else:
+                        if meta > 0 and (res / meta) >= 0.8: atingiu = True
+                        elif meta == 0 and (dias_exec > 0 or res > 0): atingiu = True
                         
-                    if atingiu:
-                        return "🟢 Executada"
+                    if atingiu: return "🟢 Executada"
                         
                     if andamento in ["Planejada", "Planejado", "Planejadas", "Não Executada", ""]:
                         if pd.notna(dt_fim):
-                            if dt_fim >= hoje:
-                                return "⚪ Planejada"
-                            else:
-                                return "🔴 Não Executada - Sem Justificativa" if justif == "" else "🟡 Não Executada - Justificada"
+                            if dt_fim >= hoje: return "⚪ Planejada"
+                            else: return "🔴 Não Executada - Sem Justificativa" if justif == "" else "🟡 Não Executada - Justificada"
                         else:
                             ano_str = str(row.get("Ano da Ação", "")).split('.')[0]
                             if ano_str.isdigit() and int(ano_str) < hoje.year:
@@ -2551,7 +2556,6 @@ elif modo == "📊 Visualizar Base":
 
                 df_base_acoes["Status de Execução"] = df_base_acoes.apply(calc_status_acao_t1, axis=1)
 
-                # 2. INICIALIZAÇÃO SEGURA DOS FILTROS POPOVER
                 for k in ["f_ano_ac", "f_pna_ac", "f_uf_ac", "f_papel_ac", "f_focal_ac", "f_status_ac", "f_and_ac", "f_tema_ac"]:
                     if k not in st.session_state:
                         st.session_state[k] = "Todas" if k in ["f_pna_ac", "f_uf_ac"] else "Todos"
@@ -2559,8 +2563,8 @@ elif modo == "📊 Visualizar Base":
                 def limpar_filtros_acoes_t1():
                     for k in ["f_ano_ac", "f_pna_ac", "f_uf_ac", "f_papel_ac", "f_focal_ac", "f_status_ac", "f_and_ac", "f_tema_ac"]:
                         st.session_state[k] = "Todas" if k in ["f_pna_ac", "f_uf_ac"] else "Todos"
-                    if "f_slider_dts_ac" in st.session_state:
-                        del st.session_state["f_slider_dts_ac"]
+                    st.session_state.pop("f_slider_dts_ac", None)
+                    st.session_state.pop("last_ano_ac_sel", None)
 
                 filtros_ac = {
                     "ano": ("Ano da Ação", st.session_state["f_ano_ac"]),
@@ -2574,7 +2578,6 @@ elif modo == "📊 Visualizar Base":
                     "data": ("Data_Inicio_Datetime", st.session_state.get("f_slider_dts_ac", None))
                 }
 
-                # 3. BARRA DE FILTROS SUPERIOR COM POPOVERS
                 c_fac1, c_fac2, c_fac3, c_fac4 = st.columns([1, 1.2, 1.2, 0.5])
                 
                 with c_fac1:
@@ -2588,7 +2591,6 @@ elif modo == "📊 Visualizar Base":
 
                         df_p_data = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, "data")
                         
-                        # 🚀 Intervalo de datas seguro (Ano Civil Completo quando filtrado por ano)
                         if f_ano_ac != "Todos" and str(f_ano_ac).isdigit():
                             ano_int_ac = int(f_ano_ac)
                             min_dt_ac = date(ano_int_ac, 1, 1)
@@ -2599,31 +2601,24 @@ elif modo == "📊 Visualizar Base":
                                 min_dt_ac = date(int(dts_validas_ac.min().year), 1, 1)
                                 max_dt_ac = date(int(dts_validas_ac.max().year), 12, 31)
                             else:
-                                min_dt_ac = date(2025, 1, 1)
-                                max_dt_ac = date(2027, 12, 31)
+                                min_dt_ac = date(hoje.year, 1, 1)
+                                max_dt_ac = date(hoje.year, 12, 31)
 
-                        if min_dt_ac >= max_dt_ac:
-                            max_dt_ac = min_dt_ac + pd.Timedelta(days=1)
+                        if min_dt_ac >= max_dt_ac: max_dt_ac = min_dt_ac + pd.Timedelta(days=1)
                         
-                        # 🚀 Reset automático do slider ao mudar o ano selecionado
+                        # 🚀 Blindagem do Slider de Data
+                        val_atual_sl = st.session_state.get("f_slider_dts_ac", (min_dt_ac, max_dt_ac))
+                        
+                        # Se for a primeira vez que o ano muda, reseta o slider garantidamente
                         if st.session_state.get("last_ano_ac_sel") != f_ano_ac:
                             st.session_state["last_ano_ac_sel"] = f_ano_ac
-                            st.session_state["f_slider_dts_ac"] = (min_dt_ac, max_dt_ac)
+                            v_start, v_end = min_dt_ac, max_dt_ac
+                        else:
+                            v_start = max(min_dt_ac, min(val_atual_sl[0], max_dt_ac))
+                            v_end = max(min_dt_ac, min(val_atual_sl[1], max_dt_ac))
+                            if v_start > v_end: v_start = min_dt_ac
 
-                        val_atual_sl = st.session_state.get("f_slider_dts_ac", (min_dt_ac, max_dt_ac))
-                        v_start = max(min_dt_ac, min(val_atual_sl[0], max_dt_ac))
-                        v_end = max(min_dt_ac, min(val_atual_sl[1], max_dt_ac))
-                        if v_start > v_end: 
-                            v_start = min_dt_ac
-
-                        f_slider_dts_ac = st.slider(
-                            "Data de Início:", 
-                            min_value=min_dt_ac, 
-                            max_value=max_dt_ac, 
-                            value=(v_start, v_end), 
-                            format="DD/MM/YYYY",
-                            key="slider_dts_acoes_tab1"
-                        )
+                        f_slider_dts_ac = st.slider("Data de Início:", min_value=min_dt_ac, max_value=max_dt_ac, value=(v_start, v_end), format="DD/MM/YYYY", key="slider_dts_acoes_t1")
                         st.session_state["f_slider_dts_ac"] = f_slider_dts_ac
                         filtros_ac["data"] = ("Data_Inicio_Datetime", f_slider_dts_ac)
 
@@ -2682,13 +2677,9 @@ elif modo == "📊 Visualizar Base":
                 with c_fac4:
                     st.button("🧹 Limpar", use_container_width=True, on_click=limpar_filtros_acoes_t1)
 
-                # Aplicação final de todos os filtros
                 df_exib_ac = aplicar_filtros_responsivos(df_base_acoes, filtros_ac, None)
 
-                df_exib_ac["Data de Início"] = df_exib_ac["Data_Inicio_Datetime"].dt.date
-                df_exib_ac["Data de Término"] = df_exib_ac["Data_Termino_Datetime"].dt.date
-
-                # 4. COLUNAS REORDENADAS
+                # 4. COLUNAS REORDENADAS E FORMATAÇÃO PARA VISUALIZAÇÃO
                 COLS_TABELA_ACOES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Nome da Ação PNAPA", 
                     "Status de Execução", "Indicador", "Meta_Indicador", "Resultado_Indicador", 
@@ -2696,13 +2687,15 @@ elif modo == "📊 Visualizar Base":
                     "Importância da Atividade", "Tema da Atividade", "Objetivo da Atividade", 
                     "Tipo de Atividade", "Andamento", "Data de Início", "Data de Término", 
                     "Dias_Gastos_Plan", "Origem do Recurso", "Rec_Plan_Total", 
-                    "Observações", "Justificativa_Acao_PNAPA"
+                    "Observações", "Justificativa_Acao_PNAPA", "Id_Str"
                 ]
 
                 cols_ac_validas = [c for c in COLS_TABELA_ACOES if c in df_exib_ac.columns]
                 df_tab_ac = df_exib_ac[cols_ac_validas].copy()
                 
-                # 🚀 FORMATAÇÃO DIRETA NO PADRÃO BR (Elimina None e ponto decimal)
+                df_tab_ac["Data de Início"] = df_tab_ac["Data de Início"].apply(converter_dt_seguro).dt.date
+                df_tab_ac["Data de Término"] = df_tab_ac["Data de Término"].apply(converter_dt_seguro).dt.date
+                
                 df_tab_ac["Meta_Indicador"] = df_tab_ac["Meta_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
                 df_tab_ac["Resultado_Indicador"] = df_tab_ac["Resultado_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
                 df_tab_ac["% de Execução da Ação"] = df_tab_ac["% de Execução da Ação"].apply(lambda v: f"{formatar_numero_br(v, 1)}%")
@@ -2711,17 +2704,14 @@ elif modo == "📊 Visualizar Base":
                 
                 df_tab_ac = df_tab_ac.sort_values(by=["Data de Início", "Id"], ascending=[True, True], na_position='last').reset_index(drop=True)
 
-                if "selecoes_acoes" not in st.session_state: st.session_state["selecoes_acoes"] = {}
-                if "version_ed_ac" not in st.session_state: st.session_state["version_ed_ac"] = 0
-
                 if [k for k, v in st.session_state["selecoes_acoes"].items() if v]:
-                    if st.button("✕ Desmarcar Todas as Ações", type="secondary", key="btn_desm_ac"):
+                    if st.button("✕ Desmarcar Todas as Ações", type="secondary", key="btn_desm_ac_t1"):
                         st.session_state["selecoes_acoes"] = {}
-                        st.session_state["version_ed_ac"] += 1
                         st.rerun()
 
+                # 🚀 LÓGICA BLINDADA DO CHECKBOX NO DATA EDITOR
                 if pode_editar:
-                    df_tab_ac.insert(0, "Selecionar", [st.session_state["selecoes_acoes"].get(str(int(row_id)), False) if pd.notna(row_id) else False for row_id in df_tab_ac["Id"]])
+                    df_tab_ac.insert(0, "Selecionar", [st.session_state["selecoes_acoes"].get(id_cand, False) for id_cand in df_tab_ac["Id_Str"]])
                     colunas_travadas_ac = {col: st.column_config.Column(disabled=True) for col in df_tab_ac.columns if col != "Selecionar"}
                 else:
                     colunas_travadas_ac = {col: st.column_config.Column(disabled=True) for col in df_tab_ac.columns}
@@ -2729,25 +2719,33 @@ elif modo == "📊 Visualizar Base":
                 colunas_travadas_ac["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
                 colunas_travadas_ac["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_ac["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
+                colunas_travadas_ac["Id_Str"] = None # Oculta a coluna auxiliar de string
 
-                key_dinamica_ac = f"editor_acoes_v{st.session_state['version_ed_ac']}"
-                tabela_ac = st.data_editor(df_tab_ac, hide_index=True, use_container_width=True, column_config=colunas_travadas_ac, key=key_dinamica_ac)
+                # 🚀 Chave Fixa para o Editor
+                evento_tabela_ac = st.data_editor(df_tab_ac, hide_index=True, use_container_width=True, column_config=colunas_travadas_ac, key="editor_acoes_t1")
 
-                if pode_editar and st.session_state[key_dinamica_ac] and "edited_rows" in st.session_state[key_dinamica_ac]:
-                    for idx_l, alt in st.session_state[key_dinamica_ac]["edited_rows"].items():
-                        if "Selecionar" in alt:
-                            alvo_ac = df_tab_ac.iloc[int(idx_l)]
-                            id_r_ac = str(alvo_ac["Id"])
-                            uf_l_ac = str(alvo_ac.get("UF_Acao_PNAPA", "")).strip()
-                            if perfil_usuario == "Editor Regional" and uf_l_ac != uf_usuario and alt["Selecionar"] is True:
-                                st.error(f"⛔ Acesso Negado: Como Editor Regional ({uf_usuario}), você não tem permissão para editar registros da UF: {uf_l_ac}.")
-                                st.session_state["selecoes_acoes"][id_r_ac] = False
+                # Captura reativa das seleções
+                if pode_editar and st.session_state.get("editor_acoes_t1") and "edited_rows" in st.session_state["editor_acoes_t1"]:
+                    houve_alteracao_ac = False
+                    for idx_row, dict_alteracao in st.session_state["editor_acoes_t1"]["edited_rows"].items():
+                        if "Selecionar" in dict_alteracao:
+                            row_alvo = df_tab_ac.iloc[int(idx_row)]
+                            id_alvo_str = str(row_alvo["Id_Str"])
+                            uf_alvo = str(row_alvo.get("UF_Acao_PNAPA", "")).strip()
+                            
+                            if perfil_usuario == "Editor Regional" and uf_alvo != uf_usuario and dict_alteracao["Selecionar"] is True:
+                                st.error(f"⛔ Acesso Negado: Como Editor Regional ({uf_usuario}), você não tem permissão para editar registros da UF: {uf_alvo}.")
+                                st.session_state["selecoes_acoes"][id_alvo_str] = False
                             else:
-                                st.session_state["selecoes_acoes"][id_r_ac] = alt["Selecionar"]
-                            st.rerun()
+                                st.session_state["selecoes_acoes"][id_alvo_str] = dict_alteracao["Selecionar"]
+                            houve_alteracao_ac = True
+                            
+                    if houve_alteracao_ac:
+                        st.rerun()
 
-                ids_marcados_ac = [k for k, v in st.session_state["selecoes_acoes"].items() if v]
-                df_ac_sel = df_exib_ac[df_exib_ac["Id"].astype(str).isin(ids_marcados_ac)]
+                # Subconjunto selecionado para o Painel de Operações
+                ids_marcados_ac = [k for k, v in st.session_state["selecoes_acoes"].items() if v is True]
+                df_ac_sel = df_exib_ac[df_exib_ac["Id_Str"].isin(ids_marcados_ac)]
 
                 # --- PAINEL DE OPERAÇÃO DE AÇÕES ---
                 if not pode_editar:
@@ -2755,13 +2753,13 @@ elif modo == "📊 Visualizar Base":
                 elif df_ac_sel.empty:
                     st.caption("💡 *Selecione uma Ação acima para alterar Ponto Focal, Papel da UF, Metas ou excluir.*")
                 else:
-                    ids_ac_lista = df_ac_sel["Id"].astype(str).tolist()
+                    ids_ac_lista = df_ac_sel["Id_Str"].tolist()
                     st.markdown("---")
                     st.markdown(f"### 🛠️ Central de Operações da Ação ({len(ids_ac_lista)} item(ns) selecionado(s))")
                     
                     with st.popover("🗑️ Remover Ação(ões) Selecionada(s)", use_container_width=True):
                         st.markdown(f"⚠️ Deseja apagar definitivamente a(s) Ação(ões) ID: **{', '.join(ids_ac_lista)}**?")
-                        if st.button("Confirmar Exclusão de Ações", type="primary", key="btn_del_ac_tab"):
+                        if st.button("Confirmar Exclusão de Ações", type="primary", key="btn_del_ac_tab_t1"):
                             payloads_del = [{"Acao": "Excluir", "Id": str(id_del)} for id_del in ids_ac_lista]
                             for p_del in payloads_del: requests.post(URL_FLOW_PRINCIPAL, json=p_del, timeout=20)
                             st.cache_data.clear()
@@ -2774,10 +2772,10 @@ elif modo == "📊 Visualizar Base":
                     # Edição Individual de Ação
                     if len(ids_ac_lista) == 1:
                         reg_ac_alvo = df_ac_sel.iloc[0]
-                        id_ac_ref = str(reg_ac_alvo["Id"])
+                        id_ac_ref = str(reg_ac_alvo["Id_Str"])
                         st.markdown(f"#### 📝 Edição do Planejamento da Ação (ID: **{id_ac_ref}**)")
 
-                        val_ano_ac = int(pd.to_numeric(reg_ac_alvo.get("Ano da Ação"), errors='coerce') or 2026)
+                        val_ano_ac = int(pd.to_numeric(reg_ac_alvo.get("Ano da Ação"), errors='coerce') or hoje.year)
                         val_num_acao_ac = str(reg_ac_alvo.get("Número da Ação PNAPA", ""))
                         val_nome_acao_ac = str(reg_ac_alvo.get("Nome da Ação PNAPA", ""))
                         val_indicador_ac = str(reg_ac_alvo.get("Indicador", ""))
@@ -2789,7 +2787,6 @@ elif modo == "📊 Visualizar Base":
                             st.text_input("Número da Ação PNAPA", value=val_num_acao_ac, disabled=True, key=f"t1_ac_num_{id_ac_ref}")
                             st.text_input("Nome da Ação PNAPA", value=val_nome_acao_ac, disabled=True, key=f"t1_ac_nome_{id_ac_ref}")
                             
-                            # 🚀 UF e Papel movidos para o topo da Aba 1 para atualizar a equipe instantaneamente
                             c_ac_uf, c_ac_pap = st.columns(2)
                             with c_ac_uf:
                                 if perfil_usuario == "Administrador":
@@ -2806,11 +2803,9 @@ elif modo == "📊 Visualizar Base":
                                 ed_papel_inst = st.selectbox("Papel da UF nesta Ação:", LISTA_PAPEIS_INSTITUCIONAIS, index=idx_pap, key=f"t1_ac_papel_{id_ac_ref}")
 
                             if ed_papel_inst == "Coordenação":
-                                # 🚀 Puxa a lista de servidores atualizada baseada no "uf_acao_val" acima
                                 srvs_uf_lista = obter_servidores_por_uf(df_servidores, uf_acao_val)
                                 val_foc_atual = str(reg_ac_alvo.get("Servidor", "")).strip()
                                 
-                                # Mantém o servidor atual selecionado APENAS se a UF não foi alterada
                                 if uf_acao_val == str(reg_ac_alvo.get("UF_Acao_PNAPA", "")).strip() and val_foc_atual in srvs_uf_lista:
                                     idx_foc = srvs_uf_lista.index(val_foc_atual)
                                 else:
@@ -2820,7 +2815,6 @@ elif modo == "📊 Visualizar Base":
                                     f"Ponto Focal da Ação em {uf_acao_val}:", 
                                     srvs_uf_lista if srvs_uf_lista else [email_logado], 
                                     index=idx_foc, 
-                                    # 🚀 Chave amarrada à UF força o reset visual do componente quando a UF muda
                                     key=f"t1_ac_focal_{id_ac_ref}_{uf_acao_val}"
                                 )
                                 
@@ -2837,10 +2831,9 @@ elif modo == "📊 Visualizar Base":
                                 ed_servidor_ac, ed_uf_srv_ac, ed_lot_ac, ed_eq_ac = "", "", "", "Não"
 
                             lista_and_ac = ["Planejada", "Cancelada", "Não Demandada", "Não Executada"]
-                            idx_and_ac = lista_and_ac.index(reg_ac_alvo["Andamento"]) if reg_ac_alvo.get("Andamento") in lista_and_ac else 0
+                            idx_and_ac = lista_and_ac.index(reg_ac_alvo.get("Andamento", "Planejada")) if reg_ac_alvo.get("Andamento") in lista_and_ac else 0
                             ed_andamento_ac = st.selectbox("Andamento da Ação:", lista_and_ac, index=idx_and_ac, key=f"t1_ac_and_{id_ac_ref}")
 
-                            # 👑 PAINEL DE LIDERANÇA NA EDIÇÃO DA AÇÃO
                             if ed_papel_inst == "Coordenação" and ed_servidor_ac:
                                 dias_acao_ed_temp = st.session_state.get(f"t1_ac_dpl_{id_ac_ref}", obter_float_limpo(reg_ac_alvo.get("Dias_Gastos_Plan")))
                                 dados_term_ac_ed = calcular_termometro_carga(
@@ -2871,15 +2864,14 @@ elif modo == "📊 Visualizar Base":
                             
                             st.text_input("Classificação da Ação Setorial (Herdada)", value=importancia_ac, disabled=True, key=f"t1_ac_imp_{id_ac_ref}_{val_num_acao_ac}")
                             
-                            ed_tema_ac = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_ac_alvo["Tema da Atividade"]) if reg_ac_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_ac_tema_{id_ac_ref}")
+                            ed_tema_ac = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, index=LISTA_TEMAS.index(reg_ac_alvo.get("Tema da Atividade", "Outros temas")) if reg_ac_alvo.get("Tema da Atividade") in LISTA_TEMAS else 0, key=f"t1_ac_tema_{id_ac_ref}")
                             
                             obj_ac_atual = str(reg_ac_alvo.get("Objetivo da Atividade", "Prevenção e Gestão de Riscos")).strip()
                             st.text_input("Objetivo Estratégico (Herdado):", value=obj_ac_atual, disabled=True, key=f"t1_ac_obj_dis_{id_ac_ref}_{val_num_acao_ac}")
                             ed_obj_ac = obj_ac_atual
                             
-                            ed_tipo_ac = st.selectbox("Tipo de Atividade Padrão:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_ac_alvo["Tipo de Atividade"]) if reg_ac_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_ac_tipo_{id_ac_ref}")
+                            ed_tipo_ac = st.selectbox("Tipo de Atividade Padrão:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_ac_alvo.get("Tipo de Atividade", "Operação")) if reg_ac_alvo.get("Tipo de Atividade") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_ac_tipo_{id_ac_ref}")
 
-                            # 📍 Geolocalização na Edição da Ação Setorial
                             st.markdown("<p style='font-weight:bold; margin-top:12px; color:#03170a;'>📍 Local de Realização da Ação Setorial</p>", unsafe_allow_html=True)
                             uf_oc_ac_atual = str(reg_ac_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", uf_acao_val)).strip()
                             idx_uf_oc_ac = LISTA_UFS_COMPLETA.index(uf_oc_ac_atual) if uf_oc_ac_atual in LISTA_UFS_COMPLETA else 0
@@ -2898,9 +2890,8 @@ elif modo == "📊 Visualizar Base":
                             ed_dt_i_ac = st.date_input("Data de Início:", value=val_dti_ac, format="DD/MM/YYYY", key=f"t1_ac_dti_{id_ac_ref}")
                             ed_dt_f_ac = st.date_input("Data de Término:", value=val_dtf_ac, format="DD/MM/YYYY", key=f"t1_ac_dtf_{id_ac_ref}")
                             
-                            # 🚀 Nome amigável de dias planejados:
                             ed_dias_pl_ac = st.number_input("Dias de Dedicação Planejados:", min_value=0.0, value=obter_float_limpo(reg_ac_alvo.get("Dias_Gastos_Plan")), step=0.5, format="%.1f", key=f"t1_ac_dpl_{id_ac_ref}")
-                            ed_orig_ac = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(reg_ac_alvo["Origem do Recurso"]) if reg_ac_alvo.get("Origem do Recurso") in LISTA_ORIGENS_RECURSO else 0, key=f"t1_ac_orig_{id_ac_ref}")
+                            ed_orig_ac = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(reg_ac_alvo.get("Origem do Recurso", "SP")) if reg_ac_alvo.get("Origem do Recurso") in LISTA_ORIGENS_RECURSO else 0, key=f"t1_ac_orig_{id_ac_ref}")
                             
                             st.markdown("<p style='font-weight:bold; color:#03170a;'>Valores Orçamentários Planejados</p>", unsafe_allow_html=True)
                             ed_rp_d_ac = st.number_input("Recursos Planejados — Diárias (R$):", min_value=0.0, value=obter_float_limpo(reg_ac_alvo.get("Rec_Plan_Diarias")), step=50.0, format="%.2f", key=f"t1_ac_rpd_{id_ac_ref}")
@@ -2913,13 +2904,12 @@ elif modo == "📊 Visualizar Base":
                         with aba5_ac:
                             ed_obs_ac = st.text_area("Observações:", value=str(reg_ac_alvo.get("Observações", "")), key=f"t1_ac_obs_{id_ac_ref}")
                             if ed_andamento_ac in ["Cancelada", "Não Demandada", "Não Executada"]:
-                                idx_j_ac = LISTA_JUSTIFICATIVAS_ACAO.index(reg_ac_alvo["Justificativa_Acao_PNAPA"]) if reg_ac_alvo.get("Justificativa_Acao_PNAPA") in LISTA_JUSTIFICATIVAS_ACAO else 0
+                                idx_j_ac = LISTA_JUSTIFICATIVAS_ACAO.index(reg_ac_alvo.get("Justificativa_Acao_PNAPA", "")) if reg_ac_alvo.get("Justificativa_Acao_PNAPA") in LISTA_JUSTIFICATIVAS_ACAO else 0
                                 ed_just_ac = st.selectbox("Justificativa:", LISTA_JUSTIFICATIVAS_ACAO, index=idx_j_ac, key=f"t1_ac_just_{id_ac_ref}")
                             else:
                                 ed_just_ac = ""
 
-                        if st.button("💾 Gravar Alterações da Ação", type="primary", key=f"btn_salvar_ac_{id_ac_ref}"):
-                            # 🛡️ TRAVA DO TERMÔMETRO NA GRAVAÇÃO DA AÇÃO (2027+)
+                        if st.button("💾 Gravar Alterações da Ação", type="primary", key=f"btn_salvar_ac_t1_{id_ac_ref}"):
                             if ed_papel_inst == "Coordenação" and ed_servidor_ac:
                                 res_chk_ac = calcular_termometro_carga(
                                     df=df_atual,
@@ -2948,14 +2938,13 @@ elif modo == "📊 Visualizar Base":
                             )
                             executar_envio_sharepoint([payload_ac])
                             st.session_state["selecoes_acoes"] = {}
-                            st.session_state["version_ed_ac"] += 1
                             st.rerun()
                     
-                    # Edição em Lote de Ações (Restrita ao Status)
+                    # Edição em Lote de Ações
                     else:
                         st.warning(f"ℹ️ **Edição em Lote Restrita:** {len(ids_ac_lista)} ações selecionadas. Apenas o status pode ser alterado em massa.")
-                        novo_and_ac_lote = st.selectbox("Alterar Andamento para TODAS as Ações:", ["Planejada", "Cancelada", "Não Demandada", "Não Executada"], key="lt_ac_and")
-                        if st.button(f"💾 Atualizar Andamento de {len(ids_ac_lista)} Ações", type="primary", key="btn_salvar_lote_ac"):
+                        novo_and_ac_lote = st.selectbox("Alterar Andamento para TODAS as Ações:", ["Planejada", "Cancelada", "Não Demandada", "Não Executada"], key="lt_ac_and_t1")
+                        if st.button(f"💾 Atualizar Andamento de {len(ids_ac_lista)} Ações", type="primary", key="btn_salvar_lote_ac_t1"):
                             payloads_lote_ac = []
                             for _, row_orig in df_ac_sel.iterrows():
                                 p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
@@ -2966,7 +2955,6 @@ elif modo == "📊 Visualizar Base":
                                 payloads_lote_ac.append(payload_sanit)
                             executar_envio_sharepoint(payloads_lote_ac)
                             st.session_state["selecoes_acoes"] = {}
-                            st.session_state["version_ed_ac"] += 1
                             st.rerun()
 
         # =====================================================================
@@ -2975,12 +2963,10 @@ elif modo == "📊 Visualizar Base":
         with tab_sub_atividades:
             df_base_atvs = df_trabalho[df_trabalho["Nível"].astype(str).str.strip() == "Atividade"].copy()
             
-            # 🚀 MÁGICA: CRUZAMENTO DINÂMICO (PROCV) COM A BASE DE SERVIDORES
             if not df_servidores.empty:
                 df_s_aux = df_servidores[["Servidor", "Fiscal", "AEAC", "Funcao"]].drop_duplicates(subset=["Servidor"])
                 df_base_atvs = pd.merge(df_base_atvs, df_s_aux, on="Servidor", how="left")
             
-            # Preenche vazios caso algum servidor não tenha cadastro na base auxiliar
             for col_nova in ["Fiscal", "AEAC"]:
                 if col_nova not in df_base_atvs.columns: df_base_atvs[col_nova] = "Não"
                 df_base_atvs[col_nova] = df_base_atvs[col_nova].fillna("Não")
@@ -2993,7 +2979,6 @@ elif modo == "📊 Visualizar Base":
             if df_base_atvs.empty:
                 st.info("Nenhuma Atividade de Campo cadastrada na base.")
             else:
-                # 1. CÁLCULO DO STATUS DE CONCLUSÃO
                 def calc_status_atv_t1(row):
                     andamento = str(row.get("Andamento", "")).strip()
                     doc = str(row.get("Doc_Probatorio_Exec", "")).strip()
@@ -3018,8 +3003,9 @@ elif modo == "📊 Visualizar Base":
                 def limpar_filtros_atividades_t1():
                     for k in chaves_filtros_atv:
                         st.session_state[k] = "Todas" if k in ["f_pna_at", "f_uf_at", "f_func_at", "f_funcao_srv_at"] else "Todos"
-                    if "f_slider_dts_at" in st.session_state:
-                        del st.session_state["f_slider_dts_at"]
+                    st.session_state.pop("f_slider_dts_at", None)
+                    st.session_state.pop("slider_dts_atvs_tab2", None)
+                    st.session_state.pop("last_ano_at_sel", None)
 
                 filtros_at = {
                     "ano": ("Ano da Ação", st.session_state["f_ano_at"]),
@@ -3030,7 +3016,7 @@ elif modo == "📊 Visualizar Base":
                     "func": ("Coordenador_Operacao", st.session_state["f_func_at"]),
                     "status": ("Status de Conclusão", st.session_state["f_status_at"]),
                     "tema": ("Tema da Atividade", st.session_state["f_tema_at"]),
-                    "fiscal": ("Fiscal", st.session_state["f_fiscal_at"]),           
+                    "fiscal": ("Fiscal", st.session_state["f_fiscal_at"]),            
                     "aeac": ("AEAC", st.session_state["f_aeac_at"]),                  
                     "funcao_srv": ("Funcao", st.session_state["f_funcao_srv_at"]),    
                     "data": ("Data_Inicio_Datetime", st.session_state.get("f_slider_dts_at", None))
@@ -3060,8 +3046,8 @@ elif modo == "📊 Visualizar Base":
                                 min_dt_at = date(int(dts_validas_at.min().year), 1, 1)
                                 max_dt_at = date(int(dts_validas_at.max().year), 12, 31)
                             else:
-                                min_dt_at = date(2025, 1, 1)
-                                max_dt_at = date(2027, 12, 31)
+                                min_dt_at = date(hoje.year, 1, 1)
+                                max_dt_at = date(hoje.year, 12, 31)
 
                         if min_dt_at >= max_dt_at:
                             max_dt_at = min_dt_at + pd.Timedelta(days=1)
@@ -3069,6 +3055,7 @@ elif modo == "📊 Visualizar Base":
                         if st.session_state.get("last_ano_at_sel") != f_ano_at:
                             st.session_state["last_ano_at_sel"] = f_ano_at
                             st.session_state["f_slider_dts_at"] = (min_dt_at, max_dt_at)
+                            st.session_state["slider_dts_atvs_tab2"] = (min_dt_at, max_dt_at)
 
                         val_atual_sl_at = st.session_state.get("f_slider_dts_at", (min_dt_at, max_dt_at))
                         v_start_at = max(min_dt_at, min(val_atual_sl_at[0], max_dt_at))
@@ -3168,10 +3155,7 @@ elif modo == "📊 Visualizar Base":
 
                 df_exib_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, None)
 
-                df_exib_at["Data de Início"] = df_exib_at["Data_Inicio_Datetime"].dt.date
-                df_exib_at["Data de Término"] = df_exib_at["Data_Termino_Datetime"].dt.date
-
-                # 4. COLUNAS REORDENADAS COM OS DADOS CRUZADOS NO FINAL
+                # 4. COLUNAS REORDENADAS E FORMATAÇÃO VISUAL
                 COLS_TABELA_ATIVIDADES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Codigo_Atividade", 
                     "Nome da Atividade", "Status de Conclusão", "Papel_Institucional", "Coordenador_Operacao", 
@@ -3183,11 +3167,14 @@ elif modo == "📊 Visualizar Base":
                     "Número da PCDP", "Periculosidade/Insalubridade", "Tema da Atividade", 
                     "Objetivo da Atividade", "Tipo de Atividade", 
                     "Avaliacao_Qualidade", "Avaliacao_Feedback", "Observações",
-                    "Fiscal", "AEAC", "Funcao"
+                    "Fiscal", "AEAC", "Funcao", "Id_Str"
                 ]
 
                 cols_at_validas = [c for c in COLS_TABELA_ATIVIDADES if c in df_exib_at.columns]
                 df_tab_at = df_exib_at[cols_at_validas].copy()
+                
+                df_tab_at["Data de Início"] = df_tab_at["Data de Início"].apply(converter_dt_seguro).dt.date
+                df_tab_at["Data de Término"] = df_tab_at["Data de Término"].apply(converter_dt_seguro).dt.date
                 
                 df_tab_at["Resultado_Indicador"] = df_tab_at["Resultado_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
                 df_tab_at["Dias_Gastos_Plan"] = df_tab_at["Dias_Gastos_Plan"].apply(lambda v: formatar_numero_br(v, 1))
@@ -3215,69 +3202,68 @@ elif modo == "📊 Visualizar Base":
                 df_tab_at.loc[~mascara_visibilidade, "Avaliacao_Qualidade"] = "🔒 Restrito"
                 df_tab_at.loc[~mascara_visibilidade, "Avaliacao_Feedback"] = "🔒 Restrito"
 
-                if "selecoes_atividades" not in st.session_state: st.session_state["selecoes_atividades"] = {}
-                if "version_ed_at" not in st.session_state: st.session_state["version_ed_at"] = 0
-
                 if [k for k, v in st.session_state["selecoes_atividades"].items() if v]:
-                    if st.button("✕ Desmarcar Todas as Atividades", type="secondary", key="btn_desm_at"):
+                    if st.button("✕ Desmarcar Todas as Atividades", type="secondary", key="btn_desm_at_t1"):
                         st.session_state["selecoes_atividades"] = {}
-                        st.session_state["version_ed_at"] += 1
                         st.rerun()
 
+                # 🚀 LÓGICA BLINDADA DO CHECKBOX NO DATA EDITOR
                 if pode_editar:
-                    df_tab_at.insert(0, "Selecionar", [st.session_state["selecoes_atividades"].get(str(int(row_id)), False) if pd.notna(row_id) else False for row_id in df_tab_at["Id"]])
+                    df_tab_at.insert(0, "Selecionar", [st.session_state["selecoes_atividades"].get(normalizar_id_t1(row_id), False) for row_id in df_tab_at["Id_Str"]])
                     colunas_travadas_at = {col: st.column_config.Column(disabled=True) for col in df_tab_at.columns if col != "Selecionar"}
                 else:
                     colunas_travadas_at = {col: st.column_config.Column(disabled=True) for col in df_tab_at.columns}
 
                 colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
+                colunas_travadas_at["Id_Str"] = None
+                
                 colunas_travadas_at["Status de Conclusão"] = st.column_config.TextColumn("Status de Conclusão", disabled=True)
                 colunas_travadas_at["Resultado_Indicador"] = st.column_config.TextColumn("Resultado Indicador", disabled=True)
                 colunas_travadas_at["Dias_Gastos_Plan"] = st.column_config.TextColumn("Dias Plan.", disabled=True)
                 colunas_travadas_at["Dias_Gastos_Exec"] = st.column_config.TextColumn("Dias Exec.", disabled=True)
                 colunas_travadas_at["Rec_Plan_Total"] = st.column_config.TextColumn("Rec. Plan. Total", disabled=True)
                 colunas_travadas_at["Rec_Exec_Total"] = st.column_config.TextColumn("Rec. Exec. Total", disabled=True)
-
                 colunas_travadas_at["Data de Início"] = st.column_config.DateColumn("Data de Início", format="DD/MM/YYYY", disabled=True)
                 colunas_travadas_at["Data de Término"] = st.column_config.DateColumn("Data de Término", format="DD/MM/YYYY", disabled=True)
 
-                colunas_travadas_at["Fiscal"] = st.column_config.TextColumn("Fiscal?", disabled=True)
-                colunas_travadas_at["AEAC"] = st.column_config.TextColumn("AEAC?", disabled=True)
-                colunas_travadas_at["Funcao"] = st.column_config.TextColumn("Cargo/Função", disabled=True)
+                # 🚀 Chave Fixa para o Editor
+                evento_tabela_at = st.data_editor(df_tab_at, hide_index=True, use_container_width=True, column_config=colunas_travadas_at, key="editor_atividades_t1")
 
-                key_dinamica_at = f"editor_atividades_v{st.session_state['version_ed_at']}"
-                tabela_at = st.data_editor(df_tab_at, hide_index=True, use_container_width=True, column_config=colunas_travadas_at, key=key_dinamica_at)
-
-                if pode_editar and st.session_state[key_dinamica_at] and "edited_rows" in st.session_state[key_dinamica_at]:
-                    for idx_l, alt in st.session_state[key_dinamica_at]["edited_rows"].items():
-                        if "Selecionar" in alt:
-                            alvo_at = df_tab_at.iloc[int(idx_l)]
-                            id_r_at = str(alvo_at["Id"])
-                            uf_l_at = str(alvo_at.get("UF_Acao_PNAPA", "")).strip()
-                            if perfil_usuario == "Editor Regional" and uf_l_at != uf_usuario and alt["Selecionar"] is True:
-                                st.error(f"⛔ Acesso Negado: Como Editor Regional ({uf_usuario}), você não tem permissão para editar registros da UF: {uf_l_at}.")
-                                st.session_state["selecoes_atividades"][id_r_at] = False
+                if pode_editar and st.session_state.get("editor_atividades_t1") and "edited_rows" in st.session_state["editor_atividades_t1"]:
+                    houve_alteracao_at = False
+                    for idx_row, dict_alteracao in st.session_state["editor_atividades_t1"]["edited_rows"].items():
+                        if "Selecionar" in dict_alteracao:
+                            row_alvo = df_tab_at.iloc[int(idx_row)]
+                            id_alvo_str = str(row_alvo["Id_Str"])
+                            uf_alvo = str(row_alvo.get("UF_Acao_PNAPA", "")).strip()
+                            
+                            if perfil_usuario == "Editor Regional" and uf_alvo != uf_usuario and dict_alteracao["Selecionar"] is True:
+                                st.error(f"⛔ Acesso Negado: Como Editor Regional ({uf_usuario}), você não tem permissão para editar registros da UF: {uf_alvo}.")
+                                st.session_state["selecoes_atividades"][id_alvo_str] = False
                             else:
-                                st.session_state["selecoes_atividades"][id_r_at] = alt["Selecionar"]
-                            st.rerun()
+                                st.session_state["selecoes_atividades"][id_alvo_str] = dict_alteracao["Selecionar"]
+                            houve_alteracao_at = True
+                            
+                    if houve_alteracao_at:
+                        st.rerun()
 
-                ids_marcados_at = [k for k, v in st.session_state["selecoes_atividades"].items() if v]
+                ids_marcados_at = [k for k, v in st.session_state["selecoes_atividades"].items() if v is True]
+                df_at_sel = df_exib_at[df_exib_at["Id_Str"].isin(ids_marcados_at)]
 
-                df_at_sel = df_exib_at[df_exib_at["Id"].astype(str).isin(ids_marcados_at)]
-
+                # --- PAINEL DE OPERAÇÃO DE ATIVIDADES ---
                 if not pode_editar:
                     st.info("👁️ **Modo Somente Leitura:** Apenas Administradores e Editores Regionais podem editar Atividades.")
                 elif df_at_sel.empty:
                     st.caption("💡 *Selecione uma ou mais atividades acima para editar ou excluir.*")
                 else:
-                    ids_at_lista = df_at_sel["Id"].astype(str).tolist()
+                    ids_at_lista = df_at_sel["Id_Str"].tolist()
                     qtd_at_sel = len(ids_at_lista)
                     st.markdown("---")
                     st.markdown(f"### 🛠️ Central de Operações de Atividades ({qtd_at_sel} item(ns) selecionado(s))")
                     
                     with st.popover("🗑️ Remover Atividade(s) Selecionada(s)", use_container_width=True):
                         st.markdown(f"⚠️ Deseja apagar definitivamente a(s) Atividade(s) ID: **{', '.join(ids_at_lista)}**?")
-                        if st.button("Confirmar Exclusão de Atividades", type="primary", key="btn_del_at_tab"):
+                        if st.button("Confirmar Exclusão de Atividades", type="primary", key="btn_del_at_tab_t1"):
                             payloads_del = [{"Acao": "Excluir", "Id": str(id_del)} for id_del in ids_at_lista]
                             for p_del in payloads_del: requests.post(URL_FLOW_PRINCIPAL, json=p_del, timeout=20)
                             st.cache_data.clear()
@@ -3289,10 +3275,10 @@ elif modo == "📊 Visualizar Base":
 
                     if qtd_at_sel == 1:
                         reg_at_alvo = df_at_sel.iloc[0]
-                        id_at_ref = str(reg_at_alvo["Id"])
+                        id_at_ref = normalizar_id_t1(reg_at_alvo["Id"])
                         st.markdown(f"#### 📝 Edição Individual da Atividade (ID: **{id_at_ref}**)")
 
-                        val_ano_at = int(pd.to_numeric(reg_at_alvo.get("Ano da Ação"), errors='coerce') or 2026)
+                        val_ano_at = int(pd.to_numeric(reg_at_alvo.get("Ano da Ação"), errors='coerce') or hoje.year)
                         val_num_acao_at = str(reg_at_alvo.get("Número da Ação PNAPA", ""))
                         val_nome_acao_at = str(reg_at_alvo.get("Nome da Ação PNAPA", ""))
                         val_indicador_at = str(reg_at_alvo.get("Indicador", ""))
@@ -3307,7 +3293,13 @@ elif modo == "📊 Visualizar Base":
                         with aba1_at:
                             st.markdown("##### 🗂️ Ação PNAPA Vinculada (Pai)")
                             df_pna_vinc_pool = df_pnapas[df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL"].copy()
-                            lista_opcoes_vinc = sorted((df_pnapas_op["Acao_Ano"].astype(str) + " - " + df_pnapas_op["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas_op.empty else []
+                            
+                            df_pnapas_op_vinc = df_pnapas[
+                                ~df_pnapas["Num_Acao_PNAPA"].astype(str).str.upper().str.contains("DIPRO") &
+                                ~df_pnapas["Acao_Ano"].astype(str).str.upper().str.contains("DIPRO")
+                            ].copy() if not df_pnapas.empty else pd.DataFrame()
+
+                            lista_opcoes_vinc = sorted((df_pnapas_op_vinc["Acao_Ano"].astype(str) + " - " + df_pnapas_op_vinc["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas_op_vinc.empty else []
                             cod_atual_salvo = str(reg_at_alvo.get("Número da Ação PNAPA", "")).strip()
                             
                             idx_pna_atual = 0
@@ -3326,7 +3318,6 @@ elif modo == "📊 Visualizar Base":
                                 apel_tmp = str(dados_novo_pai.get("Nome_Acao_Apelido", ""))
                                 val_nome_acao_at = apel_tmp if apel_tmp and apel_tmp.lower() != "nan" else str(dados_novo_pai.get("Nome_Acao_Completo", "")).strip()
                                 
-                                # 🚀 EXTRAÇÃO DA HERANÇA DIRETA DA AÇÃO
                                 val_indicador_at = str(dados_novo_pai["Indicador"])
                                 imp_raw = str(dados_novo_pai.get("Importância", "Ordinária")).strip()
                                 importancia_at = "Rotina" if imp_raw in ["Rotina", "Ordinária"] else "Finalística"
@@ -3402,12 +3393,10 @@ elif modo == "📊 Visualizar Base":
 
                             ed_nome_atv = st.text_input("Nome da Atividade / Operação:", value=nome_atv_prefill, key=f"t1_at_nomeatv_{id_at_ref}").strip()
                             lista_and_at = ["Prevista", "Concluída"]
-                            idx_and_at = lista_and_at.index(reg_at_alvo["Andamento"]) if reg_at_alvo.get("Andamento") in lista_and_at else 0
+                            idx_and_at = lista_and_at.index(reg_at_alvo.get("Andamento", "Prevista")) if reg_at_alvo.get("Andamento") in lista_and_at else 0
                             ed_andamento_at = st.selectbox("Andamento da Atividade:", lista_and_at, index=idx_and_at, key=f"t1_at_and_{id_at_ref}")
 
-                        
                         with aba2_at:
-                            # 🚀 Keys com val_num_acao_at forçam a recarga instantânea na troca da Ação
                             st.text_input("Indicador Oficial (Herdado)", value=val_indicador_at, disabled=True, key=f"t1_at_ind_{id_at_ref}_{val_num_acao_at}")
                             ed_res_ind_at = st.text_input("Resultado do Indicador (Aferição Real):", value=str(reg_at_alvo.get("Resultado_Indicador", "")), key=f"t1_at_resind_{id_at_ref}")
                             
@@ -3431,12 +3420,9 @@ elif modo == "📊 Visualizar Base":
                             ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica")) if reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
                                                 
                         with aba3_at:
-                            # 1. LISTAGEM ESTRITA DE SERVIDORES DA NOVA UF
                             lista_nomes_servidores = obter_servidores_por_uf(df_servidores, ed_uf_acao_val)
-                            
                             srv_atual_at = str(reg_at_alvo.get("Servidor", "")).strip()
                             
-                            # Seleciona o servidor atual se ele pertencer à UF escolhida; senão, reseta para o 1º da lista
                             if srv_atual_at in lista_nomes_servidores:
                                 idx_srv_at = lista_nomes_servidores.index(srv_atual_at)
                             else:
@@ -3448,7 +3434,6 @@ elif modo == "📊 Visualizar Base":
                             
                             c_at_rh1, c_at_rh2 = st.columns(2)
                             with c_at_rh1:
-                                # 🚀 Chave dinâmica vinculada à UF (recarrega limpo ao trocar de estado)
                                 ed_servidor_at = st.selectbox(
                                     f"Servidor Integrante / Responsável ({ed_uf_acao_val}):", 
                                     lista_nomes_servidores, 
@@ -3469,7 +3454,6 @@ elif modo == "📊 Visualizar Base":
                                     key=f"t1_at_func_{id_at_ref}_{ed_uf_acao_val}_{ed_servidor_at}"
                                 )
 
-                            # 🚀 2. RESGATE DINÂMICO DOS DADOS REAIS DO SERVIDOR
                             match_srv_at_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
                             if not match_srv_at_t1.empty:
                                 dados_s_linha = match_srv_at_t1.iloc[0]
@@ -3483,7 +3467,6 @@ elif modo == "📊 Visualizar Base":
                                 ed_uf_srv_at, ed_lot_at, ed_eq_at = ed_uf_acao_val, "Sede Superintendência", "Não"
                                 cad_fiscal_t1, cad_aeac_t1, cad_funcao_srv_t1 = "Não", "Não", ""
 
-                            # 🌡️ TERMÔMETRO VISUAL NA EDIÇÃO DA ATIVIDADE
                             dias_ed_temp = st.session_state.get(f"t1_at_dpl_{id_at_ref}", obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Plan")))
                             dados_term_at_ed = calcular_termometro_carga(
                                 df=df_atual,
@@ -3511,13 +3494,12 @@ elif modo == "📊 Visualizar Base":
                                 for err in dados_term_at_ed["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
                                 for avs in dados_term_at_ed["mensagens_aviso"]: st.warning(f"⚠️ **ALERTA:** {avs}")
 
-                            # 🚀 3. CAMPOS AUTOMÁTICOS SEM KEY FIXA (Renderizam o valor real a cada alteração)
                             st.text_input("UF do Servidor (Automático)", value=ed_uf_srv_at, disabled=True)
                             st.text_input("Lotação (Automático)", value=ed_lot_at, disabled=True)
                             st.text_input("Faz parte da Equipe de Emergências? (Automático)", value=ed_eq_at, disabled=True)
                             ed_pcdp_at = st.text_input("Número da PCDP:", value=str(reg_at_alvo.get("Número da PCDP", "")), key=f"t1_at_pcdp_{id_at_ref}")
                             
-                            st.markdown("<p style='font-weight:bold; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
+                            st.markdown("<p style='font-weight:bold; margin-top:12px; color:#03170a;'>📍 Geolocalização da Atividade</p>", unsafe_allow_html=True)
                             st.text_input("País", value="Brasil", disabled=True)
                             uf_oc_atual = str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "SP"))
                             idx_uf_oc_at = LISTA_UFS_COMPLETA.index(uf_oc_atual) if uf_oc_atual in LISTA_UFS_COMPLETA else 0
@@ -3536,12 +3518,14 @@ elif modo == "📊 Visualizar Base":
                             ed_dt_i_at = st.date_input("Data de Início:", value=val_dti_at, format="DD/MM/YYYY", key=f"t1_at_dti_{id_at_ref}")
                             ed_dt_f_at = st.date_input("Data de Término:", value=val_dtf_at, format="DD/MM/YYYY", key=f"t1_at_dtf_{id_at_ref}")
                             
-                            # 🚀 Nomes amigáveis de dias planejados e executados:
                             ed_dias_pl_at = st.number_input("Dias de Dedicação Planejados:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Plan")), step=0.5, format="%.1f", key=f"t1_at_dpl_{id_at_ref}")
                             ed_dias_ex_at = st.number_input("Dias de Dedicação Executados:", min_value=0.0, value=obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Exec")), step=0.5, format="%.1f", key=f"t1_at_dex_{id_at_ref}")
-                            ed_orig_at = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=LISTA_ORIGENS_RECURSO.index(reg_at_alvo["Origem do Recurso"]) if reg_at_alvo.get("Origem do Recurso") in LISTA_ORIGENS_RECURSO else 0, key=f"t1_at_orig_{id_at_ref}")
                             
-                            st.markdown("<p style='font-weight:bold; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
+                            origem_def = str(reg_at_alvo.get("Origem do Recurso", "SP"))
+                            idx_origem = LISTA_ORIGENS_RECURSO.index(origem_def) if origem_def in LISTA_ORIGENS_RECURSO else 0
+                            ed_orig_at = st.selectbox("Origem do Recurso:", LISTA_ORIGENS_RECURSO, index=idx_origem, key=f"t1_at_orig_{id_at_ref}")
+                            
+                            st.markdown("<p style='font-weight:bold; margin-top:15px; color:#03170a;'>Valores Orçamentários (Planejado vs Executado)</p>", unsafe_allow_html=True)
                             c_at_pl, c_at_ex = st.columns(2)
                             with c_at_pl:
                                 st.caption("Recursos Planejados")
@@ -3576,10 +3560,9 @@ elif modo == "📊 Visualizar Base":
 
                         ed_papel_heranca = papel_estado_at if papel_estado_at in LISTA_PAPEIS_INSTITUCIONAIS else ""
 
-                        if st.button("💾 Gravar Alterações da Atividade", type="primary", key=f"btn_salvar_at_{id_at_ref}"):
+                        if st.button("💾 Gravar Alterações da Atividade", type="primary", key=f"btn_salvar_at_t1_{id_at_ref}"):
                             bloqueio_coord = False
                             
-                            # 🛡️ TRAVA DO TERMÔMETRO NA GRAVAÇÃO DA ATIVIDADE (2027+)
                             res_val_atv_ed = calcular_termometro_carga(
                                 df=df_atual,
                                 df_srv_base=df_servidores,
@@ -3628,9 +3611,9 @@ elif modo == "📊 Visualizar Base":
                                 )
                                 executar_envio_sharepoint([payload_at])
                                 st.session_state["selecoes_atividades"] = {}
-                                st.session_state["version_ed_at"] += 1
                                 st.rerun()
-
+                    
+                    # Edição em Lote de Atividades
                     else:
                         st.info(f"👥 **Edição em Lote:** {qtd_at_sel} atividades selecionadas. Marque os campos nas abas abaixo para habilitar a edição seletiva em massa.")
                         edicoes_lote = {}
@@ -3642,8 +3625,12 @@ elif modo == "📊 Visualizar Base":
                         with l_aba1:
                             st.markdown("##### 🗂️ Ação PNAPA Vinculada (Pai)")
                             if st.checkbox("Alterar Ação PNAPA Vinculada?", key="chk_acao_lt"):
-                                df_pna_vinc_pool = df_pnapas[df_pnapas["Num_Acao_PNAPA"].astype(str).str.strip().str.upper() != "DIPRO_GLOBAL"].copy()
-                                lista_opcoes_vinc_lt = sorted((df_pnapas_op["Acao_Ano"].astype(str) + " - " + df_pnapas_op["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas_op.empty else []
+                                df_pnapas_op_vinc = df_pnapas[
+                                    ~df_pnapas["Num_Acao_PNAPA"].astype(str).str.upper().str.contains("DIPRO") &
+                                    ~df_pnapas["Acao_Ano"].astype(str).str.upper().str.contains("DIPRO")
+                                ].copy() if not df_pnapas.empty else pd.DataFrame()
+
+                                lista_opcoes_vinc_lt = sorted((df_pnapas_op_vinc["Acao_Ano"].astype(str) + " - " + df_pnapas_op_vinc["Nome_Acao_Apelido"].astype(str)).tolist()) if not df_pnapas_op_vinc.empty else []
                                 sel_acao_pai_lt = st.selectbox("Selecione a Nova Ação PNAPA:", lista_opcoes_vinc_lt if lista_opcoes_vinc_lt else ["Nenhuma Ação Cadastrada"], key="in_acao_lt")
                                 if lista_opcoes_vinc_lt:
                                     cod_novo_pai_lt = sel_acao_pai_lt.split(" - ")[0].strip()
@@ -3684,6 +3671,7 @@ elif modo == "📊 Visualizar Base":
                                         if num_extraido > maior_num_lt: maior_num_lt = num_extraido
                                 cod_base_ano_lt = acao_base_lt if "-" in str(acao_base_lt) else f"{acao_base_lt}-{df_at_sel.iloc[0].get('Ano da Ação', 2026)}"
                                 cod_sug_lt = f"{cod_base_ano_lt}-{uf_base_lt}-ATV{maior_num_lt + 1:02d}"
+                                
                                 opcoes_atvs_existentes_lt = []
                                 mapa_dados_atv_lt = {}
                                 for cod_unic in sorted(df_atvs_acao_uf_lt["Codigo_Atividade"].dropna().unique()):
@@ -3692,6 +3680,7 @@ elif modo == "📊 Visualizar Base":
                                     label_ex_lt = f"{cod_unic} — {nome_atv_ex}"
                                     opcoes_atvs_existentes_lt.append(label_ex_lt)
                                     mapa_dados_atv_lt[label_ex_lt] = nome_atv_ex
+                                    
                                 modo_cod_lt = st.radio("Definição do Novo Código:", ["➕ Digitar Manualmente / Automático", "🔗 Vincular a Atividade Existente"], horizontal=True)
                                 if modo_cod_lt == "➕ Digitar Manualmente / Automático":
                                     edicoes_lote["Codigo_Atividade"] = st.text_input("Novo Código:", value=cod_sug_lt, key="in_cod_lt_man").strip().upper()
@@ -3918,7 +3907,6 @@ elif modo == "📊 Visualizar Base":
                                     
                                     executar_envio_sharepoint(payloads_lote)
                                     st.session_state["selecoes_atividades"] = {}
-                                    st.session_state["version_ed_at"] += 1
                                     st.session_state.pop("lote_nome_puxado", None)
                                     st.rerun()
                         else:
