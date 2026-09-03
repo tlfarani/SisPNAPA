@@ -5779,28 +5779,29 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         ].copy()
 
         if not df_acoes_cadastradas.empty:
-            # 🚀 Blindagem federativa da UF Coordenadora
             df_acoes_cadastradas["UF_Coordenadora"] = df_acoes_cadastradas.apply(obter_uf_coordenadora_segura, axis=1)
             
-            # Blindagem: Apenas Linhas de Coordenação somam na Meta Física do Plano Nacional
             df_acoes_cadastradas["Meta_Num"] = df_acoes_cadastradas.apply(
                 lambda r: float(pd.to_numeric(r.get("Meta_Indicador", 0), errors='coerce') or 0.0) 
                 if str(r.get("Papel_Institucional", "Coordenação")).strip() == "Coordenação" else 0.0, 
                 axis=1
             )
             
-            r_d = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Diarias", 0), errors='coerce').fillna(0.0)
-            r_p = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Passagens", 0), errors='coerce').fillna(0.0)
-            r_o = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Outras_Despesas", 0), errors='coerce').fillna(0.0)
-            df_acoes_cadastradas["Rec_Plan_Num"] = r_d + r_p + r_o
+            # 🚀 BLINDAGEM NUMÉRICA DEFINITIVA (Sobrescreve com float puro)
+            df_acoes_cadastradas["Rec_Plan_Diarias"] = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Diarias", 0), errors='coerce').fillna(0.0)
+            df_acoes_cadastradas["Rec_Plan_Passagens"] = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Passagens", 0), errors='coerce').fillna(0.0)
+            df_acoes_cadastradas["Rec_Plan_Outras_Despesas"] = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Outras_Despesas", 0), errors='coerce').fillna(0.0)
+            
+            df_acoes_cadastradas["Rec_Plan_Num"] = (
+                df_acoes_cadastradas["Rec_Plan_Diarias"] + 
+                df_acoes_cadastradas["Rec_Plan_Passagens"] + 
+                df_acoes_cadastradas["Rec_Plan_Outras_Despesas"]
+            )
             df_acoes_cadastradas["Dias_Plan_Num"] = pd.to_numeric(df_acoes_cadastradas.get("Dias_Gastos_Plan", 0), errors='coerce').fillna(0.0)
             df_acoes_cadastradas["Num_Pna_Limpo"] = df_acoes_cadastradas["Número da Ação PNAPA"].astype(str).str.strip().str.upper()
         else:
-            df_acoes_cadastradas["UF_Coordenadora"] = []
-            df_acoes_cadastradas["Meta_Num"] = []
-            df_acoes_cadastradas["Rec_Plan_Num"] = []
-            df_acoes_cadastradas["Dias_Plan_Num"] = []
-            df_acoes_cadastradas["Num_Pna_Limpo"] = []
+            for col_vazia in ["UF_Coordenadora", "Meta_Num", "Rec_Plan_Diarias", "Rec_Plan_Passagens", "Rec_Plan_Outras_Despesas", "Rec_Plan_Num", "Dias_Plan_Num", "Num_Pna_Limpo"]:
+                df_acoes_cadastradas[col_vazia] = []
 
         # =====================================================================
         # 3. SEPARAÇÃO HIERÁRQUICA: MACROAÇÕES (N1) E AÇÕES SETORIAIS (N2)
@@ -5937,6 +5938,39 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 unsafe_allow_html=True
             )
 
+        # =====================================================================
+        # 4.2 PAINEL RETRÁTIL: STATUS DA REDE FEDERATIVA & ADESÃO DAS UFS
+        # =====================================================================
+        with st.expander("🗺️ **Status da Rede Federativa & Adesão das UFs ao Ciclo**", expanded=False):
+            st.markdown("Acompanhamento das unidades da federação que já integraram o planejamento anual e identificação de lacunas federativas.")
+            
+            ufs_com_propostas = sorted(df_acoes_cadastradas["UF_Acao_PNAPA"].dropna().unique().tolist()) if not df_acoes_cadastradas.empty else []
+            todas_ufs_lista = sorted(LISTA_UFS_COMPLETA)
+            ufs_sem_propostas = sorted([u for u in todas_ufs_lista if u not in ufs_com_propostas])
+            
+            c_fed1, c_fed2 = st.columns([1.5, 1])
+            with c_fed1:
+                st.markdown(f"**🟢 UFs com Propostas Cadastradas ({len(ufs_com_propostas)}/27):**")
+                if ufs_com_propostas:
+                    tags_aderidas = " ".join([
+                        f"<span style='background-color: #dcfce7; color: #166534; border: 1px solid #86efac; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.88em; margin-right: 4px; display: inline-block; margin-bottom: 4px;'>{u}</span>"
+                        for u in ufs_com_propostas
+                    ])
+                    st.markdown(tags_aderidas, unsafe_allow_html=True)
+                else:
+                    st.info("Nenhuma UF registrou propostas para este ano.")
+
+            with c_fed2:
+                st.markdown(f"**⏳ UFs sem Registro no Exercício ({len(ufs_sem_propostas)}/27):**")
+                if ufs_sem_propostas:
+                    tags_pendentes = " ".join([
+                        f"<span style='background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.88em; margin-right: 4px; display: inline-block; margin-bottom: 4px;'>{u}</span>"
+                        for u in ufs_sem_propostas
+                    ])
+                    st.markdown(tags_pendentes, unsafe_allow_html=True)
+                else:
+                    st.success("🎉 Todas as 27 UFs já possuem registro no ciclo!")
+        
         st.markdown("---")
 
         # =====================================================================
@@ -6118,11 +6152,11 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
                     # KPIs de Totais da Matriz
                     st.markdown("---")
-                    tot_dias_m = df_matriz["Dias_Plan_Num"].sum()
-                    tot_diarias_m = df_matriz["Rec_Plan_Diarias"].sum()
-                    tot_pass_m = df_matriz["Rec_Plan_Passagens"].sum()
-                    tot_outras_m = df_matriz["Rec_Plan_Outras_Despesas"].sum()
-                    tot_geral_m = df_matriz["Rec_Plan_Num"].sum()
+                    tot_dias_m = pd.to_numeric(df_matriz["Dias_Plan_Num"], errors='coerce').fillna(0.0).sum()
+                    tot_diarias_m = pd.to_numeric(df_matriz["Rec_Plan_Diarias"], errors='coerce').fillna(0.0).sum()
+                    tot_pass_m = pd.to_numeric(df_matriz["Rec_Plan_Passagens"], errors='coerce').fillna(0.0).sum()
+                    tot_outras_m = pd.to_numeric(df_matriz["Rec_Plan_Outras_Despesas"], errors='coerce').fillna(0.0).sum()
+                    tot_geral_m = pd.to_numeric(df_matriz["Rec_Plan_Num"], errors='coerce').fillna(0.0).sum()
 
                     c_tm1, c_tm2, c_tm3, c_tm4, c_tm5 = st.columns(5)
                     c_tm1.metric("Esforço de Campo", f"{tot_dias_m:.1f} dias")
