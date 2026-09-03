@@ -5973,7 +5973,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 else:
                     st.success("🎉 Todas as 27 UFs já possuem registro no ciclo!")
         
-        st.markdown("---")
+        st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
 
         # =====================================================================
         # 4.3 PAINEL RETRÁTIL: MATRIZ DE ALOCAÇÃO DE ESFORÇO & RECURSOS
@@ -6167,6 +6167,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     c_tm4.metric("Total Outras", formatar_moeda_br(tot_outras_m))
                     c_tm5.metric("Orçamento Total", formatar_moeda_br(tot_geral_m))
         
+        st.markdown("---")
         st.markdown("### 🌳 Árvore de Pactuação por Macroação & Validação de Tetos Setoriais")
 
         todas_ufs_brasil = sorted(LISTA_UFS_COMPLETA)
