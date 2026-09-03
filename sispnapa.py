@@ -5938,10 +5938,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             )
 
         st.markdown("---")
-        st.markdown("### 🌳 Árvore de Pactuação por Macroação & Validação de Tetos Setoriais")
-
-        todas_ufs_brasil = sorted(LISTA_UFS_COMPLETA)
-
 
         # =====================================================================
         # 4.3 PAINEL RETRÁTIL: MATRIZ DE ALOCAÇÃO DE ESFORÇO & RECURSOS
@@ -6134,6 +6130,11 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     c_tm3.metric("Total Passagens", formatar_moeda_br(tot_pass_m))
                     c_tm4.metric("Total Outras", formatar_moeda_br(tot_outras_m))
                     c_tm5.metric("Orçamento Total", formatar_moeda_br(tot_geral_m))
+        
+        st.markdown("### 🌳 Árvore de Pactuação por Macroação & Validação de Tetos Setoriais")
+
+        todas_ufs_brasil = sorted(LISTA_UFS_COMPLETA)
+        
         
         # =====================================================================
         # 5. LOOP PRINCIPAL: MACROAÇÕES (NÍVEL 1)
