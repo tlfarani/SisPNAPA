@@ -2938,7 +2938,6 @@ elif modo == "📊 Visualizar Base":
                             papel_ed = str(ed_papel_inst).strip()
                             uf_coord_ed = str(ed_uf_coord).strip().upper()
                             
-                            # Verifica se OUTRA linha já possui a mesma combinação (Ação + UF Proponente + Papel + UF Coordenadora + Tema)
                             duplicata_existente = df_atual[
                                 (df_atual["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
                                 (df_atual["Id"].astype(str).str.split('.').str[0] != str(id_ac_ref).split('.')[0]) &
