@@ -9,6 +9,7 @@ import requests
 import google.generativeai as genai
 import unicodedata
 
+
 st.set_page_config(page_title="SisPNAPA - Emergências Ambientais e Climáticas", layout="wide")
 
 # =================================================================
@@ -820,6 +821,513 @@ def calcular_capacidade_equipes_uf(df_atual, df_srv_base, ano_alvo):
             dados["Status"] = "⚪ Sem Equipe Cadastrada"
 
     return resumo_ufs
+
+import io
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib import colors
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfgen import canvas
+
+# =====================================================================
+# --- PALETA INSTITUCIONAL VERDE IBAMA ---
+# =====================================================================
+VERDE_IBAMA_ESCURO = "#293D09"   # Verde floresta institucional dos cabeçalhos
+VERDE_IBAMA_OLIVA  = "#506B23"   # Verde oliva para sub-banners e destaques
+FUNDO_ZEBRA_TABELA = "#F8FAF8"   # Alternância suave de linhas
+BORDA_TABELA       = "#CBD5E1"   # Borda cinza suave
+
+# =====================================================================
+# --- CANVAS REPORTLAB (RODAPÉ OFICIAL: PÁGINA X DE Y) ---
+# =====================================================================
+class NumberedCanvasPNAPA(canvas.Canvas):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._saved_page_states = []
+
+    def showPage(self):
+        self._saved_page_states.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        num_pages = len(self._saved_page_states)
+        for state in self._saved_page_states:
+            self.__dict__.update(state)
+            self.draw_footer(num_pages)
+            super().showPage()
+        super().save()
+
+    def draw_footer(self, page_count):
+        self.saveState()
+        self.setFont("Helvetica", 8)
+        self.setFillColor(colors.HexColor("#475569"))
+        self.setStrokeColor(colors.HexColor(BORDA_TABELA))
+        self.setLineWidth(0.5)
+        self.line(20, 25, 841.89 - 20, 25)
+        self.drawString(20, 14, "SisPNAPA — Sistema Integrado de Gestão do Plano Nacional Anual de Proteção Ambiental")
+        self.drawRightString(841.89 - 20, 14, f"Página {self._pageNumber} de {page_count}")
+        self.restoreState()
+
+
+# =====================================================================
+# --- GERADOR OFICIAL DE PDF (REPORTLAB EM CORES DO IBAMA) ---
+# =====================================================================
+def gerar_minuta_portaria_pdf(df_anexo_i: pd.DataFrame, df_anexo_ii: pd.DataFrame, ano_ref: int) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4), # 841.89 x 595.27 pt
+        leftMargin=20.94,
+        rightMargin=20.94,
+        topMargin=20,
+        bottomMargin=30
+    )
+
+    styles = getSampleStyleSheet()
+    
+    # Estilos de Título do Banner Superior
+    st_ban_tit = ParagraphStyle('BanTit', fontName='Helvetica-Bold', fontSize=11, leading=13, alignment=1, textColor=colors.white)
+    st_ban_sub = ParagraphStyle('BanSub', fontName='Helvetica-Bold', fontSize=8.5, leading=11, alignment=1, textColor=colors.white)
+    
+    # Estilos de Célula das Tabelas
+    st_th = ParagraphStyle('Th', fontName='Helvetica-Bold', fontSize=7.2, leading=8.5, alignment=1, textColor=colors.white)
+    st_cell = ParagraphStyle('Td', fontName='Helvetica', fontSize=6.8, leading=8.2, textColor=colors.HexColor("#03170a"))
+    st_cell_b = ParagraphStyle('TdB', fontName='Helvetica-Bold', fontSize=6.8, leading=8.2, textColor=colors.HexColor("#03170a"))
+    st_center = ParagraphStyle('TdC', parent=st_cell, alignment=1)
+    st_center_b = ParagraphStyle('TdCB', parent=st_cell_b, alignment=1)
+    st_right = ParagraphStyle('TdR', parent=st_cell, alignment=2)
+    st_right_b = ParagraphStyle('TdRB', parent=st_cell_b, alignment=2)
+    
+    st_nota = ParagraphStyle('Nota', fontName='Helvetica-Oblique', fontSize=6.8, leading=8.5, textColor=colors.HexColor("#334155"))
+
+    story = []
+
+    # -------------------------------------------------------------
+    # PÁGINA 1: ANEXO I (AÇÕES ESTRATÉGICAS / MACRO)
+    # -------------------------------------------------------------
+    banner_i_data = [
+        [Paragraph(f"PLANO NACIONAL DE ATUAÇÃO PREVENTIVA AMBIENTAL — PNAPA {ano_ref}", st_ban_tit)],
+        [Paragraph("ANEXO I — MINUTA DE PUBLICAÇÃO DE AÇÕES ESTRATÉGICAS (PORTARIA PNAPA)", st_ban_sub)]
+    ]
+    t_banner_i = Table(banner_i_data, colWidths=[800], rowHeights=[22, 19])
+    t_banner_i.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(VERDE_IBAMA_ESCURO)),
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor(VERDE_IBAMA_OLIVA)),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+    ]))
+    story.append(t_banner_i)
+    story.append(Spacer(1, 8))
+
+    col_w_i = [50, 115, 175, 80, 65, 115, 45, 80, 75] # Total = 800 pt exatos
+    headers_i = [
+        "Código\nPNAPA", "Título da Ação\nEstratégica", "Descrição / Escopo\nNacional",
+        "Liderança\nSede", "UFs\nParticipantes", "Indicador\nOficial",
+        "Meta\nNac.", "Orçamento Total\nDemandado (R$)", "Período de\nExecução"
+    ]
+    table_data_i = [[Paragraph(h.replace('\n', '<br/>'), st_th) for h in headers_i]]
+
+    for _, r in df_anexo_i.iterrows():
+        table_data_i.append([
+            Paragraph(str(r.get('Código PNAPA', '')), st_center_b),
+            Paragraph(str(r.get('Título da Ação Estratégica', '')), st_cell_b),
+            Paragraph(str(r.get('Descrição / Escopo Nacional', '')), st_cell),
+            Paragraph(str(r.get('Liderança Sede', '')), st_cell),
+            Paragraph(str(r.get('UFs Participantes', '')), st_center),
+            Paragraph(str(r.get('Indicador Oficial', '')), st_cell),
+            Paragraph(str(r.get('Meta Nac.', '0,0')), st_right),
+            Paragraph(str(r.get('Orçamento Total Demandado (R$)', 'R$ 0,00')), st_right_b),
+            Paragraph(str(r.get('Período de Execução', f'01/01/{ano_ref} a 31/12/{ano_ref}')), st_center)
+        ])
+
+    table_i = Table(table_data_i, colWidths=col_w_i, repeatRows=1)
+    table_i.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(VERDE_IBAMA_ESCURO)),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor(BORDA_TABELA)),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(FUNDO_ZEBRA_TABELA)])
+    ]))
+    story.append(table_i)
+
+    # -------------------------------------------------------------
+    # PÁGINA 2: ANEXO II (MATRIZ DE PACTUAÇÃO SETORIAL)
+    # -------------------------------------------------------------
+    story.append(PageBreak())
+
+    banner_ii_data = [
+        [Paragraph(f"PLANO NACIONAL DE ATUAÇÃO PREVENTIVA AMBIENTAL — PNAPA {ano_ref}", st_ban_tit)],
+        [Paragraph("ANEXO II — MATRIZ DE PACTUAÇÃO SETORIAL E ADESÃO FEDERATIVA", st_ban_sub)]
+    ]
+    t_banner_ii = Table(banner_ii_data, colWidths=[800], rowHeights=[22, 19])
+    t_banner_ii.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(VERDE_IBAMA_ESCURO)),
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor(VERDE_IBAMA_OLIVA)),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+    ]))
+    story.append(t_banner_ii)
+    story.append(Spacer(1, 8))
+
+    col_w_ii = [40, 50, 90, 50, 70, 60, 85, 25, 85, 45, 65, 75, 60] # Total = 800 pt exatos
+    headers_ii = [
+        "Ação\nMãe", "Código\nSetorial", "Título /\nModal", "Tema /\nModal",
+        "Especialista\nSede", "Diretriz\nAdesão", "Governança /\nUFs", "Qtd\nUFs",
+        "Indicador\nSetorial", "Meta\nSetorial", "Teto Ceneac\n(R$)", "Orçamento\nDemandado", "Cronograma\nPrevisto"
+    ]
+    table_data_ii = [[Paragraph(h.replace('\n', '<br/>'), st_th) for h in headers_ii]]
+
+    span_commands = []
+    current_mae = None
+    start_row = 1
+
+    for idx, r in df_anexo_ii.iterrows():
+        row_num = idx + 1
+        mae = str(r.get('Ação Mãe', '')).strip()
+
+        # Agrupamento visual da Ação Mãe
+        if current_mae is None:
+            current_mae = mae
+            start_row = row_num
+        elif mae != current_mae:
+            if row_num - 1 > start_row:
+                span_commands.append(('SPAN', (0, start_row), (0, row_num - 1)))
+            current_mae = mae
+            start_row = row_num
+
+        gov_text = str(r.get('Governança / UFs', '')).replace('\n', '<br/>')
+        
+        table_data_ii.append([
+            Paragraph(mae, st_center_b),
+            Paragraph(str(r.get('Código Setorial', '')), st_center_b),
+            Paragraph(str(r.get('Título / Modal', '')), st_cell_b),
+            Paragraph(str(r.get('Tema / Modal', '')), st_center),
+            Paragraph(str(r.get('Especialista Sede', '')), st_cell),
+            Paragraph(str(r.get('Diretriz Adesão', '')), st_cell),
+            Paragraph(gov_text, st_cell),
+            Paragraph(str(r.get('Qtd UFs', '0')), st_center),
+            Paragraph(str(r.get('Indicador Setorial', '')), st_cell),
+            Paragraph(str(r.get('Meta Setorial', '0,0')), st_right),
+            Paragraph(str(r.get('Teto Ceneac (R$)', 'R$ 0,00')), st_right),
+            Paragraph(str(r.get('Orçamento Demandado', 'R$ 0,00')), st_right_b),
+            Paragraph(str(r.get('Cronograma Previsto', f'Ciclo Anual {ano_ref}')), st_center)
+        ])
+
+    if len(df_anexo_ii) >= start_row and len(df_anexo_ii) > start_row:
+        span_commands.append(('SPAN', (0, start_row), (0, len(df_anexo_ii))))
+
+    base_style_ii = [
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(VERDE_IBAMA_ESCURO)),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2.5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2.5),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor(BORDA_TABELA)),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(FUNDO_ZEBRA_TABELA)])
+    ]
+    base_style_ii.extend(span_commands)
+
+    table_ii = Table(table_data_ii, colWidths=col_w_ii, repeatRows=1)
+    table_ii.setStyle(TableStyle(base_style_ii))
+    story.append(table_ii)
+
+    # Nota de Rodapé Institucional
+    story.append(Spacer(1, 6))
+    nota_txt = (
+        "<b>* Nota de Governança Federativa:</b> As participações pactuadas sob o papel de Apoio Operacional possuem "
+        "compromisso institucional mensurado pelo esforço em dias de dedicação e alocação orçamentária de custeio/diárias, "
+        "vinculando-se ao alcance da meta física e do produto final sob responsabilidade formal da UF Coordenadora."
+    )
+    story.append(Paragraph(nota_txt, st_nota))
+
+    doc.build(story, canvasmaker=NumberedCanvasPNAPA)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# =====================================================================
+# --- GERADOR OFICIAL DE EXCEL (OPENPYXL EM CORES DO IBAMA) ---
+# =====================================================================
+def gerar_minuta_portaria_excel(df_anexo_i: pd.DataFrame, df_anexo_ii: pd.DataFrame, ano_ref: int) -> bytes:
+    wb = Workbook()
+    
+    # Fontes e Estilos
+    f_tit = Font(name="Calibri", size=13, bold=True, color="FFFFFF")
+    f_sub = Font(name="Calibri", size=10, bold=True, color="03170A")
+    f_th = Font(name="Calibri", size=9.5, bold=True, color="FFFFFF")
+    f_body = Font(name="Calibri", size=9, color="03170A")
+    f_body_b = Font(name="Calibri", size=9, bold=True, color="03170A")
+    f_nota = Font(name="Calibri", size=8.5, italic=True, color="475569")
+    
+    fill_verde_escuro = PatternFill(start_color="293D09", end_color="293D09", fill_type="solid")
+    fill_sub_banner   = PatternFill(start_color="F2F5F3", end_color="F2F5F3", fill_type="solid")
+    fill_zebra        = PatternFill(start_color="F8FAF8", end_color="F8FAF8", fill_type="solid")
+    
+    border_thin = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1')
+    )
+    
+    align_c = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    align_l = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    align_r = Alignment(horizontal="right", vertical="center")
+
+    def parse_float(v):
+        if isinstance(v, (int, float)): return float(v)
+        try: return float(str(v).replace('R$', '').replace('.', '').replace(',', '.').strip())
+        except: return 0.0
+
+    # -------------------------------------------------------------
+    # ABA 1: ANEXO I - MACRO (PORTARIA)
+    # -------------------------------------------------------------
+    ws1 = wb.active
+    ws1.title = "Anexo I - Macro (Portaria)"
+    ws1.views.sheetView[0].showGridLines = True
+
+    ws1.merge_cells("A1:I1")
+    c_t1 = ws1["A1"]
+    c_t1.value = f"PLANO NACIONAL DE ATUAÇÃO PREVENTIVA AMBIENTAL — PNAPA {ano_ref}"
+    c_t1.font, c_t1.fill, c_t1.alignment = f_tit, fill_verde_escuro, align_c
+    ws1.row_dimensions[1].height = 28
+
+    ws1.merge_cells("A2:I2")
+    c_s1 = ws1["A2"]
+    c_s1.value = "ANEXO I — MINUTA DE PUBLICAÇÃO DE AÇÕES ESTRATÉGICAS (PORTARIA PNAPA)"
+    c_s1.font, c_s1.fill, c_s1.alignment = f_sub, fill_sub_banner, align_c
+    ws1.row_dimensions[2].height = 20
+
+    h_i = [
+        "Código PNAPA", "Título da Ação Estratégica", "Descrição / Escopo Nacional",
+        "Liderança Sede", "UFs Participantes", "Indicador Oficial",
+        "Meta Nacional", "Orçamento Total Demandado (R$)", "Período de Execução"
+    ]
+    ws1.row_dimensions[4].height = 25
+    for c_idx, h in enumerate(h_i, 1):
+        cell = ws1.cell(4, c_idx, h)
+        cell.font, cell.fill, cell.alignment, cell.border = f_th, fill_verde_escuro, align_c, border_thin
+
+    r_cur1 = 5
+    for _, r in df_anexo_i.iterrows():
+        ws1.row_dimensions[r_cur1].height = 26
+        vals = [
+            (str(r.get("Código PNAPA", "")), align_c, f_body_b, None),
+            (str(r.get("Título da Ação Estratégica", "")), align_l, f_body_b, None),
+            (str(r.get("Descrição / Escopo Nacional", "")), align_l, f_body, None),
+            (str(r.get("Liderança Sede", "")), align_l, f_body, None),
+            (str(r.get("UFs Participantes", "")), align_c, f_body, None),
+            (str(r.get("Indicador Oficial", "")), align_l, f_body, None),
+            (parse_float(r.get("Meta Nac.", 0)), align_r, f_body, "#,##0.0"),
+            (parse_float(r.get("Orçamento Total Demandado (R$)", 0)), align_r, f_body_b, 'R$ #,##0.00'),
+            (str(r.get("Período de Execução", f"01/01/{ano_ref} a 31/12/{ano_ref}")), align_c, f_body, None)
+        ]
+        for c_idx, (v, al, fn, fmt) in enumerate(vals, 1):
+            c = ws1.cell(r_cur1, c_idx, v)
+            c.alignment, c.font, c.border = al, fn, border_thin
+            if fmt: c.number_format = fmt
+            if r_cur1 % 2 == 0: c.fill = fill_zebra
+        r_cur1 += 1
+
+    # -------------------------------------------------------------
+    # ABA 2: ANEXO II - AÇÕES SETORIAIS
+    # -------------------------------------------------------------
+    ws2 = wb.create_sheet(title="Anexo II - Ações Setoriais")
+    ws2.views.sheetView[0].showGridLines = True
+
+    ws2.merge_cells("A1:M1")
+    c_t2 = ws2["A1"]
+    c_t2.value = f"PLANO NACIONAL DE ATUAÇÃO PREVENTIVA AMBIENTAL — PNAPA {ano_ref}"
+    c_t2.font, c_t2.fill, c_t2.alignment = f_tit, fill_verde_escuro, align_c
+    ws2.row_dimensions[1].height = 28
+
+    ws2.merge_cells("A2:M2")
+    c_s2 = ws2["A2"]
+    c_s2.value = "ANEXO II — MATRIZ DE PACTUAÇÃO SETORIAL E ADESÃO FEDERATIVA"
+    c_s2.font, c_s2.fill, c_s2.alignment = f_sub, fill_sub_banner, align_c
+    ws2.row_dimensions[2].height = 20
+
+    h_ii = [
+        "Código Macro (Mãe)", "Código Setorial", "Título / Modal", "Tema / Modal",
+        "Especialista Sede", "Diretriz de Adesão", "UFs Proponentes", "Qtd UFs",
+        "Indicador Setorial", "Meta Prevista", "Teto Ceneac (R$)",
+        "Orçamento Demandado (R$)", "Cronograma Previsto"
+    ]
+    ws2.row_dimensions[4].height = 25
+    for c_idx, h in enumerate(h_ii, 1):
+        cell = ws2.cell(4, c_idx, h)
+        cell.font, cell.fill, cell.alignment, cell.border = f_th, fill_verde_escuro, align_c, border_thin
+
+    r_cur2 = 5
+    for _, r in df_anexo_ii.iterrows():
+        ws2.row_dimensions[r_cur2].height = 28
+        vals_ii = [
+            (str(r.get("Ação Mãe", "")), align_c, f_body_b, None),
+            (str(r.get("Código Setorial", "")), align_c, f_body_b, None),
+            (str(r.get("Título / Modal", "")), align_l, f_body_b, None),
+            (str(r.get("Tema / Modal", "")), align_c, f_body, None),
+            (str(r.get("Especialista Sede", "")), align_l, f_body, None),
+            (str(r.get("Diretriz Adesão", "")), align_l, f_body, None),
+            (str(r.get("Governança / UFs", "")), align_l, f_body, None),
+            (int(r.get("Qtd UFs", 0)) if str(r.get("Qtd UFs", "")).isdigit() else 0, align_c, f_body_b, "#,##0"),
+            (str(r.get("Indicador Setorial", "")), align_l, f_body, None),
+            (parse_float(r.get("Meta Setorial", 0)), align_r, f_body, "#,##0.0"),
+            (parse_float(r.get("Teto Ceneac (R$)", 0)), align_r, f_body, 'R$ #,##0.00'),
+            (parse_float(r.get("Orçamento Demandado", 0)), align_r, f_body_b, 'R$ #,##0.00'),
+            (str(r.get("Cronograma Previsto", f"Ciclo Anual {ano_ref}")), align_c, f_body, None)
+        ]
+        for c_idx, (v, al, fn, fmt) in enumerate(vals_ii, 1):
+            c = ws2.cell(r_cur2, c_idx, v)
+            c.alignment, c.font, c.border = al, fn, border_thin
+            if fmt: c.number_format = fmt
+            if r_cur2 % 2 == 0: c.fill = fill_zebra
+        r_cur2 += 1
+
+    # Nota de Rodapé no Excel
+    ws2.merge_cells(start_row=r_cur2 + 1, start_column=1, end_row=r_cur2 + 1, end_column=13)
+    c_n = ws2.cell(r_cur2 + 1, 1, 
+        "Nota de Governança Federativa: As participações pactuadas sob o papel de Apoio Operacional possuem compromisso "
+        "institucional mensurado pelo esforço em dias de dedicação e alocação orçamentária de custeio/diárias, "
+        "vinculando-se ao alcance da meta física e do produto final sob responsabilidade formal da UF Coordenadora."
+    )
+    c_n.font, c_n.alignment = f_nota, align_l
+    ws2.row_dimensions[r_cur2 + 1].height = 22
+
+    # Autoajuste de Largura
+    col_w_map = {
+        ws1: {1: 16, 2: 40, 3: 45, 4: 28, 5: 18, 6: 35, 7: 15, 8: 25, 9: 24},
+        ws2: {1: 18, 2: 18, 3: 40, 4: 15, 5: 28, 6: 25, 7: 30, 8: 10, 9: 35, 10: 15, 11: 20, 12: 24, 13: 20}
+    }
+    for ws, limits in col_w_map.items():
+        for col_idx, width in limits.items():
+            ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def montar_tabelas_minuta_portaria(df_acoes_cadastradas, df_macros, df_setoriais_pool, ano_ref):
+    """
+    Consolida as propostas dos estados contra o catálogo para gerar os DataFrames
+    estruturados do Anexo I (Macroações) e Anexo II (Ações Setoriais).
+    """
+    # 1. Montagem do Anexo I (Ações Estratégicas / Macro)
+    linhas_anexo_i = []
+    for _, rm in df_macros.iterrows():
+        c_puro = str(rm.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+        
+        # Filtra filhas
+        df_filhas = df_setoriais_pool[
+            (df_setoriais_pool["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == c_puro) |
+            (df_setoriais_pool["Num_Acao_PNAPA"].astype(str).str.strip().str.upper().str.startswith(f"{c_puro}."))
+        ]
+        chaves_filhas = set(df_filhas["Num_Acao_PNAPA"].dropna().unique().tolist() + [c_puro, f"{c_puro}-{ano_ref}"])
+        df_prop_m = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_filhas)] if not df_acoes_cadastradas.empty else pd.DataFrame()
+        
+        # UFs participantes únicas
+        ufs_part = sorted(list(set(df_prop_m["UF_Acao_PNAPA"].dropna().unique().tolist()))) if not df_prop_m.empty else []
+        ufs_txt = ", ".join(ufs_part) if ufs_part else "-"
+        
+        # Meta física (apenas coordenações somam)
+        meta_macro = float(pd.to_numeric(rm.get("Meta_Nacional", 0), errors='coerce') or 0.0)
+        if meta_macro == 0 and not df_filhas.empty:
+            meta_macro = pd.to_numeric(df_filhas["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
+            
+        orc_macro = df_prop_m["Rec_Plan_Num"].sum() if not df_prop_m.empty else 0.0
+        
+        linhas_anexo_i.append({
+            "Código PNAPA": c_puro,
+            "Título da Ação Estratégica": str(rm.get("Nome_Acao_Apelido", rm.get("Nome_Acao_Completo", ""))),
+            "Descrição / Escopo Nacional": str(rm.get("Objetivo_Padrao", "")),
+            "Liderança Sede": f"{rm.get('Dono_Acao','Ceneac')} ({rm.get('UF_Dono','DF')})",
+            "UFs Participantes": ufs_txt,
+            "Indicador Oficial": str(rm.get("Indicador", "Entregas Concluídas")),
+            "Meta Nac.": meta_macro,
+            "Orçamento Total Demandado (R$)": orc_macro,
+            "Período de Execução": f"01/01/{ano_ref} a 31/12/{ano_ref}"
+        })
+    df_anexo_i = pd.DataFrame(linhas_anexo_i)
+
+    # 2. Montagem do Anexo II (Ações Setoriais)
+    linhas_anexo_ii = []
+    # Agrupa filhas respeitando a ordem das macros
+    for _, rm in df_macros.iterrows():
+        cod_mae = str(rm.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+        df_filhas_mae = df_setoriais_pool[
+            (df_setoriais_pool["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == cod_mae) |
+            (df_setoriais_pool["Num_Acao_PNAPA"].astype(str).str.strip().str.upper().str.startswith(f"{cod_mae}."))
+        ]
+        
+        if df_filhas_mae.empty:
+            df_filhas_mae = pd.DataFrame([rm])
+
+        for _, rs in df_filhas_mae.iterrows():
+            cod_s_puro = str(rs.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+            chaves_sec = {cod_s_puro, f"{cod_s_puro}-{ano_ref}"}
+            df_prop_s = df_acoes_cadastradas[df_acoes_cadastradas["Num_Pna_Limpo"].isin(chaves_sec)] if not df_acoes_cadastradas.empty else pd.DataFrame()
+            
+            # Governança: Discriminação entre Coordenação e Apoio
+            ufs_coord = sorted(df_prop_s[df_prop_s["Papel_Institucional"].astype(str).str.strip() == "Coordenação"]["UF_Acao_PNAPA"].dropna().unique().tolist()) if not df_prop_s.empty else []
+            bloco_apoios = []
+            if not df_prop_s.empty:
+                df_apoio = df_prop_s[df_prop_s["Papel_Institucional"].astype(str).str.strip() == "Apoio"]
+                for uf_orig, grp in df_apoio.groupby("UF_Acao_PNAPA"):
+                    dests = sorted(list(set(grp["UF_Coordenadora"].dropna().tolist())))
+                    bloco_apoios.append(f"{uf_orig} (➔ {', '.join(dests)})")
+                    
+            part_linhas = []
+            if ufs_coord: part_linhas.append("Coordenação: " + ", ".join(ufs_coord))
+            if bloco_apoios: part_linhas.append("Apoio: " + ", ".join(bloco_apoios))
+            gov_txt = "\n".join(part_linhas) if part_linhas else "Nenhuma adesão registrada"
+            
+            qtd_ufs = len(set(df_prop_s["UF_Acao_PNAPA"].dropna().tolist())) if not df_prop_s.empty else 0
+            
+            # Diretriz de Adesão Ceneac
+            ufs_obrig = obter_lista_ufs_obrigatorias(rs.get("UFs_Obrigatorias", ""))
+            if len(ufs_obrig) == len(LISTA_UFS_COMPLETA):
+                dir_txt = "Obrigatória (Todas as 27 UFs)"
+            elif ufs_obrig:
+                dir_txt = f"Obrigatória ({', '.join(sorted(list(ufs_obrig)))})"
+            else:
+                dir_txt = "Facultativa"
+                
+            meta_sec_plan = df_prop_s[df_prop_s["Papel_Institucional"].astype(str).str.strip() != "Apoio"]["Meta_Num"].sum() if not df_prop_s.empty else 0.0
+            teto_sec = float(pd.to_numeric(rs.get("Orcamento_Nacional", 0), errors='coerce') or 0.0)
+            orc_dem_sec = df_prop_s["Rec_Plan_Num"].sum() if not df_prop_s.empty else 0.0
+
+            linhas_anexo_ii.append({
+                "Ação Mãe": cod_mae,
+                "Código Setorial": cod_s_puro,
+                "Título / Modal": str(rs.get("Nome_Acao_Apelido", rs.get("Nome_Acao_Completo", ""))),
+                "Tema / Modal": str(rs.get("Tema_Padrao", "")),
+                "Especialista Sede": f"{rs.get('Dono_Acao','Ceneac')} ({rs.get('UF_Dono','DF')})",
+                "Diretriz Adesão": dir_txt,
+                "Governança / UFs": gov_txt,
+                "Qtd UFs": qtd_ufs,
+                "Indicador Setorial": str(rs.get("Indicador", "")),
+                "Meta Setorial": meta_sec_plan,
+                "Teto Ceneac (R$)": teto_sec,
+                "Orçamento Demandado": orc_dem_sec,
+                "Cronograma Previsto": f"Ciclo Anual {ano_ref}"
+            })
+    df_anexo_ii = pd.DataFrame(linhas_anexo_ii)
+
+    return df_anexo_i, df_anexo_ii
 
 # =================================================================
 # FUNÇÕES UTILITÁRIAS DE FORMATAÇÃO NO PADRÃO BRASILEIRO (BRL)
@@ -6078,7 +6586,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             st.error(f"❌ Erro de comunicação: {e}")
 
         # =====================================================================
-        # 2. RESGATE DAS PROPOSTAS ESTADUAIS (NÍVEL 3 / df_atual)
+        # 2. RESGATE DAS PROPOSTAS ESTADUAIS (NÍVEL 3 / df_atual) COM UF_COORDENADORA
         # =====================================================================
         df_acoes_cadastradas = df_atual[
             (df_atual["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
@@ -6086,19 +6594,29 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         ].copy()
 
         if not df_acoes_cadastradas.empty:
-            df_acoes_cadastradas["Meta_Num"] = pd.to_numeric(df_acoes_cadastradas["Meta_Indicador"], errors='coerce').fillna(0.0)
+            df_acoes_cadastradas["UF_Coordenadora"] = df_acoes_cadastradas.apply(obter_uf_coordenadora_segura, axis=1)
             
-            r_d = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Diarias", 0), errors='coerce').fillna(0.0)
-            r_p = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Passagens", 0), errors='coerce').fillna(0.0)
-            r_o = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Outras_Despesas", 0), errors='coerce').fillna(0.0)
-            df_acoes_cadastradas["Rec_Plan_Num"] = r_d + r_p + r_o
+            df_acoes_cadastradas["Meta_Num"] = df_acoes_cadastradas.apply(
+                lambda r: float(pd.to_numeric(r.get("Meta_Indicador", 0), errors='coerce') or 0.0) 
+                if str(r.get("Papel_Institucional", "Coordenação")).strip() == "Coordenação" else 0.0, 
+                axis=1
+            )
+            
+            # 🚀 BLINDAGEM NUMÉRICA DEFINITIVA (Sobrescreve com float puro)
+            df_acoes_cadastradas["Rec_Plan_Diarias"] = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Diarias", 0), errors='coerce').fillna(0.0)
+            df_acoes_cadastradas["Rec_Plan_Passagens"] = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Passagens", 0), errors='coerce').fillna(0.0)
+            df_acoes_cadastradas["Rec_Plan_Outras_Despesas"] = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Outras_Despesas", 0), errors='coerce').fillna(0.0)
+            
+            df_acoes_cadastradas["Rec_Plan_Num"] = (
+                df_acoes_cadastradas["Rec_Plan_Diarias"] + 
+                df_acoes_cadastradas["Rec_Plan_Passagens"] + 
+                df_acoes_cadastradas["Rec_Plan_Outras_Despesas"]
+            )
             df_acoes_cadastradas["Dias_Plan_Num"] = pd.to_numeric(df_acoes_cadastradas.get("Dias_Gastos_Plan", 0), errors='coerce').fillna(0.0)
             df_acoes_cadastradas["Num_Pna_Limpo"] = df_acoes_cadastradas["Número da Ação PNAPA"].astype(str).str.strip().str.upper()
         else:
-            df_acoes_cadastradas["Meta_Num"] = []
-            df_acoes_cadastradas["Rec_Plan_Num"] = []
-            df_acoes_cadastradas["Dias_Plan_Num"] = []
-            df_acoes_cadastradas["Num_Pna_Limpo"] = []
+            for col_vazia in ["UF_Coordenadora", "Meta_Num", "Rec_Plan_Diarias", "Rec_Plan_Passagens", "Rec_Plan_Outras_Despesas", "Rec_Plan_Num", "Dias_Plan_Num", "Num_Pna_Limpo"]:
+                df_acoes_cadastradas[col_vazia] = []
 
         # =====================================================================
         # 3. SEPARAÇÃO HIERÁRQUICA: MACROAÇÕES (N1) E AÇÕES SETORIAIS (N2)
@@ -6118,7 +6636,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             (df_pna_ano["Num_Acao_PNAPA"].astype(str).str.contains(r"\."))
         ].copy()
 
-        # Se não houver macros explícitas (ex: antes da harmonização), trata todas como N1
         if df_macros.empty:
             df_macros = df_pna_ano.copy()
 
@@ -6155,7 +6672,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             delta_color="normal" if saldo_dipro_restante >= 0 else "inverse"
         )
 
-        # LINHA 2: RESUMO E ADESÃO FEDERATIVA
+
         # =====================================================================
         # 4.1 PAINEL DE CAPACIDADE DA FORÇA DE TRABALHO POR UF / NUPAEM / SEDE
         # =====================================================================
@@ -6167,7 +6684,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 "Tetos aplicados: **90 dias** (Titular/Sede), **60 dias** (Substituto) e **40 dias** (Membro de Equipe)."
             )
 
-            # Montagem do DataFrame de Exibição
             lista_tabela_cap = []
             for uf_key, d_uf in resumo_capacidade_ufs.items():
                 if d_uf["Capacidade_Total_Dias"] > 0 or d_uf["Dias_Planejados"] > 0:
@@ -6184,7 +6700,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             if lista_tabela_cap:
                 df_tab_cap = pd.DataFrame(lista_tabela_cap).sort_values(by="Ocupação (%)", ascending=False)
                 
-                # KPIs rápidos do painel
                 total_cap_br = df_tab_cap["Capacidade Total (Dias)"].sum()
                 total_plan_br = df_tab_cap["Dias Comprometidos"].sum()
                 saldo_br = total_cap_br - total_plan_br
@@ -6197,7 +6712,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # Formatação dos dados para exibição na tabela
                 df_tab_cap_view = df_tab_cap.copy()
                 df_tab_cap_view["Capacidade Total (Dias)"] = df_tab_cap_view["Capacidade Total (Dias)"].apply(lambda v: f"{v:,.0f} d")
                 df_tab_cap_view["Dias Comprometidos"] = df_tab_cap_view["Dias Comprometidos"].apply(lambda v: f"{v:,.1f} d")
@@ -6240,11 +6754,296 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 unsafe_allow_html=True
             )
 
+        st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
+
+        # =====================================================================
+        # 4.2 PAINEL RETRÁTIL: STATUS DA REDE FEDERATIVA & ADESÃO DAS UFS
+        # =====================================================================
+        with st.expander("🗺️ **Status da Rede Federativa & Adesão das UFs ao Ciclo**", expanded=False):
+            st.markdown("Acompanhamento das unidades da federação que já integraram o planejamento anual e identificação de lacunas federativas.")
+            
+            ufs_com_propostas = sorted(df_acoes_cadastradas["UF_Acao_PNAPA"].dropna().unique().tolist()) if not df_acoes_cadastradas.empty else []
+            todas_ufs_lista = sorted(LISTA_UFS_COMPLETA)
+            ufs_sem_propostas = sorted([u for u in todas_ufs_lista if u not in ufs_com_propostas])
+            
+            c_fed1, c_fed2 = st.columns([1.5, 1])
+            with c_fed1:
+                st.markdown(f"**🟢 UFs com Propostas Cadastradas ({len(ufs_com_propostas)}/27):**")
+                if ufs_com_propostas:
+                    tags_aderidas = " ".join([
+                        f"<span style='background-color: #dcfce7; color: #166534; border: 1px solid #86efac; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.88em; margin-right: 4px; display: inline-block; margin-bottom: 4px;'>{u}</span>"
+                        for u in ufs_com_propostas
+                    ])
+                    st.markdown(tags_aderidas, unsafe_allow_html=True)
+                else:
+                    st.info("Nenhuma UF registrou propostas para este ano.")
+
+            with c_fed2:
+                st.markdown(f"**⏳ UFs sem Registro no Exercício ({len(ufs_sem_propostas)}/27):**")
+                if ufs_sem_propostas:
+                    tags_pendentes = " ".join([
+                        f"<span style='background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.88em; margin-right: 4px; display: inline-block; margin-bottom: 4px;'>{u}</span>"
+                        for u in ufs_sem_propostas
+                    ])
+                    st.markdown(tags_pendentes, unsafe_allow_html=True)
+                else:
+                    st.success("🎉 Todas as 27 UFs já possuem registro no ciclo!")
+        
+        st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
+
+        # =====================================================================
+        # 4.3 PAINEL RETRÁTIL: MATRIZ DE ALOCAÇÃO DE ESFORÇO & RECURSOS
+        # =====================================================================
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("📊 **Matriz de Alocação de Esforço (Dias) e Recursos (R$) por Ação**", expanded=True):
+            st.markdown("##### 💼 Distribuição de Dias de Campo e Recursos Financeiros")
+            st.caption("Consolidado analítico das propostas pactuadas com indicadores visuais de consumo de capacidade e orçamento.")
+
+            if df_acoes_cadastradas.empty:
+                st.info("Nenhuma proposta setorial registrada para o exercício.")
+            else:
+                df_matriz = df_acoes_cadastradas.copy()
+                
+                # Seletor local de UF para a Matriz (ou herda de uf_usuario / filtro geral)
+                lista_ufs_matriz = ["🇧🇷 Todas as UFs (Nacional)"] + sorted(df_matriz["UF_Acao_PNAPA"].dropna().unique().tolist())
+                idx_uf_padrao_mat = 0
+                if 'uf_usuario' in locals() and uf_usuario in lista_ufs_matriz:
+                    idx_uf_padrao_mat = lista_ufs_matriz.index(uf_usuario)
+                
+                col_sel_mat, _ = st.columns([1.5, 2.5])
+                with col_sel_mat:
+                    uf_visao_sel = st.selectbox("Filtrar Matriz por UF:", lista_ufs_matriz, index=idx_uf_padrao_mat, key="pact_uf_visao_matriz")
+
+                # Aplica o filtro de UF se selecionado
+                rotulo_escopo = "Nacional" if uf_visao_sel == "🇧🇷 Todas as UFs (Nacional)" else f"da UF {uf_visao_sel}"
+                if uf_visao_sel != "🇧🇷 Todas as UFs (Nacional)":
+                    df_matriz = df_matriz[df_matriz["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_visao_sel]
+
+                if df_matriz.empty:
+                    st.warning(f"A UF **{uf_visao_sel}** ainda não possui propostas cadastradas para este exercício.")
+                else:
+                    # Totais de referência para cálculo percentual (100% da UF ou do País)
+                    tot_dias_ref = float(df_matriz["Dias_Plan_Num"].sum())
+                    tot_orc_ref = float(df_matriz["Rec_Plan_Num"].sum())
+
+                    # Configuração das Barras de Progresso Nativas do Streamlit
+                    col_config_barras = {
+                        "% Esforço": st.column_config.ProgressColumn(
+                            "% Esforço",
+                            help=f"Percentual do esforço em dias em relação ao total {rotulo_escopo} ({tot_dias_ref:.1f} d)",
+                            format="%.1f%%",
+                            min_value=0.0,
+                            max_value=100.0
+                        ),
+                        "% Orçamento": st.column_config.ProgressColumn(
+                            "% Orçamento",
+                            help=f"Percentual do recurso financeiro em relação ao total {rotulo_escopo} ({formatar_moeda_br(tot_orc_ref)})",
+                            format="%.1f%%",
+                            min_value=0.0,
+                            max_value=100.0
+                        )
+                    }
+
+                    tab_mat_macro, tab_mat_set, tab_mat_det = st.tabs([
+                        "🎯 Consolidado por Macroação (N1)",
+                        "📈 Consolidado por Ação Setorial (N2)", 
+                        "📋 Detalhamento Analítico (Propostas)"
+                    ])
+
+                    # ---------------------------------------------------------
+                    # ABA 1: CONSOLIDADO POR MACROAÇÃO (NÍVEL 1)
+                    # ---------------------------------------------------------
+                    with tab_mat_macro:
+                        mapa_macro_info = {}
+                        for _, rm in df_macros.iterrows():
+                            c_m = str(rm.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+                            mapa_macro_info[c_m] = {
+                                "Nome": str(rm.get("Nome_Acao_Apelido", rm.get("Nome_Acao_Completo", ""))).strip(),
+                                "Lideranca": f"{rm.get('Dono_Acao', '')} ({rm.get('UF_Dono', '')})".strip()
+                            }
+
+                        df_matriz["Cod_Macro"] = df_matriz["Num_Pna_Limpo"].apply(lambda x: str(x).split(".")[0].split("-")[0].strip().upper())
+                        
+                        agg_macro = df_matriz.groupby("Cod_Macro").agg(
+                            Qtd_Setoriais=("Num_Pna_Limpo", "nunique"),
+                            Qtd_Propostas=("Id", "count"),
+                            Dias_Totais=("Dias_Plan_Num", "sum"),
+                            Orcamento_Total=("Rec_Plan_Num", "sum")
+                        ).reset_index()
+
+                        agg_macro["Macroação Estratégica"] = agg_macro["Cod_Macro"].apply(
+                            lambda c: mapa_macro_info.get(c, {}).get("Nome", f"Macroação {c}")
+                        )
+                        agg_macro["Liderança Sede"] = agg_macro["Cod_Macro"].apply(
+                            lambda c: mapa_macro_info.get(c, {}).get("Lideranca", "Sede Ceneac")
+                        )
+
+                        agg_macro["% Esforço"] = (agg_macro["Dias_Totais"] / tot_dias_ref * 100.0) if tot_dias_ref > 0 else 0.0
+                        agg_macro["% Orçamento"] = (agg_macro["Orcamento_Total"] / tot_orc_ref * 100.0) if tot_orc_ref > 0 else 0.0
+                        agg_macro["Total Dias"] = agg_macro["Dias_Totais"].apply(lambda v: f"{formatar_numero_br(v, 1)} d")
+                        agg_macro["Total Demandado (R$)"] = agg_macro["Orcamento_Total"].apply(formatar_moeda_br)
+
+                        cols_macro_show = [
+                            "Cod_Macro", "Macroação Estratégica", "Liderança Sede", 
+                            "Qtd_Setoriais", "Qtd_Propostas", "Total Dias", "% Esforço", 
+                            "Total Demandado (R$)", "% Orçamento"
+                        ]
+                        renomear_macro = {
+                            "Cod_Macro": "Código PNAPA",
+                            "Qtd_Setoriais": "Setoriais",
+                            "Qtd_Propostas": "Propostas"
+                        }
+                        
+                        st.dataframe(
+                            agg_macro[cols_macro_show].rename(columns=renomear_macro),
+                            column_config=col_config_barras,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                    # ---------------------------------------------------------
+                    # ABA 2: CONSOLIDADO POR AÇÃO SETORIAL (NÍVEL 2)
+                    # ---------------------------------------------------------
+                    with tab_mat_set:
+                        agg_setoriais = df_matriz.groupby(["Num_Pna_Limpo", "Nome da Ação PNAPA"]).agg(
+                            Qtd_Propostas=("Id", "count"),
+                            UFs_Participantes=("UF_Acao_PNAPA", lambda x: ", ".join(sorted(list(set(x))))),
+                            Dias_Totais=("Dias_Plan_Num", "sum"),
+                            Orcamento_Total=("Rec_Plan_Num", "sum")
+                        ).reset_index()
+
+                        agg_setoriais["Macro (Mãe)"] = agg_setoriais["Num_Pna_Limpo"].apply(lambda x: str(x).split(".")[0].split("-")[0].strip().upper())
+                        agg_setoriais["% Esforço"] = (agg_setoriais["Dias_Totais"] / tot_dias_ref * 100.0) if tot_dias_ref > 0 else 0.0
+                        agg_setoriais["% Orçamento"] = (agg_setoriais["Orcamento_Total"] / tot_orc_ref * 100.0) if tot_orc_ref > 0 else 0.0
+                        
+                        agg_setoriais["Total Dias"] = agg_setoriais["Dias_Totais"].apply(lambda v: f"{formatar_numero_br(v, 1)} d")
+                        agg_setoriais["Total Demandado (R$)"] = agg_setoriais["Orcamento_Total"].apply(formatar_moeda_br)
+
+                        cols_set_show = [
+                            "Num_Pna_Limpo", "Nome da Ação PNAPA", "Macro (Mãe)", 
+                            "Qtd_Propostas", "UFs_Participantes", "Total Dias", "% Esforço", 
+                            "Total Demandado (R$)", "% Orçamento"
+                        ]
+                        renomear_set = {
+                            "Num_Pna_Limpo": "Código Setorial",
+                            "Nome da Ação PNAPA": "Título da Ação",
+                            "Qtd_Propostas": "Propostas",
+                            "UFs_Participantes": "UFs"
+                        }
+                        
+                        st.dataframe(
+                            agg_setoriais[cols_set_show].rename(columns=renomear_set),
+                            column_config=col_config_barras,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                    # ---------------------------------------------------------
+                    # ABA 3: DETALHAMENTO ANALÍTICO ITEMIZADO (COM UF_COORDENADORA)
+                    # ---------------------------------------------------------
+                    with tab_mat_det:
+                        df_det_view = pd.DataFrame({
+                            "Ação Setorial": df_matriz["Num_Pna_Limpo"],
+                            "Título": df_matriz["Nome da Ação PNAPA"],
+                            "UF Proponente": df_matriz["UF_Acao_PNAPA"],
+                            "Papel": df_matriz.apply(
+                                lambda r: f"Apoio (em {str(r.get('UF_Coordenadora', '')).strip().upper()})" 
+                                if str(r.get("Papel_Institucional", "")).strip() == "Apoio" 
+                                else "Coordenação", axis=1
+                            ),
+                            "Responsável": df_matriz.apply(
+                                lambda r: f"Equipe Nupaem-{r['UF_Acao_PNAPA']}" 
+                                if str(r.get("Papel_Institucional", "")).strip() == "Apoio" and (not r.get("Servidor") or str(r.get("Servidor")).lower() in ["nan", "none", ""])
+                                else str(r.get("Servidor", "Não Designado")), axis=1
+                            ),
+                            "Meta": df_matriz.apply(
+                                lambda r: "— (Apoio)" if str(r.get("Papel_Institucional", "")).strip() == "Apoio" 
+                                else formatar_numero_br(r.get("Meta_Num", 0.0), 1), axis=1
+                            ),
+                            "Dias (Esforço)": df_matriz["Dias_Plan_Num"].apply(lambda v: f"{formatar_numero_br(v, 1)} d"),
+                            "Diárias (R$)": df_matriz["Rec_Plan_Diarias"].apply(formatar_moeda_br),
+                            "Passagens (R$)": df_matriz["Rec_Plan_Passagens"].apply(formatar_moeda_br),
+                            "Outras Desp. (R$)": df_matriz["Rec_Plan_Outras_Despesas"].apply(formatar_moeda_br),
+                            "Total Previsto (R$)": df_matriz["Rec_Plan_Num"].apply(formatar_moeda_br)
+                        })
+                        st.dataframe(df_det_view.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+                    # KPIs de Totais da Matriz
+                    st.markdown("---")
+                    tot_dias_m = pd.to_numeric(df_matriz["Dias_Plan_Num"], errors='coerce').fillna(0.0).sum()
+                    tot_diarias_m = pd.to_numeric(df_matriz["Rec_Plan_Diarias"], errors='coerce').fillna(0.0).sum()
+                    tot_pass_m = pd.to_numeric(df_matriz["Rec_Plan_Passagens"], errors='coerce').fillna(0.0).sum()
+                    tot_outras_m = pd.to_numeric(df_matriz["Rec_Plan_Outras_Despesas"], errors='coerce').fillna(0.0).sum()
+                    tot_geral_m = pd.to_numeric(df_matriz["Rec_Plan_Num"], errors='coerce').fillna(0.0).sum()
+
+                    c_tm1, c_tm2, c_tm3, c_tm4, c_tm5 = st.columns(5)
+                    c_tm1.metric("Esforço de Campo", f"{tot_dias_m:.1f} dias")
+                    c_tm2.metric("Total Diárias", formatar_moeda_br(tot_diarias_m))
+                    c_tm3.metric("Total Passagens", formatar_moeda_br(tot_pass_m))
+                    c_tm4.metric("Total Outras", formatar_moeda_br(tot_outras_m))
+                    c_tm5.metric("Orçamento Total", formatar_moeda_br(tot_geral_m))
+        
         st.markdown("---")
         st.markdown("### 🌳 Árvore de Pactuação por Macroação & Validação de Tetos Setoriais")
 
         todas_ufs_brasil = sorted(LISTA_UFS_COMPLETA)
 
+        # =====================================================================
+        # 4.4 EXPORTAÇÕES OFICIAIS: MINUTA DA PORTARIA EM EXCEL & PDF (VERDE IBAMA)
+        # =====================================================================
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            col_desc_exp, col_btns_exp = st.columns([1.4, 1.6])
+            with col_desc_exp:
+                st.markdown("##### 📄 Exportações Oficiais do Ciclo de Pactuação")
+                st.caption(f"Emissão da Minuta da Portaria PNAPA {ano_pact_sel} (Anexos I e II) para instrução SEI e publicação.")
+
+            with col_btns_exp:
+                c_btn1, c_btn2 = st.columns(2)
+                
+                # Montagem estruturada dos Anexos I e II conforme catálogo e propostas
+                if not df_acoes_cadastradas.empty:
+                    df_anexo_i_exp, df_anexo_ii_exp = montar_tabelas_minuta_portaria(
+                        df_acoes_cadastradas, df_macros, df_setoriais_pool, ano_pact_sel
+                    )
+                else:
+                    df_anexo_i_exp, df_anexo_ii_exp = pd.DataFrame(), pd.DataFrame()
+
+                # Botão 1: Planilha Excel Formatada (openpyxl)
+                with c_btn1:
+                    if not df_anexo_ii_exp.empty:
+                        bytes_excel = gerar_minuta_portaria_excel(
+                            df_anexo_i_exp, df_anexo_ii_exp, ano_pact_sel
+                        )
+                        st.download_button(
+                            label="📊 **Baixar Matriz (Excel)**",
+                            data=bytes_excel,
+                            file_name=f"Minuta_Portaria_PNAPA_{ano_pact_sel}_Consolidada.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="btn_down_excel_pact_oficial"
+                        )
+                    else:
+                        st.button("📊 Baixar Matriz (Excel)", disabled=True, use_container_width=True)
+
+                # Botão 2: Documento Oficial em PDF (ReportLab)
+                with c_btn2:
+                    if not df_anexo_ii_exp.empty:
+                        bytes_pdf = gerar_minuta_portaria_pdf(
+                            df_anexo_i_exp, df_anexo_ii_exp, ano_pact_sel
+                        )
+                        st.download_button(
+                            label="📜 **Minuta Portaria (PDF)**",
+                            data=bytes_pdf,
+                            file_name=f"Minuta_Portaria_PNAPA_{ano_pact_sel}_Oficial.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="btn_down_minuta_pdf_oficial"
+                        )
+                    else:
+                        st.button("📜 Minuta Portaria (PDF)", disabled=True, use_container_width=True)
+        
+        
         # =====================================================================
         # 5. LOOP PRINCIPAL: MACROAÇÕES (NÍVEL 1)
         # =====================================================================
@@ -6409,9 +7208,16 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     tem_estouro_sec = (teto_orc_sec > 0 and orc_dem_sec > teto_orc_sec)
                     saldo_orc_sec = teto_orc_sec - orc_dem_sec
 
-                    ufs_com_proposta = df_prop_sec["UF_Acao_PNAPA"].dropna().unique().tolist() if not df_prop_sec.empty else []
-                    ufs_faltantes_total = sorted([u for u in todas_ufs_brasil if u not in ufs_com_proposta])
-                    ufs_obrig_faltantes = sorted([u for u in ufs_obrig_set if u not in ufs_com_proposta])
+                    # 🚀 Governança: Identifica estados atendidos (seja por Coordenação ou Apoio)
+                    if not df_prop_sec.empty:
+                        ufs_atendidas = set(df_prop_sec["UF_Acao_PNAPA"].dropna().unique()).union(
+                            set(df_prop_sec["UF_Coordenadora"].dropna().unique())
+                        )
+                    else:
+                        ufs_atendidas = set()
+
+                    ufs_faltantes_total = sorted([u for u in todas_ufs_brasil if u not in ufs_atendidas])
+                    ufs_obrig_faltantes = sorted([u for u in ufs_obrig_set if u not in ufs_atendidas])
 
                     with st.container(border=True):
                         col_sh1, col_sh2, col_sh3 = st.columns([2, 1, 1])
@@ -6457,7 +7263,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             st.warning(f"⚠️ **Pendência de Governança:** {len(ufs_obrig_faltantes)} estado(s) de adesão obrigatória ainda não cadastraram proposta: **{', '.join(ufs_obrig_faltantes)}**.")
 
                         tab_prop_ufs, tab_prop_pend = st.tabs([
-                            f"🗺️ Propostas Recebidas ({len(df_prop_sec)} UFs)", 
+                            f"🗺️ Propostas Recebidas ({len(df_prop_sec)} registros)", 
                             f"⏳ Estados Pendentes ({len(ufs_faltantes_total)} UFs)"
                         ])
 
@@ -6465,19 +7271,28 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             if df_prop_sec.empty:
                                 st.info("Nenhum estado cadastrou proposta para esta Ação Setorial.")
                             else:
+                                # 🚀 2. TABELA DISCRIMINANDO A UF COORDENADORA E AJUSTANDO O PONTO FOCAL
                                 df_tabela_propostas = df_prop_sec[[
-                                    "UF_Acao_PNAPA", "Papel_Institucional", "Servidor", 
+                                    "UF_Acao_PNAPA", "Papel_Institucional", "UF_Coordenadora", "Servidor", 
                                     "Meta_Indicador", "Rec_Plan_Diarias", "Rec_Plan_Passagens", 
                                     "Rec_Plan_Outras_Despesas", "Rec_Plan_Num", "Dias_Plan_Num", "Andamento"
                                 ]].copy()
 
+                                # Tratamento visual do Ponto Focal / Responsável
+                                df_tabela_propostas["Servidor"] = df_tabela_propostas.apply(
+                                    lambda r: r["Servidor"] if str(r.get("Papel_Institucional")).strip() == "Coordenação" else "Equipe em Apoio",
+                                    axis=1
+                                )
+
                                 df_tabela_propostas.columns = [
-                                    "UF", "Papel", "Ponto Focal Estadual", 
+                                    "UF Proponente", "Papel", "UF Coordenadora", "Ponto Focal Estadual", 
                                     "Meta", "Diárias (R$)", "Passagens (R$)", 
                                     "Outras Desp. (R$)", "Total Previsto (R$)", "Dias (Esforço)", "Situação"
                                 ]
 
-                                df_tabela_propostas["Meta"] = df_tabela_propostas["Meta"].apply(lambda v: formatar_numero_br(v, 1))
+                                df_tabela_propostas["Meta"] = df_tabela_propostas.apply(
+                                    lambda r: "—" if str(r.get("Papel")).strip() == "Apoio" else formatar_numero_br(r["Meta"], 1), axis=1
+                                )
                                 df_tabela_propostas["Dias (Esforço)"] = df_tabela_propostas["Dias (Esforço)"].apply(lambda v: formatar_numero_br(v, 1))
                                 for col_m in ["Diárias (R$)", "Passagens (R$)", "Outras Desp. (R$)", "Total Previsto (R$)"]:
                                     df_tabela_propostas[col_m] = df_tabela_propostas[col_m].apply(formatar_moeda_br)
@@ -6486,7 +7301,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
                         with tab_prop_pend:
                             if not ufs_faltantes_total:
-                                st.success("🎉 Todas as 27 UFs já registraram propostas para esta Ação Setorial!")
+                                st.success("🎉 Todas as 27 UFs já registraram ou receberam propostas para esta Ação Setorial!")
                             else:
                                 if ufs_obrig_faltantes:
                                     st.markdown(f"**🚨 Estados com Adesão Obrigatória Pendente ({len(ufs_obrig_faltantes)} UFs):**")
