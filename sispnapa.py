@@ -5771,7 +5771,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             st.error(f"❌ Erro de comunicação: {e}")
 
         # =====================================================================
-        # 2. RESGATE DAS PROPOSTAS ESTADUAIS (NÍVEL 3 / df_atual)
+        # 2. RESGATE DAS PROPOSTAS ESTADUAIS (NÍVEL 3 / df_atual) COM UF_COORDENADORA
         # =====================================================================
         df_acoes_cadastradas = df_atual[
             (df_atual["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
@@ -5779,7 +5779,15 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
         ].copy()
 
         if not df_acoes_cadastradas.empty:
-            df_acoes_cadastradas["Meta_Num"] = pd.to_numeric(df_acoes_cadastradas["Meta_Indicador"], errors='coerce').fillna(0.0)
+            # 🚀 Blindagem federativa da UF Coordenadora
+            df_acoes_cadastradas["UF_Coordenadora"] = df_acoes_cadastradas.apply(obter_uf_coordenadora_segura, axis=1)
+            
+            # Blindagem: Apenas Linhas de Coordenação somam na Meta Física do Plano Nacional
+            df_acoes_cadastradas["Meta_Num"] = df_acoes_cadastradas.apply(
+                lambda r: float(pd.to_numeric(r.get("Meta_Indicador", 0), errors='coerce') or 0.0) 
+                if str(r.get("Papel_Institucional", "Coordenação")).strip() == "Coordenação" else 0.0, 
+                axis=1
+            )
             
             r_d = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Diarias", 0), errors='coerce').fillna(0.0)
             r_p = pd.to_numeric(df_acoes_cadastradas.get("Rec_Plan_Passagens", 0), errors='coerce').fillna(0.0)
@@ -5788,6 +5796,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             df_acoes_cadastradas["Dias_Plan_Num"] = pd.to_numeric(df_acoes_cadastradas.get("Dias_Gastos_Plan", 0), errors='coerce').fillna(0.0)
             df_acoes_cadastradas["Num_Pna_Limpo"] = df_acoes_cadastradas["Número da Ação PNAPA"].astype(str).str.strip().str.upper()
         else:
+            df_acoes_cadastradas["UF_Coordenadora"] = []
             df_acoes_cadastradas["Meta_Num"] = []
             df_acoes_cadastradas["Rec_Plan_Num"] = []
             df_acoes_cadastradas["Dias_Plan_Num"] = []
@@ -5811,7 +5820,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             (df_pna_ano["Num_Acao_PNAPA"].astype(str).str.contains(r"\."))
         ].copy()
 
-        # Se não houver macros explícitas (ex: antes da harmonização), trata todas como N1
         if df_macros.empty:
             df_macros = df_pna_ano.copy()
 
@@ -5848,7 +5856,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             delta_color="normal" if saldo_dipro_restante >= 0 else "inverse"
         )
 
-        # LINHA 2: RESUMO E ADESÃO FEDERATIVA
         # =====================================================================
         # 4.1 PAINEL DE CAPACIDADE DA FORÇA DE TRABALHO POR UF / NUPAEM / SEDE
         # =====================================================================
@@ -5860,7 +5867,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 "Tetos aplicados: **90 dias** (Titular/Sede), **60 dias** (Substituto) e **40 dias** (Membro de Equipe)."
             )
 
-            # Montagem do DataFrame de Exibição
             lista_tabela_cap = []
             for uf_key, d_uf in resumo_capacidade_ufs.items():
                 if d_uf["Capacidade_Total_Dias"] > 0 or d_uf["Dias_Planejados"] > 0:
@@ -5877,7 +5883,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             if lista_tabela_cap:
                 df_tab_cap = pd.DataFrame(lista_tabela_cap).sort_values(by="Ocupação (%)", ascending=False)
                 
-                # KPIs rápidos do painel
                 total_cap_br = df_tab_cap["Capacidade Total (Dias)"].sum()
                 total_plan_br = df_tab_cap["Dias Comprometidos"].sum()
                 saldo_br = total_cap_br - total_plan_br
@@ -5890,7 +5895,6 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # Formatação dos dados para exibição na tabela
                 df_tab_cap_view = df_tab_cap.copy()
                 df_tab_cap_view["Capacidade Total (Dias)"] = df_tab_cap_view["Capacidade Total (Dias)"].apply(lambda v: f"{v:,.0f} d")
                 df_tab_cap_view["Dias Comprometidos"] = df_tab_cap_view["Dias Comprometidos"].apply(lambda v: f"{v:,.1f} d")
@@ -6102,9 +6106,16 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                     tem_estouro_sec = (teto_orc_sec > 0 and orc_dem_sec > teto_orc_sec)
                     saldo_orc_sec = teto_orc_sec - orc_dem_sec
 
-                    ufs_com_proposta = df_prop_sec["UF_Acao_PNAPA"].dropna().unique().tolist() if not df_prop_sec.empty else []
-                    ufs_faltantes_total = sorted([u for u in todas_ufs_brasil if u not in ufs_com_proposta])
-                    ufs_obrig_faltantes = sorted([u for u in ufs_obrig_set if u not in ufs_com_proposta])
+                    # 🚀 Governança: Identifica estados atendidos (seja por Coordenação ou Apoio)
+                    if not df_prop_sec.empty:
+                        ufs_atendidas = set(df_prop_sec["UF_Acao_PNAPA"].dropna().unique()).union(
+                            set(df_prop_sec["UF_Coordenadora"].dropna().unique())
+                        )
+                    else:
+                        ufs_atendidas = set()
+
+                    ufs_faltantes_total = sorted([u for u in todas_ufs_brasil if u not in ufs_atendidas])
+                    ufs_obrig_faltantes = sorted([u for u in ufs_obrig_set if u not in ufs_atendidas])
 
                     with st.container(border=True):
                         col_sh1, col_sh2, col_sh3 = st.columns([2, 1, 1])
@@ -6150,7 +6161,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             st.warning(f"⚠️ **Pendência de Governança:** {len(ufs_obrig_faltantes)} estado(s) de adesão obrigatória ainda não cadastraram proposta: **{', '.join(ufs_obrig_faltantes)}**.")
 
                         tab_prop_ufs, tab_prop_pend = st.tabs([
-                            f"🗺️ Propostas Recebidas ({len(df_prop_sec)} UFs)", 
+                            f"🗺️ Propostas Recebidas ({len(df_prop_sec)} registros)", 
                             f"⏳ Estados Pendentes ({len(ufs_faltantes_total)} UFs)"
                         ])
 
@@ -6158,19 +6169,28 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                             if df_prop_sec.empty:
                                 st.info("Nenhum estado cadastrou proposta para esta Ação Setorial.")
                             else:
+                                # 🚀 2. TABELA DISCRIMINANDO A UF COORDENADORA E AJUSTANDO O PONTO FOCAL
                                 df_tabela_propostas = df_prop_sec[[
-                                    "UF_Acao_PNAPA", "Papel_Institucional", "Servidor", 
+                                    "UF_Acao_PNAPA", "Papel_Institucional", "UF_Coordenadora", "Servidor", 
                                     "Meta_Indicador", "Rec_Plan_Diarias", "Rec_Plan_Passagens", 
                                     "Rec_Plan_Outras_Despesas", "Rec_Plan_Num", "Dias_Plan_Num", "Andamento"
                                 ]].copy()
 
+                                # Tratamento visual do Ponto Focal / Responsável
+                                df_tabela_propostas["Servidor"] = df_tabela_propostas.apply(
+                                    lambda r: r["Servidor"] if str(r.get("Papel_Institucional")).strip() == "Coordenação" else "Equipe em Apoio",
+                                    axis=1
+                                )
+
                                 df_tabela_propostas.columns = [
-                                    "UF", "Papel", "Ponto Focal Estadual", 
+                                    "UF Proponente", "Papel", "UF Coordenadora", "Ponto Focal Estadual", 
                                     "Meta", "Diárias (R$)", "Passagens (R$)", 
                                     "Outras Desp. (R$)", "Total Previsto (R$)", "Dias (Esforço)", "Situação"
                                 ]
 
-                                df_tabela_propostas["Meta"] = df_tabela_propostas["Meta"].apply(lambda v: formatar_numero_br(v, 1))
+                                df_tabela_propostas["Meta"] = df_tabela_propostas.apply(
+                                    lambda r: "—" if str(r.get("Papel")).strip() == "Apoio" else formatar_numero_br(r["Meta"], 1), axis=1
+                                )
                                 df_tabela_propostas["Dias (Esforço)"] = df_tabela_propostas["Dias (Esforço)"].apply(lambda v: formatar_numero_br(v, 1))
                                 for col_m in ["Diárias (R$)", "Passagens (R$)", "Outras Desp. (R$)", "Total Previsto (R$)"]:
                                     df_tabela_propostas[col_m] = df_tabela_propostas[col_m].apply(formatar_moeda_br)
@@ -6179,7 +6199,7 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
 
                         with tab_prop_pend:
                             if not ufs_faltantes_total:
-                                st.success("🎉 Todas as 27 UFs já registraram propostas para esta Ação Setorial!")
+                                st.success("🎉 Todas as 27 UFs já registraram ou receberam propostas para esta Ação Setorial!")
                             else:
                                 if ufs_obrig_faltantes:
                                     st.markdown(f"**🚨 Estados com Adesão Obrigatória Pendente ({len(ufs_obrig_faltantes)} UFs):**")
