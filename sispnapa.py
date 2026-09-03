@@ -871,29 +871,39 @@ def carregar_bases_vias_power_automate():
     
     return df_lot, df_serv, df_pna
 
-def obter_ponto_focal_acao(df, cod_acao, uf_alvo):
-    """Localiza de forma flexível o Ponto Focal e o Papel do Estado na Ação Pai."""
-    if df.empty or not cod_acao:
+def obter_ponto_focal_acao(df, num_acao, uf_alvo):
+    if df.empty or not num_acao or not uf_alvo:
         return "", "Não Cadastrado"
     
-    cod_puro = str(cod_acao).split("-")[0].strip().upper()
-    cod_comp = str(cod_acao).strip().upper()
-    uf_limpa = str(uf_alvo).strip().upper()
+    cod_str = str(num_acao).strip().upper()
+    cod_puro = cod_str.split("-")[0].strip()
+    uf_str = str(uf_alvo).strip().upper()
     
-    linhas = df[
-        (df["Nível"].astype(str).str.strip() == "Ação") &
-        (df["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_limpa) &
+    # Filtra ações setoriais daquela UF casando com ou sem o sufixo do ano
+    linhas_acao = df[
+        (df["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
+        (df["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_str) &
         (
-            (df["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_comp) |
+            (df["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_str) |
             (df["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_puro) |
             (df["Número da Ação PNAPA"].astype(str).str.strip().str.upper().str.startswith(cod_puro))
         )
     ]
     
-    if not linhas.empty:
-        focal = str(linhas["Servidor"].iloc[0]).strip()
-        papel = str(linhas["Papel_Institucional"].iloc[0]).strip() if "Papel_Institucional" in linhas.columns else "Coordenação"
-        return focal, papel
+    if linhas_acao.empty:
+        return "", "Não Cadastrado"
+    
+    # Prioriza linha de Coordenação para identificar o Ponto Focal
+    linha_coord = linhas_acao[linhas_acao["Papel_Institucional"].astype(str).str.strip() == "Coordenação"]
+    if not linha_coord.empty:
+        focal = str(linha_coord.iloc[0].get("Servidor", "")).strip()
+        return (focal if focal and focal.lower() != "nan" else "Não Definido"), "Coordenação"
+    
+    # Caso só existam linhas de apoio
+    linha_apoio = linhas_acao[linhas_acao["Papel_Institucional"].astype(str).str.strip() == "Apoio"]
+    if not linha_apoio.empty:
+        return "Equipe em Apoio", "Apoio"
+        
     return "", "Não Cadastrado"
 
 df_lotacoes, df_servidores, df_pnapas = carregar_bases_vias_power_automate()
@@ -3666,6 +3676,10 @@ elif modo == "➕ Inserir Nova Linha":
             ponto_focal_estado, papel_estado_acao = obter_ponto_focal_acao(df_atual, val_num_acao, uf_filtro_pna)
 
             st.info(f"👑 **Especialista Sede:** `{dono_nacional} ({uf_dono_nac})` | **Meta Nacional:** `{meta_nac_info}`  \n📍 **Governança em {uf_filtro_pna}:** Papel: `{papel_estado_acao}` | Ponto Focal Estadual: `{ponto_focal_estado if ponto_focal_estado else 'Não Definido'}`")
+
+            # 🛡️ Alerta visual prévio se já houver Coordenação Estadual cadastrada
+            if papel_estado_acao == "Coordenação":
+                st.warning(f"📌 **Coordenação Já Estruturada:** A UF **{uf_filtro_pna}** já registrou proposta de Coordenação para esta Ação sob liderança de **{ponto_focal_estado}**. Caso queira prestar apoio interestadual adicional, selecione o papel 'Apoio' abaixo.")
 
             res_cap_temp = calcular_capacidade_equipes_uf(df_atual, df_servidores, val_ano)
             info_uf_sel = res_cap_temp.get(uf_filtro_pna, {})
