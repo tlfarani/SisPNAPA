@@ -3745,7 +3745,7 @@ elif modo == "➕ Inserir Nova Linha":
                     )
                 with c_loc_ac2:
                     estado_local = MAPEAMENTO_ESTADOS_COMPLETO.get(uf_ocorrencia, "")
-                    st.text_input("Estado de Realização (Automático):", value=estado_local, disabled=True, key="pna_est_local_acao_dis")
+                    st.text_input("Estado de Realização (Automático):", value=estado_local, disabled=True)
                 with c_loc_ac3:
                     lista_muns_ac = ["Âmbito Estadual / Sede"] + obter_municipios_ibge(uf_ocorrencia)
                     municipio = st.selectbox("Município Polo / Região:", lista_muns_ac, key="pna_mun_ocorrencia_acao")
