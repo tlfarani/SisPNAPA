@@ -4069,7 +4069,7 @@ elif modo == "➕ Inserir Nova Linha":
                 col_t1, col_t2, col_t3 = st.columns(3)
                 col_t1.metric("📅 Dias Planejados", f"{dados_term_atv_form['dias_totais_projetados']:.1f} / {dados_term_atv_form['teto_dias']:.0f} d")
                 col_t2.metric("🔄 Ativ. Rotina (Máx 50%)", f"{dados_term_atv_form['dias_ord_projetados']:.1f} / {dados_term_atv_form['teto_ordinarias']:.0f} d")
-                col_t3.metric("👑 Coordenações Nível 3", f"{dados_term_atv_form['acoes_coord_n3']} / {dados_term_at_form['teto_coord_n3']} máx")
+                col_t3.metric("👑 Coordenações Nível 3", f"{dados_term_atv_form['acoes_coord_n3']} / {dados_term_atv_form['teto_coord_n3']} máx")
                 st.progress(pct_dias, text=f"Consumo de Tempo: {pct_dias*100:.1f}%")
 
                 for err in dados_term_atv_form["mensagens_erro"]: st.error(f"⛔ **BLOQUEIO (2027+):** {err}")
