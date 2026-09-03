@@ -4089,7 +4089,7 @@ elif modo == "➕ Inserir Nova Linha":
             idx_uf_oc = LISTA_UFS_COMPLETA.index(uf_oc_def) if uf_oc_def in LISTA_UFS_COMPLETA else 0
             uf_ocorrencia = st.selectbox("UF do Local de Realização (Campo):", LISTA_UFS_COMPLETA, index=idx_uf_oc, key=f"atv_sel_uf_ocorrencia_{codigo_atividade}")
             estado_local = MAPEAMENTO_ESTADOS_COMPLETO.get(uf_ocorrencia, "")
-            st.text_input("Estado de Realização (Automático):", value=estado_local, disabled=True, key=f"atv_txt_est_oc_{codigo_atividade}")
+            st.text_input("Estado de Realização (Automático):", value=estado_local, disabled=True)
             
             lista_municipios_uf = obter_municipios_ibge(uf_ocorrencia)
             mun_def = str(extrair_padrao_atv("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
