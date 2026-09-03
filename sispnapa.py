@@ -9,6 +9,7 @@ import requests
 import google.generativeai as genai
 import unicodedata
 
+
 st.set_page_config(page_title="SisPNAPA - Emergências Ambientais e Climáticas", layout="wide")
 
 # =================================================================
@@ -820,6 +821,534 @@ def calcular_capacidade_equipes_uf(df_atual, df_srv_base, ano_alvo):
             dados["Status"] = "⚪ Sem Equipe Cadastrada"
 
     return resumo_ufs
+
+import io
+import pandas as pd
+import streamlit as st
+
+# =====================================================================
+# --- FUNÇÃO 1: GERAR PLANILHA EXCEL OFICIAL (3 ABAS INSTITUCIONAIS) ---
+# =====================================================================
+def gerar_excel_portaria_pnapa(df_acoes_ano, df_macros_ano, df_setoriais_ano, ano_ref):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        
+        # Estilos Oficiais
+        fmt_header_inst = workbook.add_format({
+            'bold': True, 'font_size': 12, 'font_name': 'Arial',
+            'font_color': '#03170a', 'align': 'left', 'valign': 'vcenter'
+        })
+        fmt_sub_inst = workbook.add_format({
+            'bold': True, 'font_size': 10, 'font_name': 'Arial',
+            'font_color': '#1e3a8a', 'align': 'left', 'valign': 'vcenter'
+        })
+        fmt_th = workbook.add_format({
+            'bold': True, 'font_size': 9, 'font_name': 'Arial',
+            'bg_color': '#03170a', 'font_color': '#ffffff',
+            'align': 'center', 'valign': 'vcenter', 'text_wrap': True,
+            'border': 1, 'border_color': '#cbd5e1'
+        })
+        fmt_cell = workbook.add_format({
+            'font_size': 9, 'font_name': 'Arial', 'valign': 'vcenter',
+            'border': 1, 'border_color': '#e2e8f0'
+        })
+        fmt_center = workbook.add_format({
+            'font_size': 9, 'font_name': 'Arial', 'align': 'center', 'valign': 'vcenter',
+            'border': 1, 'border_color': '#e2e8f0'
+        })
+        fmt_moeda = workbook.add_format({
+            'font_size': 9, 'font_name': 'Arial', 'num_format': 'R$ #,##0.00', 'align': 'right', 'valign': 'vcenter',
+            'border': 1, 'border_color': '#e2e8f0'
+        })
+        fmt_num1 = workbook.add_format({
+            'font_size': 9, 'font_name': 'Arial', 'num_format': '#,##0.0', 'align': 'right', 'valign': 'vcenter',
+            'border': 1, 'border_color': '#e2e8f0'
+        })
+        fmt_num0 = workbook.add_format({
+            'font_size': 9, 'font_name': 'Arial', 'num_format': '#,##0', 'align': 'right', 'valign': 'vcenter',
+            'border': 1, 'border_color': '#e2e8f0'
+        })
+
+        # -------------------------------------------------------------
+        # ABA 1: ANEXO I - MACRO (PORTARIA)
+        # -------------------------------------------------------------
+        ws1 = workbook.add_worksheet("Anexo I - Macro (Portaria)")
+        ws1.write(0, 0, f"PLANO NACIONAL DE ATUAÇÃO PREVENTIVA AMBIENTAL — PNAPA {ano_ref}", fmt_header_inst)
+        ws1.write(1, 0, "ANEXO I — MINUTA DE PUBLICAÇÃO DE AÇÕES ESTRATÉGICAS (PORTARIA PNAPA)", fmt_sub_inst)
+        
+        headers_aba1 = [
+            "Código PNAPA", "Título da Ação Estratégica", "Descrição / Escopo Nacional",
+            "Liderança Sede", "UFs Participantes", "Indicador Oficial",
+            "Meta Nacional", "Orçamento Total Demandado (R$)", "Período de Execução"
+        ]
+        for c_idx, h_name in enumerate(headers_aba1):
+            ws1.write(3, c_idx, h_name, fmt_th)
+            
+        r_cursor = 4
+        for _, rm in df_macros_ano.iterrows():
+            c_puro = str(rm.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+            
+            # Filhas da Macro
+            df_filhas = df_setoriais_ano[
+                (df_setoriais_ano["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == c_puro) |
+                (df_setoriais_ano["Num_Acao_PNAPA"].astype(str).str.strip().str.upper().str.startswith(f"{c_puro}."))
+            ]
+            chaves_filhas = set(df_filhas["Num_Acao_PNAPA"].dropna().unique().tolist() + [c_puro, f"{c_puro}-{ano_ref}"])
+            
+            # Propostas das UFs
+            df_prop_m = df_acoes_ano[df_acoes_ano["Num_Pna_Limpo"].isin(chaves_filhas)] if not df_acoes_ano.empty else pd.DataFrame()
+            
+            ufs_part = sorted(list(set(df_prop_m["UF_Acao_PNAPA"].dropna().unique().tolist()))) if not df_prop_m.empty else []
+            ufs_part_txt = ", ".join(ufs_part) if ufs_part else "Nenhuma adesão"
+            
+            meta_macro = float(pd.to_numeric(rm.get("Meta_Nacional", 0), errors='coerce') or 0.0)
+            if meta_macro == 0 and not df_filhas.empty:
+                meta_macro = pd.to_numeric(df_filhas["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
+                
+            orc_macro = df_prop_m["Rec_Plan_Num"].sum() if not df_prop_m.empty else 0.0
+            
+            ws1.write(r_cursor, 0, c_puro, fmt_center)
+            ws1.write(r_cursor, 1, str(rm.get("Nome_Acao_Apelido", rm.get("Nome_Acao_Completo", ""))), fmt_cell)
+            ws1.write(r_cursor, 2, str(rm.get("Objetivo_Padrao", "")), fmt_cell)
+            ws1.write(r_cursor, 3, f"{rm.get('Dono_Acao','Ceneac')} ({rm.get('UF_Dono','DF')})", fmt_cell)
+            ws1.write(r_cursor, 4, ufs_part_txt, fmt_center)
+            ws1.write(r_cursor, 5, str(rm.get("Indicador", "Entregas Concluídas")), fmt_cell)
+            ws1.write(r_cursor, 6, meta_macro, fmt_num1)
+            ws1.write(r_cursor, 7, orc_macro, fmt_moeda)
+            ws1.write(r_cursor, 8, f"01/01/{ano_ref} a 31/12/{ano_ref}", fmt_center)
+            r_cursor += 1
+            
+        ws1.set_column(0, 0, 14)
+        ws1.set_column(1, 1, 35)
+        ws1.set_column(2, 2, 45)
+        ws1.set_column(3, 3, 25)
+        ws1.set_column(4, 4, 18)
+        ws1.set_column(5, 5, 30)
+        ws1.set_column(6, 6, 15)
+        ws1.set_column(7, 7, 22)
+        ws1.set_column(8, 8, 22)
+
+        # -------------------------------------------------------------
+        # ABA 2: ANEXO II - AÇÕES SETORIAIS
+        # -------------------------------------------------------------
+        ws2 = workbook.add_worksheet("Anexo II - Ações Setoriais")
+        ws2.write(0, 0, f"PLANO NACIONAL DE ATUAÇÃO PREVENTIVA AMBIENTAL — PNAPA {ano_ref}", fmt_header_inst)
+        ws2.write(1, 0, "ANEXO II — MATRIZ DE PACTUAÇÃO SETORIAL E ADESÃO FEDERATIVA", fmt_sub_inst)
+        
+        headers_aba2 = [
+            "Código Macro (Mãe)", "Código Setorial", "Título / Modal", "Tema / Modal",
+            "Especialista Sede", "Diretriz de Adesão", "UFs Proponentes", "Qtd UFs",
+            "Indicador Setorial", "Meta Prevista", "Teto Ceneac (R$)",
+            "Orçamento Demandado (R$)", "Cronograma Previsto"
+        ]
+        for c_idx, h_name in enumerate(headers_aba2):
+            ws2.write(3, c_idx, h_name, fmt_th)
+            
+        r_cursor2 = 4
+        for _, rs in df_setoriais_ano.iterrows():
+            cod_s_puro = str(rs.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+            cod_mae = str(rs.get("Acao_Mae", cod_s_puro.split(".")[0])).split("-")[0].strip().upper()
+            
+            chaves_sec = {cod_s_puro, f"{cod_s_puro}-{ano_ref}"}
+            df_prop_s = df_acoes_ano[df_acoes_ano["Num_Pna_Limpo"].isin(chaves_sec)] if not df_acoes_ano.empty else pd.DataFrame()
+            
+            # Formatação de Governança (Coordenação vs Apoio)
+            ufs_coord = sorted(df_prop_s[df_prop_s["Papel_Institucional"].astype(str).str.strip() == "Coordenação"]["UF_Acao_PNAPA"].dropna().unique().tolist()) if not df_prop_s.empty else []
+            
+            bloco_apoios = []
+            if not df_prop_s.empty:
+                df_apoio = df_prop_s[df_prop_s["Papel_Institucional"].astype(str).str.strip() == "Apoio"]
+                for uf_orig, grp in df_apoio.groupby("UF_Acao_PNAPA"):
+                    dests = sorted(list(set(grp["UF_Coordenadora"].dropna().tolist())))
+                    dest_str = ", ".join(dests)
+                    bloco_apoios.append(f"{uf_orig} (➔ {dest_str})")
+                    
+            part_linhas = []
+            if ufs_coord:
+                part_linhas.append("Coordenação: " + ", ".join(ufs_coord))
+            if bloco_apoios:
+                part_linhas.append("Apoio: " + ", ".join(bloco_apoios))
+                
+            gov_txt = "\n".join(part_linhas) if part_linhas else "Nenhuma adesão registrada"
+            qtd_ufs = len(set(df_prop_s["UF_Acao_PNAPA"].dropna().tolist())) if not df_prop_s.empty else 0
+            
+            # Diretriz
+            ufs_obrig = obter_lista_ufs_obrigatorias(rs.get("UFs_Obrigatorias", ""))
+            if len(ufs_obrig) == len(LISTA_UFS_COMPLETA):
+                dir_txt = "Obrigatória (Todas as 27 UFs)"
+            elif ufs_obrig:
+                dir_txt = f"Obrigatória ({', '.join(sorted(list(ufs_obrig)))})"
+            else:
+                dir_txt = "Facultativa"
+                
+            meta_sec_plan = df_prop_s[df_prop_s["Papel_Institucional"].astype(str).str.strip() != "Apoio"]["Meta_Num"].sum() if not df_prop_s.empty else 0.0
+            teto_ceneac_sec = float(pd.to_numeric(rs.get("Orcamento_Nacional", 0), errors='coerce') or 0.0)
+            orc_dem_sec = df_prop_s["Rec_Plan_Num"].sum() if not df_prop_s.empty else 0.0
+            
+            ws2.write(r_cursor2, 0, cod_mae, fmt_center)
+            ws2.write(r_cursor2, 1, cod_s_puro, fmt_center)
+            ws2.write(r_cursor2, 2, str(rs.get("Nome_Acao_Apelido", rs.get("Nome_Acao_Completo", ""))), fmt_cell)
+            ws2.write(r_cursor2, 3, str(rs.get("Tema_Padrao", "")), fmt_cell)
+            ws2.write(r_cursor2, 4, f"{rs.get('Dono_Acao','Ceneac')} ({rs.get('UF_Dono','DF')})", fmt_cell)
+            ws2.write(r_cursor2, 5, dir_txt, fmt_cell)
+            ws2.write(r_cursor2, 6, gov_txt, fmt_cell)
+            ws2.write(r_cursor2, 7, qtd_ufs, fmt_num0)
+            ws2.write(r_cursor2, 8, str(rs.get("Indicador", "")), fmt_cell)
+            ws2.write(r_cursor2, 9, meta_sec_plan, fmt_num1)
+            ws2.write(r_cursor2, 10, teto_ceneac_sec, fmt_moeda)
+            ws2.write(r_cursor2, 11, orc_dem_sec, fmt_moeda)
+            ws2.write(r_cursor2, 12, f"Ciclo Anual {ano_ref}", fmt_center)
+            r_cursor2 += 1
+            
+        ws2.set_column(0, 1, 14)
+        ws2.set_column(2, 2, 35)
+        ws2.set_column(3, 4, 22)
+        ws2.set_column(5, 6, 32)
+        ws2.set_column(7, 7, 10)
+        ws2.set_column(8, 8, 25)
+        ws2.set_column(9, 9, 15)
+        ws2.set_column(10, 11, 20)
+        ws2.set_column(12, 12, 18)
+
+        # -------------------------------------------------------------
+        # ABA 3: PACTUAÇÕES FEDERATIVAS (SEI)
+        # -------------------------------------------------------------
+        ws3 = workbook.add_worksheet("Pactuações Federativas (SEI)")
+        ws3.write(0, 0, f"PLANO NACIONAL DE ATUAÇÃO PREVENTIVA AMBIENTAL — PNAPA {ano_ref}", fmt_header_inst)
+        ws3.write(1, 0, "DETALHAMENTO ANALÍTICO DE PACTUAÇÕES FEDERATIVAS (INSTRUÇÃO SEI & PCDP)", fmt_sub_inst)
+        
+        headers_aba3 = [
+            "Macroação (Mãe)", "Ação Setorial", "Nome da Ação Setorial", "UF Proponente",
+            "Papel Institucional", "Ponto Focal / Responsável", "UF de Realização",
+            "Município Polo", "Meta Física", "Dias de Dedicação", "Origem do Recurso",
+            "Diárias (R$)", "Passagens (R$)", "Outras Despesas (R$)", "Total Previsto (R$)",
+            "Início", "Término", "Situação"
+        ]
+        for c_idx, h_name in enumerate(headers_aba3):
+            ws3.write(3, c_idx, h_name, fmt_th)
+            
+        r_cursor3 = 4
+        if not df_acoes_ano.empty:
+            for _, rp in df_acoes_ano.sort_values(by=["Num_Pna_Limpo", "UF_Acao_PNAPA"]).iterrows():
+                num_pna = str(rp.get("Num_Pna_Limpo", ""))
+                mae_cod = num_pna.split(".")[0].split("-")[0].strip().upper()
+                papel_str = str(rp.get("Papel_Institucional", "Coordenação")).strip()
+                uf_p = str(rp.get("UF_Acao_PNAPA", "")).strip().upper()
+                uf_c = str(rp.get("UF_Coordenadora", uf_p)).strip().upper()
+                
+                papel_txt = "Coordenação Estadual" if papel_str == "Coordenação" else f"Apoio Operacional (em {uf_c})"
+                resp_txt = "Equipe Nupaem-" + uf_p if papel_str == "Apoio" and (not rp.get("Servidor") or str(rp.get("Servidor")).lower() in ["nan","none",""]) else str(rp.get("Servidor","Não Designado"))
+                meta_val = 0.0 if papel_str == "Apoio" else float(pd.to_numeric(rp.get("Meta_Indicador",0), errors='coerce') or 0.0)
+                
+                ws3.write(r_cursor3, 0, mae_cod, fmt_center)
+                ws3.write(r_cursor3, 1, num_pna, fmt_center)
+                ws3.write(r_cursor3, 2, str(rp.get("Nome da Ação PNAPA", "")), fmt_cell)
+                ws3.write(r_cursor3, 3, uf_p, fmt_center)
+                ws3.write(r_cursor3, 4, papel_txt, fmt_cell)
+                ws3.write(r_cursor3, 5, resp_txt, fmt_cell)
+                ws3.write(r_cursor3, 6, str(rp.get("UF Onde Ocorreu/Ocorrerá a Ação", uf_c)), fmt_center)
+                ws3.write(r_cursor3, 7, str(rp.get("Município", "—")), fmt_center)
+                ws3.write(r_cursor3, 8, meta_val, fmt_num1)
+                ws3.write(r_cursor3, 9, float(pd.to_numeric(rp.get("Dias_Gastos_Plan",0), errors='coerce') or 0.0), fmt_num1)
+                ws3.write(r_cursor3, 10, str(rp.get("Origem do Recurso", uf_p)), fmt_center)
+                ws3.write(r_cursor3, 11, float(pd.to_numeric(rp.get("Rec_Plan_Diarias",0), errors='coerce') or 0.0), fmt_moeda)
+                ws3.write(r_cursor3, 12, float(pd.to_numeric(rp.get("Rec_Plan_Passagens",0), errors='coerce') or 0.0), fmt_moeda)
+                ws3.write(r_cursor3, 13, float(pd.to_numeric(rp.get("Rec_Plan_Outras_Despesas",0), errors='coerce') or 0.0), fmt_moeda)
+                ws3.write(r_cursor3, 14, float(pd.to_numeric(rp.get("Rec_Plan_Num",0), errors='coerce') or 0.0), fmt_moeda)
+                ws3.write(r_cursor3, 15, str(rp.get("Data de Início", f"01/01/{ano_ref}")), fmt_center)
+                ws3.write(r_cursor3, 16, str(rp.get("Data de Término", f"31/12/{ano_ref}")), fmt_center)
+                ws3.write(r_cursor3, 17, str(rp.get("Andamento", "Planejada")), fmt_center)
+                r_cursor3 += 1
+                
+        ws3.set_column(0, 1, 14)
+        ws3.set_column(2, 2, 35)
+        ws3.set_column(3, 3, 12)
+        ws3.set_column(4, 5, 26)
+        ws3.set_column(6, 7, 14)
+        ws3.set_column(8, 9, 14)
+        ws3.set_column(10, 10, 14)
+        ws3.set_column(11, 14, 18)
+        ws3.set_column(15, 17, 14)
+
+    return output.getvalue()
+
+
+# =====================================================================
+# --- FUNÇÃO 2: GERAR MINUTA DE PORTARIA (PDF / HTML EXECUTIVO) ---
+# =====================================================================
+def gerar_minuta_portaria_pdf_html(df_acoes_ano, df_macros_ano, df_setoriais_ano, ano_ref):
+    # 1. Montagem das Linhas do Anexo I (Macroações)
+    linhas_anexo1_html = ""
+    for _, rm in df_macros_ano.iterrows():
+        c_puro = str(rm.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+        df_filhas = df_setoriais_ano[
+            (df_setoriais_ano["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == c_puro) |
+            (df_setoriais_ano["Num_Acao_PNAPA"].astype(str).str.strip().str.upper().str.startswith(f"{c_puro}."))
+        ]
+        chaves_filhas = set(df_filhas["Num_Acao_PNAPA"].dropna().unique().tolist() + [c_puro, f"{c_puro}-{ano_ref}"])
+        df_prop_m = df_acoes_ano[df_acoes_ano["Num_Pna_Limpo"].isin(chaves_filhas)] if not df_acoes_ano.empty else pd.DataFrame()
+        
+        ufs_part = sorted(list(set(df_prop_m["UF_Acao_PNAPA"].dropna().unique().tolist()))) if not df_prop_m.empty else []
+        ufs_part_txt = ", ".join(ufs_part) if ufs_part else "Nenhuma"
+        
+        meta_macro = float(pd.to_numeric(rm.get("Meta_Nacional", 0), errors='coerce') or 0.0)
+        if meta_macro == 0 and not df_filhas.empty:
+            meta_macro = pd.to_numeric(df_filhas["Meta_Nacional"], errors='coerce').fillna(0.0).sum()
+            
+        orc_macro = df_prop_m["Rec_Plan_Num"].sum() if not df_prop_m.empty else 0.0
+        
+        linhas_anexo1_html += f"""
+        <tr>
+            <td class="center bold">{c_puro}</td>
+            <td class="bold">{rm.get('Nome_Acao_Apelido', rm.get('Nome_Acao_Completo',''))}</td>
+            <td>{rm.get('Objetivo_Padrao','')}</td>
+            <td>{rm.get('Dono_Acao','Ceneac')} ({rm.get('UF_Dono','DF')})</td>
+            <td class="center">{ufs_part_txt}</td>
+            <td>{rm.get('Indicador','Entregas Concluídas')}</td>
+            <td class="right">{formatar_numero_br(meta_macro, 1)}</td>
+            <td class="right bold">{formatar_moeda_br(orc_macro)}</td>
+            <td class="center">01/01/{ano_ref} a 31/12/{ano_ref}</td>
+        </tr>
+        """
+
+    # 2. Montagem das Linhas do Anexo II (Ações Setoriais)
+    linhas_anexo2_html = ""
+    for cod_mae, grp_mae in df_setoriais_ano.groupby(df_setoriais_ano["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper()):
+        qtd_linhas_mae = len(grp_mae)
+        primeira_linha = True
+        
+        for _, rs in grp_mae.iterrows():
+            cod_s_puro = str(rs.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+            chaves_sec = {cod_s_puro, f"{cod_s_puro}-{ano_ref}"}
+            df_prop_s = df_acoes_ano[df_acoes_ano["Num_Pna_Limpo"].isin(chaves_sec)] if not df_acoes_ano.empty else pd.DataFrame()
+            
+            ufs_coord = sorted(df_prop_s[df_prop_s["Papel_Institucional"].astype(str).str.strip() == "Coordenação"]["UF_Acao_PNAPA"].dropna().unique().tolist()) if not df_prop_s.empty else []
+            
+            bloco_apoios = []
+            if not df_prop_s.empty:
+                df_apoio = df_prop_s[df_prop_s["Papel_Institucional"].astype(str).str.strip() == "Apoio"]
+                for uf_orig, grp in df_apoio.groupby("UF_Acao_PNAPA"):
+                    dests = sorted(list(set(grp["UF_Coordenadora"].dropna().tolist())))
+                    dest_str = ", ".join(dests)
+                    bloco_apoios.append(f"{uf_orig} ({dest_str})")
+            
+            gov_linhas = []
+            if ufs_coord:
+                gov_linhas.append(f"<strong>Coordenação:</strong> {', '.join(ufs_coord)}")
+            if bloco_apoios:
+                gov_linhas.append(f"<strong>Apoio:</strong> {', '.join(bloco_apoios)}")
+            gov_txt = "<br>".join(gov_linhas) if gov_linhas else "<em>Nenhuma adesão registrada</em>"
+            
+            qtd_ufs = len(set(df_prop_s["UF_Acao_PNAPA"].dropna().tolist())) if not df_prop_s.empty else 0
+            
+            ufs_obrig = obter_lista_ufs_obrigatorias(rs.get("UFs_Obrigatorias", ""))
+            if len(ufs_obrig) == len(LISTA_UFS_COMPLETA):
+                dir_txt = "<strong>Obrigatória</strong> (Todas as 27 UFs)"
+            elif ufs_obrig:
+                dir_txt = f"<strong>Obrigatória</strong> ({', '.join(sorted(list(ufs_obrig)))})"
+            else:
+                dir_txt = "Facultativa"
+                
+            meta_sec_plan = df_prop_s[df_prop_s["Papel_Institucional"].astype(str).str.strip() != "Apoio"]["Meta_Num"].sum() if not df_prop_s.empty else 0.0
+            teto_ceneac_sec = float(pd.to_numeric(rs.get("Orcamento_Nacional", 0), errors='coerce') or 0.0)
+            orc_dem_sec = df_prop_s["Rec_Plan_Num"].sum() if not df_prop_s.empty else 0.0
+            
+            col_mae_td = f'<td rowspan="{qtd_linhas_mae}" class="center bold bg-macro">{cod_mae}</td>' if primeira_linha else ""
+            primeira_linha = False
+            
+            linhas_anexo2_html += f"""
+            <tr>
+                {col_mae_td}
+                <td class="center bold">{cod_s_puro}</td>
+                <td><strong>{rs.get('Nome_Acao_Apelido', rs.get('Nome_Acao_Completo',''))}</strong></td>
+                <td class="center">{rs.get('Tema_Padrao','')}</td>
+                <td>{rs.get('Dono_Acao','Ceneac')} ({rs.get('UF_Dono','DF')})</td>
+                <td>{dir_txt}</td>
+                <td>{gov_txt}</td>
+                <td class="center bold">{qtd_ufs}</td>
+                <td>{rs.get('Indicador','')}</td>
+                <td class="right">{formatar_numero_br(meta_sec_plan, 1)}</td>
+                <td class="right">{formatar_moeda_br(teto_ceneac_sec)}</td>
+                <td class="right bold">{formatar_moeda_br(orc_dem_sec)}</td>
+                <td class="center">Ciclo Anual {ano_ref}</td>
+            </tr>
+            """
+
+    # 3. Documento HTML Completo Formatado para Paisagem A4 (Print-to-PDF SEI)
+    html_final = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Minuta Portaria PNAPA {ano_ref}</title>
+    <style>
+        @page {{
+            size: A4 landscape;
+            margin: 10mm 12mm 12mm 12mm;
+            @bottom-right {{
+                content: "SisPNAPA - Sistema Integrado de Gestão do Plano Nacional Anual de Proteção Ambiental";
+            }}
+        }}
+        body {{
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 8pt;
+            color: #000000;
+            line-height: 1.25;
+            background: #ffffff;
+            margin: 0;
+            padding: 0;
+        }}
+        .header-doc {{
+            text-align: center;
+            margin-bottom: 8px;
+        }}
+        .header-doc h2 {{
+            font-size: 11pt;
+            margin: 0;
+            font-weight: bold;
+            color: #000;
+            text-transform: uppercase;
+        }}
+        .header-doc h3 {{
+            font-size: 9.5pt;
+            margin: 2px 0 0 0;
+            font-weight: bold;
+            color: #1e3a8a;
+            text-transform: uppercase;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+            page-break-inside: auto;
+        }}
+        tr {{
+            page-break-inside: avoid;
+            page-break-after: auto;
+        }}
+        th {{
+            background-color: #03170a;
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 7.5pt;
+            border: 1px solid #000;
+            padding: 4px 3px;
+            text-align: center;
+            text-transform: uppercase;
+        }}
+        td {{
+            border: 1px solid #cbd5e1;
+            padding: 3.5px 4px;
+            font-size: 7.5pt;
+            vertical-align: middle;
+        }}
+        .center {{ text-align: center; }}
+        .right {{ text-align: right; }}
+        .bold {{ font-weight: bold; }}
+        .bg-macro {{ background-color: #f8fafc; font-size: 8pt; }}
+        .nota-gov {{
+            margin-top: 10px;
+            font-size: 7pt;
+            color: #334155;
+            font-style: italic;
+            border-left: 3px solid #03170a;
+            padding-left: 6px;
+        }}
+        .footer-page {{
+            margin-top: 12px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 7pt;
+            color: #64748b;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 4px;
+        }}
+        .page-break {{
+            page-break-before: always;
+        }}
+        @media print {{
+            .no-print {{ display: none; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="no-print" style="background:#e0f2fe; border:1px solid #38bdf8; padding:10px; margin-bottom:15px; border-radius:6px; font-size:9pt;">
+        💡 <strong>Dica de Impressão / Salvamento em PDF:</strong> Pressione <code>Ctrl + P</code> (ou <code>Cmd + P</code> no Mac), certifique-se de selecionar o destino <strong>"Salvar como PDF"</strong> e a orientação <strong>Paisagem (Landscape)</strong> com margens no modo "Padrão".
+    </div>
+
+    <!-- PÁGINA 1: ANEXO I -->
+    <div class="header-doc">
+        <h2>PLANO NACIONAL DE ATUAÇÃO PREVENTIVA AMBIENTAL — PNAPA {ano_ref}</h2>
+        <h3>ANEXO I — MINUTA DE PUBLICAÇÃO DE AÇÕES ESTRATÉGICAS (PORTARIA PNAPA)</h3>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 7%;">Código PNAPA</th>
+                <th style="width: 17%;">Título da Ação Estratégica</th>
+                <th style="width: 25%;">Descrição / Escopo Nacional</th>
+                <th style="width: 12%;">Liderança Sede</th>
+                <th style="width: 8%;">UFs Participantes</th>
+                <th style="width: 13%;">Indicador Oficial</th>
+                <th style="width: 6%;">Meta Nac.</th>
+                <th style="width: 8%;">Orçamento Total Demandado (R$)</th>
+                <th style="width: 8%;">Período de Execução</th>
+            </tr>
+        </thead>
+        <tbody>
+            {linhas_anexo1_html}
+        </tbody>
+    </table>
+
+    <div class="footer-page">
+        <span>SisPNAPA — Sistema Integrado de Gestão do Plano Nacional Anual de Proteção Ambiental</span>
+        <span>Página 1 de 2</span>
+    </div>
+
+    <!-- PÁGINA 2: ANEXO II -->
+    <div class="page-break"></div>
+
+    <div class="header-doc" style="margin-top: 10px;">
+        <h2>PLANO NACIONAL DE ATUAÇÃO PREVENTIVA AMBIENTAL — PNAPA {ano_ref}</h2>
+        <h3>ANEXO II — MATRIZ DE PACTUAÇÃO SETORIAL E ADESÃO FEDERATIVA</h3>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 5%;">Ação Mãe</th>
+                <th style="width: 6%;">Código Setorial</th>
+                <th style="width: 15%;">Título / Modal</th>
+                <th style="width: 6%;">Tema / Modal</th>
+                <th style="width: 11%;">Especialista Sede</th>
+                <th style="width: 10%;">Diretriz Adesão</th>
+                <th style="width: 13%;">Governança / UFs</th>
+                <th style="width: 3%;">Qtd UFs</th>
+                <th style="width: 12%;">Indicador Setorial</th>
+                <th style="width: 5%;">Meta Setorial</th>
+                <th style="width: 7%;">Teto Ceneac (R$)</th>
+                <th style="width: 7%;">Orçamento Demandado</th>
+                <th style="width: 6%;">Cronograma Previsto</th>
+            </tr>
+        </thead>
+        <tbody>
+            {linhas_anexo2_html}
+        </tbody>
+    </table>
+
+    <div class="nota-gov">
+        <strong>Nota de Governança Federativa:</strong> As participações pactuadas sob o papel de Apoio Operacional possuem compromisso institucional mensurado pelo esforço em dias de dedicação e alocação orçamentária de custeio/diárias, vinculando-se ao alcance da meta física e do produto final sob responsabilidade formal da UF Coordenadora.
+    </div>
+
+    <div class="footer-page">
+        <span>SisPNAPA — Sistema Integrado de Gestão do Plano Nacional Anual de Proteção Ambiental</span>
+        <span>Página 2 de 2</span>
+    </div>
+</body>
+</html>
+"""
+    return html_final
 
 # =================================================================
 # FUNÇÕES UTILITÁRIAS DE FORMATAÇÃO NO PADRÃO BRASILEIRO (BRL)
@@ -5857,6 +6386,51 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
             delta_color="normal" if saldo_dipro_restante >= 0 else "inverse"
         )
 
+
+        # =====================================================================
+        # 4.1.1 EXPORTAÇÕES OFICIAIS: PLANILHA EXCEL & MINUTA DA PORTARIA EM PDF
+        # =====================================================================
+        st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            col_desc_exp, col_btns_exp = st.columns([1.5, 1.5])
+            with col_desc_exp:
+                st.markdown("##### 📄 Exportações Oficiais do Ciclo de Pactuação")
+                st.caption(f"Emissão oficial de documentos e planilhas consolidadas do PNAPA {ano_pact_sel} para instrução SEI.")
+
+            with col_btns_exp:
+                c_btn1, c_btn2 = st.columns(2)
+                with c_btn1:
+                    if not df_acoes_cadastradas.empty:
+                        bytes_excel = gerar_excel_portaria_pnapa(
+                            df_acoes_cadastradas, df_macros, df_setoriais_pool, ano_pact_sel
+                        )
+                        st.download_button(
+                            label="📊 **Baixar Matriz (Excel)**",
+                            data=bytes_excel,
+                            file_name=f"Minuta_Portaria_PNAPA_{ano_pact_sel}_Consolidada.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="btn_down_excel_pact_oficial"
+                        )
+                    else:
+                        st.button("📊 Baixar Matriz (Excel)", disabled=True, use_container_width=True)
+
+                with c_btn2:
+                    if not df_acoes_cadastradas.empty:
+                        html_portaria = gerar_minuta_portaria_pdf_html(
+                            df_acoes_cadastradas, df_macros, df_setoriais_pool, ano_pact_sel
+                        )
+                        st.download_button(
+                            label="📜 **Minuta Portaria (PDF)**",
+                            data=html_portaria.encode("utf-8"),
+                            file_name=f"Minuta_Portaria_PNAPA_{ano_pact_sel}_Oficial.html",
+                            mime="text/html",
+                            use_container_width=True,
+                            key="btn_down_minuta_pdf_oficial"
+                        )
+                    else:
+                        st.button("📜 Minuta Portaria (PDF)", disabled=True, use_container_width=True)
+        
         # =====================================================================
         # 4.1 PAINEL DE CAPACIDADE DA FORÇA DE TRABALHO POR UF / NUPAEM / SEDE
         # =====================================================================
