@@ -5938,6 +5938,8 @@ elif modo == "🤝 Pactuação Pré-PNAPA":
                 unsafe_allow_html=True
             )
 
+        st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
+
         # =====================================================================
         # 4.2 PAINEL RETRÁTIL: STATUS DA REDE FEDERATIVA & ADESÃO DAS UFS
         # =====================================================================
