@@ -2705,10 +2705,7 @@ elif modo == "📊 Visualizar Base":
 
                 cols_ac_validas = [c for c in COLS_TABELA_ACOES if c in df_exib_ac.columns]
                 df_tab_ac = df_exib_ac[cols_ac_validas].copy()
-                
-                df_tab_ac["Data de Início"] = df_tab_ac["Data de Início"].apply(converter_dt_seguro).dt.date
-                df_tab_ac["Data de Término"] = df_tab_ac["Data de Término"].apply(converter_dt_seguro).dt.date
-                
+                                                
                 df_tab_ac["Meta_Indicador"] = df_tab_ac["Meta_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
                 df_tab_ac["Resultado_Indicador"] = df_tab_ac.apply(
                     lambda r: "—" if str(r.get("Papel_Institucional")).strip() == "Apoio" else formatar_numero_br(r["Resultado_Indicador"], 1), axis=1
@@ -3180,10 +3177,7 @@ elif modo == "📊 Visualizar Base":
 
                 cols_at_validas = [c for c in COLS_TABELA_ATIVIDADES if c in df_exib_at.columns]
                 df_tab_at = df_exib_at[cols_at_validas].copy()
-                
-                df_tab_at["Data de Início"] = df_tab_at["Data de Início"].apply(converter_dt_seguro).dt.date
-                df_tab_at["Data de Término"] = df_tab_at["Data de Término"].apply(converter_dt_seguro).dt.date
-                
+                                                
                 df_tab_at["Resultado_Indicador"] = df_tab_at.apply(
                     lambda r: "—" if str(r.get("Papel_Institucional")).strip() == "Apoio" else formatar_numero_br(r["Resultado_Indicador"], 1), axis=1
                 )
