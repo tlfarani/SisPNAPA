@@ -2926,70 +2926,70 @@ elif modo == "📊 Visualizar Base":
                             else:
                                 ed_just_ac = ""
 
-                       if st.button("💾 Gravar Alterações da Ação", type="primary", key=f"btn_salvar_ac_t1_{id_ac_ref}"):
-                            bloquear_edicao_ac = False
-                            
-                            # 🛡️ TRAVA FEDERATIVA DE DUPLICIDADE NA EDIÇÃO
-                            cod_puro_ed = str(val_num_acao_ac).split("-")[0].strip().upper()
-                            cod_comp_ed = str(val_num_acao_ac).strip().upper()
-                            uf_prop_ed = str(uf_acao_val).strip().upper()
-                            ano_ed_str = str(val_ano_ac).strip()
-                            tema_ed = str(ed_tema_ac).strip()
-                            papel_ed = str(ed_papel_inst).strip()
-                            uf_coord_ed = str(ed_uf_coord).strip().upper()
-                            
-                            duplicata_existente = df_atual[
-                                (df_atual["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
-                                (df_atual["Id"].astype(str).str.split('.').str[0] != str(id_ac_ref).split('.')[0]) &
-                                (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_prop_ed) &
-                                (df_atual["Ano da Ação"].astype(str).str.split('.').str[0].str.strip() == ano_ed_str) &
-                                (df_atual["Tema da Atividade"].astype(str).str.strip() == tema_ed) &
-                                (df_atual["Papel_Institucional"].astype(str).str.strip() == papel_ed) &
-                                (df_atual.apply(obter_uf_coordenadora_segura, axis=1).str.strip().str.upper() == uf_coord_ed) &
-                                (
-                                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_comp_ed) |
-                                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == f"{cod_puro_ed}-{ano_ed_str}") |
-                                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_puro_ed)
-                                )
-                            ]
-                            
-                            if not duplicata_existente.empty:
-                                if papel_ed == "Apoio":
-                                    st.error(f"⛔ **Conflito de Governança:** A UF **{uf_prop_ed}** já possui uma linha de apoio cadastrada para a ação **{val_num_acao_ac}** com destino a **{uf_coord_ed}**. Não é permitido duplicar apoios para a mesma UF.")
-                                else:
-                                    st.error(f"⛔ **Conflito de Governança:** A UF **{uf_prop_ed}** já possui uma linha de Coordenação registrada para esta Ação.")
-                                bloquear_edicao_ac = True
-
-                            if not bloquear_edicao_ac and ed_papel_inst == "Coordenação" and ed_servidor_ac:
-                                res_chk_ac = calcular_termometro_carga(
-                                    df=df_atual,
-                                    df_srv_base=df_servidores,
-                                    nome_servidor=ed_servidor_ac,
-                                    ano_alvo=val_ano_ac,
-                                    dias_novos=float(ed_dias_pl_ac),
-                                    nivel_registro="Ação",
-                                    id_excluir=id_ac_ref,
-                                    num_acao_alvo=val_num_acao_ac
-                                )
-                                if res_chk_ac["status_geral"] == "BLOQUEADO":
-                                    st.error("⛔ **Alteração Impedida (Governança 2027+):** O coordenador selecionado ultrapassará os limites permitidos de liderança.")
+                        if st.button("💾 Gravar Alterações da Ação", type="primary", key=f"btn_salvar_ac_t1_{id_ac_ref}"):
+                                bloquear_edicao_ac = False
+                                
+                                # 🛡️ TRAVA FEDERATIVA DE DUPLICIDADE NA EDIÇÃO
+                                cod_puro_ed = str(val_num_acao_ac).split("-")[0].strip().upper()
+                                cod_comp_ed = str(val_num_acao_ac).strip().upper()
+                                uf_prop_ed = str(uf_acao_val).strip().upper()
+                                ano_ed_str = str(val_ano_ac).strip()
+                                tema_ed = str(ed_tema_ac).strip()
+                                papel_ed = str(ed_papel_inst).strip()
+                                uf_coord_ed = str(ed_uf_coord).strip().upper()
+                                
+                                duplicata_existente = df_atual[
+                                    (df_atual["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
+                                    (df_atual["Id"].astype(str).str.split('.').str[0] != str(id_ac_ref).split('.')[0]) &
+                                    (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_prop_ed) &
+                                    (df_atual["Ano da Ação"].astype(str).str.split('.').str[0].str.strip() == ano_ed_str) &
+                                    (df_atual["Tema da Atividade"].astype(str).str.strip() == tema_ed) &
+                                    (df_atual["Papel_Institucional"].astype(str).str.strip() == papel_ed) &
+                                    (df_atual.apply(obter_uf_coordenadora_segura, axis=1).str.strip().str.upper() == uf_coord_ed) &
+                                    (
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_comp_ed) |
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == f"{cod_puro_ed}-{ano_ed_str}") |
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_puro_ed)
+                                    )
+                                ]
+                                
+                                if not duplicata_existente.empty:
+                                    if papel_ed == "Apoio":
+                                        st.error(f"⛔ **Conflito de Governança:** A UF **{uf_prop_ed}** já possui uma linha de apoio cadastrada para a ação **{val_num_acao_ac}** com destino a **{uf_coord_ed}**. Não é permitido duplicar apoios para a mesma UF.")
+                                    else:
+                                        st.error(f"⛔ **Conflito de Governança:** A UF **{uf_prop_ed}** já possui uma linha de Coordenação registrada para esta Ação.")
                                     bloquear_edicao_ac = True
-
-                            if not bloquear_edicao_ac:
-                                payload_ac = payload_gerador(
-                                    val_ano_ac, val_num_acao_ac, val_nome_acao_ac, val_indicador_ac, "Ação Setorial",
-                                    "", ed_andamento_ac, "", "", uf_acao_val,
-                                    importancia_ac, ed_tema_ac, ed_obj_ac, ed_tipo_ac, "Não se Aplica", ed_servidor_ac,
-                                    ed_uf_srv_ac, ed_lot_ac, ed_eq_ac, "", "Brasil", ed_uf_oc_ac,
-                                    ed_est_loc_ac, ed_mun_ac, ed_dt_i_ac, ed_dtf_ac, ed_dias_pl_ac, 0.0,
-                                    ed_orig_ac, ed_rp_d_ac, ed_rp_p_ac, ed_rp_o_ac, 0.0,
-                                    0.0, 0.0, ed_obs_ac, ed_just_ac, id_ac_ref, "📝 Editar Linha Existente", df_atual,
-                                    papel_institucional=ed_papel_inst, coordenador_operacao="", meta_indicador=ed_meta_ac,
-                                    codigo_atividade="", uf_coordenadora=ed_uf_coord
-                                )
-                                executar_envio_sharepoint([payload_ac])
-                                st.session_state["selecoes_acoes"] = {}
-                                st.rerun()
+    
+                                if not bloquear_edicao_ac and ed_papel_inst == "Coordenação" and ed_servidor_ac:
+                                    res_chk_ac = calcular_termometro_carga(
+                                        df=df_atual,
+                                        df_srv_base=df_servidores,
+                                        nome_servidor=ed_servidor_ac,
+                                        ano_alvo=val_ano_ac,
+                                        dias_novos=float(ed_dias_pl_ac),
+                                        nivel_registro="Ação",
+                                        id_excluir=id_ac_ref,
+                                        num_acao_alvo=val_num_acao_ac
+                                    )
+                                    if res_chk_ac["status_geral"] == "BLOQUEADO":
+                                        st.error("⛔ **Alteração Impedida (Governança 2027+):** O coordenador selecionado ultrapassará os limites permitidos de liderança.")
+                                        bloquear_edicao_ac = True
+    
+                                if not bloquear_edicao_ac:
+                                    payload_ac = payload_gerador(
+                                        val_ano_ac, val_num_acao_ac, val_nome_acao_ac, val_indicador_ac, "Ação Setorial",
+                                        "", ed_andamento_ac, "", "", uf_acao_val,
+                                        importancia_ac, ed_tema_ac, ed_obj_ac, ed_tipo_ac, "Não se Aplica", ed_servidor_ac,
+                                        ed_uf_srv_ac, ed_lot_ac, ed_eq_ac, "", "Brasil", ed_uf_oc_ac,
+                                        ed_est_loc_ac, ed_mun_ac, ed_dt_i_ac, ed_dtf_ac, ed_dias_pl_ac, 0.0,
+                                        ed_orig_ac, ed_rp_d_ac, ed_rp_p_ac, ed_rp_o_ac, 0.0,
+                                        0.0, 0.0, ed_obs_ac, ed_just_ac, id_ac_ref, "📝 Editar Linha Existente", df_atual,
+                                        papel_institucional=ed_papel_inst, coordenador_operacao="", meta_indicador=ed_meta_ac,
+                                        codigo_atividade="", uf_coordenadora=ed_uf_coord
+                                    )
+                                    executar_envio_sharepoint([payload_ac])
+                                    st.session_state["selecoes_acoes"] = {}
+                                    st.rerun()
                     
                     # Edição em Lote de Ações
                     else:
