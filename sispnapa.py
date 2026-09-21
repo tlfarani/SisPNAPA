@@ -4189,11 +4189,31 @@ elif modo == "📊 Visualizar Base":
                         with aba2_at:
                             st.text_input("Indicador Oficial (Herdado)", value=val_indicador_at, disabled=True, key=f"t1_at_ind_{id_at_ref}")
                             
+                            # 🔍 Verifica se a atividade já possui outro Coordenador de Campo gravado no banco
+                            cod_atv_atual = str(reg_at_alvo.get("Codigo_Atividade", "")).strip().upper()
+                            coord_outro_banco = df_atual[
+                                (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                                (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == cod_atv_atual) &
+                                (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo") &
+                                (df_atual["Id"].astype(str).str.split('.').str[0] != str(id_at_ref).split('.')[0])
+                            ]
+                            ja_tem_outro_coord = not coord_outro_banco.empty
+                            nome_outro_coord = coord_outro_banco["Servidor"].iloc[0] if ja_tem_outro_coord else ""
+                            
+                            # Função atual salva desta linha
+                            func_salva_desta_linha = str(reg_at_alvo.get("Coordenador_Operacao", "Apoio de Campo")).strip()
+                            eh_coord_esta_linha = (func_salva_desta_linha == "Coordenador de Campo") and not ja_tem_outro_coord
+
                             if ed_papel_at == "Apoio":
                                 ed_res_ind_at = "0"
-                                st.text_input("Resultado do Indicador:", value="0 (Apoio Operacional — Produto final atribuído à Coordenação)", disabled=True)
+                                st.text_input("Resultado do Indicador:", value="0 (Apoio Operacional — Produto atribuído à Coordenação)", disabled=True)
+                            elif not eh_coord_esta_linha or ja_tem_outro_coord:
+                                ed_res_ind_at = "0"
+                                st.info(f"ℹ️ **Trava Anti-Duplicidade:** O Coordenador de Campo desta atividade é **{nome_outro_coord if ja_tem_outro_coord else 'o titular'}**. Linhas de Apoio de Campo registram compulsoriamente resultado `0`.")
+                                st.text_input("Resultado do Indicador:", value="0 (Exclusivo do Coordenador de Campo)", disabled=True, key=f"t1_at_resind_dis_{id_at_ref}")
                             else:
-                                ed_res_ind_at = st.text_input("Resultado do Indicador (Aferição Real):", value=str(reg_at_alvo.get("Resultado_Indicador", "")), key=f"t1_at_resind_{id_at_ref}")
+                                res_ind_salvo = str(reg_at_alvo.get("Resultado_Indicador", "")).strip()
+                                ed_res_ind_at = st.text_input("Resultado do Indicador (Aferição Real):", value=res_ind_salvo, key=f"t1_at_resind_{id_at_ref}", help="Apenas o Coordenador de Campo deve preencher este campo.")
                             
                             ed_doc_at = st.text_input("Número SEI do Documento Probatório de Execução:", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
                             
@@ -4218,8 +4238,12 @@ elif modo == "📊 Visualizar Base":
                                 ed_servidor_at = st.selectbox(f"Servidor ({ed_uf_acao_val}):", lista_nomes_servidores, index=idx_srv_at, key=f"t1_at_srv_{id_at_ref}_{ed_uf_acao_val}")
                             with c_at_rh2:
                                 func_salva_at = str(reg_at_alvo.get("Coordenador_Operacao", "Apoio de Campo")).strip()
-                                idx_func_at = LISTA_FUNCOES_CAMPO.index(func_salva_at) if func_salva_at in LISTA_FUNCOES_CAMPO else 1
-                                ed_funcao_campo = st.selectbox("Função de Campo:", LISTA_FUNCOES_CAMPO, index=idx_func_at, key=f"t1_at_func_{id_at_ref}")
+                                if ja_tem_outro_coord:
+                                    st.text_input("Função de Campo:", value="Apoio de Campo (Travado)", disabled=True, help=f"A atividade já é coordenada por {nome_outro_coord}.")
+                                    ed_funcao_campo = "Apoio de Campo"
+                                else:
+                                    idx_func_at = LISTA_FUNCOES_CAMPO.index(func_salva_at) if func_salva_at in LISTA_FUNCOES_CAMPO else 0
+                                    ed_funcao_campo = st.selectbox("Função de Campo:", LISTA_FUNCOES_CAMPO, index=idx_func_at, key=f"t1_at_func_{id_at_ref}")
 
                             match_srv_at_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
                             if not match_srv_at_t1.empty:
@@ -4389,7 +4413,18 @@ elif modo == "📊 Visualizar Base":
 
                         with l_aba3:
                             if st.checkbox("Alterar Função de Campo?", key="chk_func_lt"):
-                                edicoes_lote["Coordenador_Operacao"] = st.selectbox("Nova Função:", LISTA_FUNCOES_CAMPO, key="in_func_lt")
+                                nova_funcao_lote = st.selectbox(
+                                    "Nova Função para os Servidores Selecionados:", 
+                                    LISTA_FUNCOES_CAMPO, 
+                                    index=1, # Padrão: Apoio de Campo
+                                    key="in_func_lt"
+                                )
+                                if nova_funcao_lote == "Coordenador de Campo":
+                                    st.error("⛔ **Operação Não Permitida:** Não é possível definir múltiplos servidores como 'Coordenador de Campo' em lote. A designação de coordenador deve ser feita na Edição Individual.")
+                                else:
+                                    st.info("ℹ️ Os servidores selecionados serão definidos como **Apoio de Campo**. O resultado do indicador dessas linhas será automaticamente saneado para **0**.")
+                                    edicoes_lote["Coordenador_Operacao"] = "Apoio de Campo"
+                                    edicoes_lote["Resultado_Indicador"] = "0"
 
                         with l_aba4:
                             col_ld1, col_ld2 = st.columns(2)
@@ -4410,7 +4445,13 @@ elif modo == "📊 Visualizar Base":
 
                         if edicoes_lote:
                             st.json(edicoes_lote)
-                            if st.button("🚀 Confirmar Alterações em Massa", type="primary", key="btn_confirm_lote_at"):
+                            
+                            # Trava para não permitir confirmar se tentou colocar Coordenador de Campo em lote
+                            pode_confirmar_lote = True
+                            if edicoes_lote.get("Coordenador_Operacao") == "Coordenador de Campo":
+                                pode_confirmar_lote = False
+
+                            if st.button("🚀 Confirmar Alterações em Massa", type="primary", disabled=not pode_confirmar_lote, key="btn_confirm_lote_at"):
                                 payloads_lote = []
                                 for _, row in df_at_sel.iterrows():
                                     p_item = {col: row[col] for col in df_atual.columns if col in row}
@@ -4418,6 +4459,11 @@ elif modo == "📊 Visualizar Base":
                                     p_item["Id"] = str(row["Id"])
                                     for k_alt, v_alt in edicoes_lote.items():
                                         p_item[k_alt] = str(v_alt) if isinstance(v_alt, (date, datetime)) else v_alt
+                                    
+                                    # 🔒 Se a linha virou Apoio de Campo, zera o indicador legado (ex: 1,67)
+                                    if p_item.get("Coordenador_Operacao") == "Apoio de Campo":
+                                        p_item["Resultado_Indicador"] = "0"
+                                        
                                     payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
                                     payloads_lote.append(payload_sanit)
                                 executar_envio_sharepoint(payloads_lote)
