@@ -4187,8 +4187,64 @@ elif modo == "📊 Visualizar Base":
                                     ed_uf_coord_at = st.selectbox("UF Coordenadora da Missão:", lista_outras_ufs, index=idx_ufc_at, key=f"t1_at_ufc_{id_at_ref}")
 
                             st.markdown("##### 🏷️ Código da Atividade")
-                            ed_cod_atv = st.text_input("Código da Atividade/Missão:", value=str(reg_at_alvo.get("Codigo_Atividade", "")).strip().upper(), key=f"t1_at_cod_{id_at_ref}").strip().upper()
-                            ed_nome_atv = st.text_input("Nome da Atividade / Operação:", value=str(reg_at_alvo.get("Nome da Atividade", "")).strip(), key=f"t1_at_nomeatv_{id_at_ref}").strip()
+                            cod_atual_salvo = str(reg_at_alvo.get("Codigo_Atividade", "")).strip().upper()
+
+                            # 🔍 Busca atividades existentes da mesma Ação e UF para sugerir ou vincular
+                            df_atvs_mesma_acao = df_atual[
+                                (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                                (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == str(uf_acao_at).strip().upper()) &
+                                (
+                                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao_at).strip().upper()) |
+                                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao_at).split("-")[0].strip().upper())
+                                ) &
+                                (df_atual["Codigo_Atividade"].astype(str).str.strip() != "")
+                            ]
+
+                            import re
+                            maior_atv_ed = 0
+                            for cod_ex in df_atvs_mesma_acao["Codigo_Atividade"].dropna().unique():
+                                m_atv = re.search(r'ATV(\d+)', str(cod_ex).upper())
+                                if m_atv:
+                                    num_atv = int(m_atv.group(1))
+                                    if num_atv > maior_atv_ed: maior_atv_ed = num_atv
+
+                            cod_base_acao_ed = val_num_acao_at if "-" in str(val_num_acao_at) else f"{val_num_acao_at}-{val_ano_at}"
+                            novo_cod_sugerido_ed = f"{cod_base_acao_ed}-{uf_acao_at}-ATV{maior_atv_ed + 1:02d}"
+
+                            opcoes_atvs_pre = []
+                            mapa_nomes_pre = {}
+                            for c_u in sorted(df_atvs_mesma_acao["Codigo_Atividade"].dropna().unique()):
+                                linhas_c = df_atvs_mesma_acao[df_atvs_mesma_acao["Codigo_Atividade"] == c_u]
+                                nome_c = str(linhas_c["Nome da Atividade"].iloc[0]).strip() if not linhas_c.empty else ""
+                                lbl_c = f"{c_u} — {nome_c}"
+                                opcoes_atvs_pre.append(lbl_c)
+                                mapa_nomes_pre[lbl_c] = (c_u, nome_c)
+
+                            modo_cod_ed = st.radio(
+                                "Definição do Código:",
+                                ["Manter Atual", "🔗 Vincular a Código Pré-Existente", "➕ Gerar Novo Código Sequencial"],
+                                horizontal=True,
+                                key=f"t1_at_modo_cod_{id_at_ref}"
+                            )
+
+                            nome_sug_input = str(reg_at_alvo.get("Nome da Atividade", "")).strip()
+
+                            if modo_cod_ed == "🔗 Vincular a Código Pré-Existente" and opcoes_atvs_pre:
+                                idx_pre = 0
+                                for i_opc, opc_txt in enumerate(opcoes_atvs_pre):
+                                    if opc_txt.startswith(cod_atual_salvo + " ") or opc_txt.startswith(cod_atual_salvo + "—"):
+                                        idx_pre = i_opc
+                                        break
+                                sel_atv_pre = st.selectbox("Selecione a Atividade Pré-Existente:", opcoes_atvs_pre, index=idx_pre, key=f"t1_at_sel_pre_{id_at_ref}")
+                                ed_cod_atv = mapa_nomes_pre[sel_atv_pre][0]
+                                if not nome_sug_input or nome_sug_input == "":
+                                    nome_sug_input = mapa_nomes_pre[sel_atv_pre][1]
+                            elif modo_cod_ed == "➕ Gerar Novo Código Sequencial":
+                                ed_cod_atv = st.text_input("Novo Código Sequencial (Sugerido):", value=novo_cod_sugerido_ed, key=f"t1_at_cod_novo_{id_at_ref}").strip().upper()
+                            else:
+                                ed_cod_atv = st.text_input("Código da Atividade/Missão:", value=cod_atual_salvo, key=f"t1_at_cod_{id_at_ref}").strip().upper()
+
+                            ed_nome_atv = st.text_input("Nome da Atividade / Operação:", value=nome_sug_input, key=f"t1_at_nomeatv_{id_at_ref}").strip()
                             
                             lista_and_at = ["Prevista", "Concluída"]
                             idx_and_at = lista_and_at.index(reg_at_alvo.get("Andamento", "Prevista")) if reg_at_alvo.get("Andamento") in lista_and_at else 0
@@ -4408,6 +4464,58 @@ elif modo == "📊 Visualizar Base":
                         ])
 
                         with l_aba1:
+                            if st.checkbox("Alterar Código da Atividade?", key="chk_cod_lt"):
+                                uf_lote = str(df_at_sel["UF_Acao_PNAPA"].iloc[0]).strip().upper() if not df_at_sel.empty else "SP"
+                                num_acao_lote = str(df_at_sel["Número da Ação PNAPA"].iloc[0]).strip().upper() if not df_at_sel.empty else "CEN02.01"
+                                ano_lote = str(df_at_sel["Ano da Ação"].iloc[0]).split('.')[0].strip() if not df_at_sel.empty else "2027"
+
+                                df_atvs_lote_pool = df_atual[
+                                    (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                                    (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_lote) &
+                                    (
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == num_acao_lote) |
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == num_acao_lote.split("-")[0].strip().upper())
+                                    ) &
+                                    (df_atual["Codigo_Atividade"].astype(str).str.strip() != "")
+                                ]
+
+                                import re
+                                maior_atv_lt = 0
+                                for cod_ex in df_atvs_lote_pool["Codigo_Atividade"].dropna().unique():
+                                    m_atv = re.search(r'ATV(\d+)', str(cod_ex).upper())
+                                    if m_atv:
+                                        n_atv = int(m_atv.group(1))
+                                        if n_atv > maior_atv_lt: maior_atv_lt = n_atv
+
+                                cod_base_lt = num_acao_lote if "-" in num_acao_lote else f"{num_acao_lote}-{ano_lote}"
+                                novo_cod_sugerido_lt = f"{cod_base_lt}-{uf_lote}-ATV{maior_atv_lt + 1:02d}"
+
+                                opcoes_atvs_lt = []
+                                mapa_nomes_lt = {}
+                                for c_u in sorted(df_atvs_lote_pool["Codigo_Atividade"].dropna().unique()):
+                                    linhas_c = df_atvs_lote_pool[df_atvs_lote_pool["Codigo_Atividade"] == c_u]
+                                    nome_c = str(linhas_c["Nome da Atividade"].iloc[0]).strip() if not linhas_c.empty else ""
+                                    lbl_c = f"{c_u} — {nome_c}"
+                                    opcoes_atvs_lt.append(lbl_c)
+                                    mapa_nomes_lt[lbl_c] = (c_u, nome_c)
+
+                                modo_cod_lt = st.radio(
+                                    "Definição do Código em Lote:", 
+                                    ["🔗 Vincular a Código Pré-Existente", "➕ Gerar Novo Código Sequencial"], 
+                                    horizontal=True, 
+                                    key="radio_modo_cod_lt"
+                                )
+
+                                if modo_cod_lt == "🔗 Vincular a Código Pré-Existente" and opcoes_atvs_lt:
+                                    sel_pre_lt = st.selectbox("Selecione a Atividade Pré-Existente:", opcoes_atvs_lt, key="sel_atv_pre_lt")
+                                    cod_final_lt = mapa_nomes_lt[sel_pre_lt][0]
+                                    st.caption(f"💡 Todas as {qtd_at_sel} atividades selecionadas serão agrupadas sob o código `{cod_final_lt}`.")
+                                    edicoes_lote["Codigo_Atividade"] = cod_final_lt
+                                else:
+                                    cod_final_lt = st.text_input("Novo Código Sequencial (Sugerido):", value=novo_cod_sugerido_lt, key="in_cod_novo_lt").strip().upper()
+                                    st.caption(f"💡 Todas as {qtd_at_sel} atividades selecionadas formarão a nova atividade `{cod_final_lt}`.")
+                                    edicoes_lote["Codigo_Atividade"] = cod_final_lt
+
                             if st.checkbox("Alterar Nome da Atividade?", key="chk_nome_lt"):
                                 edicoes_lote["Nome da Atividade"] = st.text_input("Novo Nome da Atividade:", key="in_nome_lt").strip()
                             if st.checkbox("Alterar Andamento?", key="chk_and_lt"):
