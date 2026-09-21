@@ -208,6 +208,12 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         else:
             uf_coord_final = str(uf_acao).strip().upper()
 
+    # 🔒 TRAVA ANTI-DUPLICIDADE: Apenas Coordenador de Campo registra resultado físico
+    res_ind_final = str(resultado_indicador).strip() if resultado_indicador != "" else ""
+    if nivel_selecionado == "Atividade":
+        if str(coordenador_operacao).strip() != "Coordenador de Campo" or str(papel_institucional).strip() == "Apoio":
+            res_ind_final = "0"
+
     payload = {
         "Acao": acao_envio,
         "Id": id_final,
@@ -223,7 +229,7 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Andamento": str(andamento),
         "Indicador": str(val_indicador),
         "Meta_Indicador": str(meta_indicador) if meta_indicador != "" else "",
-        "Resultado_Indicador": str(resultado_indicador) if resultado_indicador != "" else "",
+        "Resultado_Indicador": res_ind_final,
         "Doc_Probatorio_Exec": str(doc_probatorio),
         "UF_Acao_PNAPA": str(uf_acao),
         "Importância da Atividade": str(importancia),
@@ -4848,14 +4854,27 @@ elif modo == "➕ Inserir Nova Linha":
         with aba2:
             st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True, key=f"atv_ind_dis_{val_num_acao}_{codigo_atividade}")
             
-            # 🚀 Trava de produto físico em Apoio
+            # 🔍 Verifica se a atividade já possui outro Coordenador de Campo gravado no banco
+            coord_existente_banco = df_atual[
+                (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(codigo_atividade).strip().upper()) &
+                (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
+            ]
+            atividade_ja_tem_coord = not coord_existente_banco.empty
+            nome_coord_cadastrado = coord_existente_banco["Servidor"].iloc[0] if atividade_ja_tem_coord else ""
+
+            # 🔒 Trava de produto físico: se for Apoio ou se já existir um coordenador
             if papel_inst == "Apoio":
                 st.info("ℹ️ Em atividade de Apoio, o produto físico de campo pertence à UF Coordenadora. Aferição física desabilitada.")
                 resultado_indicador = "0"
-                st.text_input("Resultado do Indicador:", value="0 (Apoio Operacional — Produto final atribuído à Coordenação)", disabled=True)
+                st.text_input("Resultado do Indicador:", value="0 (Apoio Operacional)", disabled=True)
+            elif atividade_ja_tem_coord:
+                st.info(f"ℹ️ **Trava Anti-Duplicidade:** O Coordenador de Campo desta atividade é **{nome_coord_cadastrado}**. Apenas a linha do coordenador registra o indicador.")
+                resultado_indicador = "0"
+                st.text_input("Resultado do Indicador:", value="0 (Exclusivo do Coordenador de Campo)", disabled=True)
             else:
                 res_ind_def = str(extrair_padrao_atv("Resultado_Indicador", "")).strip()
-                resultado_indicador = st.text_input("Resultado do Indicador (Aferição Real):", value=res_ind_def, key=f"atv_res_ind_{codigo_atividade}")
+                resultado_indicador = st.text_input("Resultado do Indicador (Aferição Real):", value=res_ind_def, key=f"atv_res_ind_{codigo_atividade}", help="Apenas o Coordenador de Campo deve preencher este campo.")
             
             doc_sei_def = str(extrair_padrao_atv("Doc_Probatorio_Exec", "")).strip()
             doc_probatorio = st.text_input("Número SEI do Documento Probatório de Execução:", value=doc_sei_def, key=f"atv_doc_sei_{codigo_atividade}")
@@ -4893,13 +4912,18 @@ elif modo == "➕ Inserir Nova Linha":
                 servidor = st.selectbox(f"Servidor Integrante / Responsável ({uf_filtro_pna}):", lista_nomes_servidores, key=f"atv_sel_servidor_{codigo_atividade}_{uf_filtro_pna}")
 
             with c_rh2:
-                if dados_atv_origem is not None:
-                    idx_funcao_sugerida = 1
+                # Se a atividade já tem um coordenador diferente do servidor selecionado, trava como Apoio de Campo
+                if atividade_ja_tem_coord and str(servidor).strip() != str(nome_coord_cadastrado).strip():
+                    st.text_input("Função na Atividade de Campo:", value="Apoio de Campo (Travado)", disabled=True)
+                    funcao_campo = "Apoio de Campo"
                 else:
-                    eh_ponto_focal = bool(ponto_focal_estado and str(servidor).strip().lower() == str(ponto_focal_estado).strip().lower())
-                    idx_funcao_sugerida = 0 if eh_ponto_focal and papel_inst == "Coordenação" else 1
+                    if dados_atv_origem is not None:
+                        idx_funcao_sugerida = 1
+                    else:
+                        eh_ponto_focal = bool(ponto_focal_estado and str(servidor).strip().lower() == str(ponto_focal_estado).strip().lower())
+                        idx_funcao_sugerida = 0 if eh_ponto_focal and papel_inst == "Coordenação" else 1
 
-                funcao_campo = st.selectbox("Função na Atividade de Campo:", LISTA_FUNCOES_CAMPO, index=idx_funcao_sugerida, key=f"atv_funcao_campo_{codigo_atividade}_{servidor}")
+                    funcao_campo = st.selectbox("Função na Atividade de Campo:", LISTA_FUNCOES_CAMPO, index=idx_funcao_sugerida, key=f"atv_funcao_campo_{codigo_atividade}_{servidor}")
 
             match_srv_atv = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
             if not match_srv_atv.empty:
@@ -5179,7 +5203,13 @@ elif modo == "➕ Inserir Nova Linha":
                         
                         p_nome_atv = nome_atividade if espelhar_detalhes else ""
                         p_andamento = andamento if espelhar_detalhes else "Não Iniciada"
-                        p_res_ind = resultado_indicador if espelhar_detalhes else ""
+                        
+                        # 🔒 REGRA DE OURO NO LOTE: Apenas o Coordenador de Campo recebe o resultado; os demais ficam com "0"
+                        if espelhar_detalhes and funcao_lote == "Coordenador de Campo" and papel_inst == "Coordenação":
+                            p_res_ind = str(resultado_indicador).strip()
+                        else:
+                            p_res_ind = "0"
+
                         p_doc = doc_probatorio if espelhar_detalhes else ""
                         
                         p_pais = pais if espelhar_local else "Brasil"
