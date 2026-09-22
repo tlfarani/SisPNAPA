@@ -4472,9 +4472,13 @@ elif modo == "📊 Visualizar Base":
                     else:
                         st.info(f"👥 **Edição em Lote:** {qtd_at_sel} atividades selecionadas. Marque os campos para edição em massa.")
                         edicoes_lote = {}
+                        edicoes_lote = {}
                         l_aba1, l_aba2, l_aba3, l_aba4, l_aba5 = st.tabs([
-                            "1. Identificação & Agrupador", "2. Detalhes & Indicadores", 
-                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações"
+                            "1. Identificação & Agrupador", 
+                            "2. Recursos Humanos & Liderança", 
+                            "3. Detalhes & Indicadores", 
+                            "4. Cronograma & Custos", 
+                            "5. Observações"
                         ])
 
                         with l_aba1:
@@ -4538,15 +4542,11 @@ elif modo == "📊 Visualizar Base":
                                 edicoes_lote["UF_Coordenadora"] = st.selectbox("Nova UF Coordenadora:", LISTA_UFS_COMPLETA, key="in_ufc_lt")
 
                         with l_aba2:
-                            if st.checkbox("Alterar Número SEI do Documento Probatório?", key="chk_doc_lt"):
-                                edicoes_lote["Doc_Probatorio_Exec"] = st.text_input("Novo SEI:", key="in_doc_lt").strip()
-
-                        with l_aba3:
                             if st.checkbox("Alterar Função de Campo?", key="chk_func_lt"):
                                 nova_funcao_lote = st.selectbox(
                                     "Nova Função para os Servidores Selecionados:", 
                                     LISTA_FUNCOES_CAMPO, 
-                                    index=1, # Padrão: Apoio de Campo
+                                    index=1,
                                     key="in_func_lt"
                                 )
                                 if nova_funcao_lote == "Coordenador de Campo":
@@ -4555,6 +4555,10 @@ elif modo == "📊 Visualizar Base":
                                     st.info("ℹ️ Os servidores selecionados serão definidos como **Apoio de Campo**. O resultado do indicador dessas linhas será automaticamente saneado para **0**.")
                                     edicoes_lote["Coordenador_Operacao"] = "Apoio de Campo"
                                     edicoes_lote["Resultado_Indicador"] = "0"
+
+                        with l_aba3:
+                            if st.checkbox("Alterar Número SEI do Documento Probatório?", key="chk_doc_lt"):
+                                edicoes_lote["Doc_Probatorio_Exec"] = st.text_input("Novo SEI:", key="in_doc_lt").strip()
 
                         with l_aba4:
                             col_ld1, col_ld2 = st.columns(2)
@@ -5345,8 +5349,8 @@ elif modo == "➕ Inserir Nova Linha":
                 if st.button("✕ Desmarcar Todos", key="btn_lote_desmarcar_todos"): st.session_state["chk_lote_all"] = False
             
             status_padrao = st.session_state.get("chk_lote_all", True)
-            espelhar_detalhes = st.checkbox("Espelhar Detalhes da Atividade e Documentos SEI", value=status_padrao, key="lote_chk_detalhes")
             espelhar_local = st.checkbox("Espelhar Localidade (País, UF, Estado, Município)", value=status_padrao, key="lote_chk_local")
+            espelhar_detalhes = st.checkbox("Espelhar Detalhes da Atividade e Documentos SEI", value=status_padrao, key="lote_chk_detalhes")
             espelhar_crono = st.checkbox("Espelhar Cronograma (Datas e Dias Gastos)", value=status_padrao, key="lote_chk_crono")
             espelhar_custos = st.checkbox("Espelhar Custos (Valores Planejados e Executados)", value=status_padrao, key="lote_chk_custos")
             espelhar_just = st.checkbox("Espelhar Justificativas e Observações", value=status_padrao, key="lote_chk_just")
