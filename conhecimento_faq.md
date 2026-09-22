@@ -73,41 +73,72 @@ O SisPNAPA resolve a disparidade histórica de nomenclaturas por meio da funçã
 * Cada atividade é vinculada obrigatoriamente a uma Ação Setorial pai da respectiva UF.
 * Registra servidores escalados, esforço em dias, diárias pagas, custos de passagens e o **número do processo SEI comprobatório**.
 
-### 2.5 Como funciona o Código Inteligente da Atividade?
-As atividades recebem um identificador unívoco gerado automaticamente:
-> **Formato:** `[Código_Ação]-[Ano]-[UF]-ATV[Sequencial]`
+### 2.5 Como funciona a Gestão do Código Inteligente da Atividade (`Codigo_Atividade`)?
+As atividades de campo são unificadas por um identificador padronizado que agrupa toda a equipe:
+> **Formato Padrão:** `[Código_Ação]-[Ano]-[UF]-ATV[Sequencial]`
 * *Exemplo:* A terceira missão vinculada à ação `CEN02.01-2027` no estado de São Paulo recebe o identificador **`CEN02.01-2027-SP-ATV03`**.
+* **Gestão Dinâmica (Inserção e Edição):** Tanto no cadastro quanto na edição (individual ou em lote), o usuário pode escolher entre duas formas de definição do código:
+  1. **➕ Gerar Novo Código Sequencial:** O sistema varre o banco em tempo real, identifica o maior número `ATV` já existente para a respectiva Ação e UF, e sugere automaticamente o próximo número sequencial vago (`maior + 1`).
+  2. **🔗 Vincular a Código Pré-Existente:** Permite selecionar em um menu suspenso uma atividade já iniciada por outro colega da equipe, herdando o código inteligente e garantindo que todos os servidores fiquem agrupados sob a mesma operação.
 
 ---
 
-## 3. Gestão de Equipes, Lotações da Sede e Liderança
+## 3. Gestão de Equipes, Liderança de Campo e Trava Anti-Duplicidade
 
 ### 3.1 Obrigatoriedade do Cadastro Prévio
 Nenhum servidor pode ser escalado em uma atividade de campo ou indicado como ponto focal se não constar previamente cadastrado na base de Equipes (`df_servidores`). Isso previne duplicidades de nomes, variações de grafia e inconsistências contábeis.
 * Para cadastrar um colaborador, acesse **👥 Gerenciar Equipes** > **➕ Cadastrar Servidor**, preencha os dados funcionais e salve.
 
-### 3.2 Regra de Liderança Única por Missão
-Toda Atividade de Campo envolvendo múltiplos servidores possui validação estrita:
-* Cada missão deve conter **exatamente 1 Coordenador de Campo**.
-* Os demais integrantes são cadastrados na função de **Apoio de Campo**.
-* ⚠️ **Bloqueio de Conflito:** O sistema impede a gravação caso dois servidores sejam apontados simultaneamente como "Coordenador de Campo" na mesma missão.
+### 3.2 Regra de Liderança Única de Campo e Exclusividade do Indicador
+Toda operação de campo envolvendo um ou mais agentes obedece a uma regra estrita de liderança:
+* **Exatamente 1 Coordenador de Campo:** Cada atividade (`Codigo_Atividade`) deve possuir uma única linha com a função **`Coordenador de Campo`**.
+* **Membros em Apoio de Campo:** Todos os demais servidores participantes daquela mesma missão são cadastrados compulsoriamente como **`Apoio de Campo`**.
+* **Exclusividade do Resultado Físico:** **Apenas a linha do Coordenador de Campo registra o resultado quantitativo do indicador.** As linhas de Apoio de Campo registram compulsoriamente valor `"0"` (exibido como `—` nas tabelas analíticas). Isso impede que a contagem física (ex: veículos abordados, terminais inspecionados) seja multiplicada pelo número de agentes em campo.
 
-### 3.3 Atributos Funcionais Automáticos
-A plataforma cruza em tempo real o cadastro de servidores para enriquecer os registros operacionais com os seguintes atributos:
-* **É Fiscal?** (`Sim` / `Não`)
-* **Possui AEAC?** (`Sim` / `Não`)
-* **Função Institucional:** (`Responsável Nupaem`, `Responsável Substituto(a)`, `Coordenador(a) Geral Ceneac`, `Coordenador(a) CPrev`, `Coordenador(a) Coate`, `Membro de Equipe`).
+### 3.3 A Trava Anti-Duplicidade em 5 Camadas
+O SisPNAPA implementa cinco camadas automáticas e integradas de proteção que impedem a sobrecontagem de indicadores:
 
-### 3.4 Sincronização em Cascata
-Se a identificação funcional, UF ou divisão de lotação de um servidor forem alteradas no módulo de equipes, o sistema executa uma atualização síncrona em cascata em todas as ações e atividades do banco de dados.
+[ Camada 1: Inserção Individual ] ──> Trava o indicador em "0" se a atividade já tiver Coordenador.
+[ Camada 2: Edição Individual ]   ──> Campo só abre para edição se a linha for o Coordenador ativo.
+[ Camada 3: Carga em Lote ]       ──> Só o Coordenador leva o indicador; apoios são forçados para "0".
+[ Camada 4: Backend / Payload ]   ──> O gerador de envio força "0" se a função != "Coordenador de Campo".
+[ Camada 5: Motor dos Dashboards ]──> Ignora linhas de apoio na soma de produtos físicos.
+
+1. **Camada 1 — Inserção Individual:** Se o usuário vincular a atividade a um código pré-existente que já possua coordenador, o sistema trava automaticamente a função em `Apoio de Campo (Travado)` e bloqueia o campo de resultado em `0`.
+2. **Camada 2 — Edição Individual:** O campo do indicador reage em tempo real à função selecionada. Se a linha for Apoio, o campo fica cinza e desabilitado em `0`. Se o usuário mudar a função para Coordenador (desde que não haja outro), o campo destrava na hora.
+3. **Camada 3 — Carga em Lote:** Ao lançar missões com múltiplos agentes, apenas a linha designada como Coordenador de Campo recebe o resultado preenchido; todas as demais linhas são gravadas com `"0"`.
+4. **Camada 4 — Sanitização no Backend (`payload_gerador`):** Antes de enviar a requisição HTTP ao SharePoint, o sistema verifica a função: qualquer registro que não seja `Coordenador de Campo` (ou que atue sob Apoio institucional) tem o campo `Resultado_Indicador` compulsoriamente redefinido para `"0"`.
+5. **Camada 5 — Motor de Agregação dos Dashboards:** Nos relatórios executivos e no painel tático, o cálculo de cumprimento de metas considera apenas o resultado apurado das linhas de Coordenadores de Campo, expurgando duplicidades mesmo se houver dados legados não saneados.
+
+### 3.4 Saneamento de Registros Legados (Resíduos Históricos)
+Para atividades antigas gravadas antes da implementação da trava (onde membros de apoio ficaram com valores fracionados, como `1,67`):
+* Basta selecionar as linhas dos apoios na tela `📊 Visualizar Base` ➔ `Atividades de Campo`, abrir a **Edição em Lote**, marcar *"Alterar Função de Campo?"* escolhendo `Apoio de Campo` e confirmar.
+* O sistema converte os registros e **zera compulsoriamente todos os valores residuais antigos para `0`**, consolidando a meta integralmente na linha do Coordenador.
 
 ---
 
-## 4. Motor de Governança Operacional, Limites e Apoio Interestadual
+## 4. Ordem Harmonizada das Abas nos Formulários (UX/UI Padronizada)
+
+Para garantir uma navegação fluida, sem retrabalho e com perfeita resposta do sistema, **100% dos formulários de atividades** (Inserção Individual, Inserção em Lote, Edição Individual e Edição em Lote) seguem rigorosamente a mesma sequência em 5 abas:
+
+| Aba | Nome da Aba | O que é informado | Comportamento Reativo |
+| :---: | :--- | :--- | :--- |
+| **1** | **Identificação & Agrupador** | Ação vinculada, Papel da UF, Código da Missão (`ATVxx`), Nome e Andamento. | Define o agrupador e checa se já existe coordenador na base. |
+| **2** | **Recursos Humanos & Liderança** | UF da equipe, Servidor, Função de Campo (`Coordenador` vs `Apoio`), PCDP e Localidade. | **Decisiva:** A escolha da função aqui dita o comportamento da Aba 3. |
+| **3** | **Detalhes & Indicadores** | Indicador oficial, **Resultado Físico**, Número do Processo SEI, Tipo e Periculosidade. | **Responsiva:** Se a Aba 2 for Coordenador, abre para digitação; se for Apoio, trava em `0`. |
+| **4** | **Cronograma & Custos** | Datas de início e término, dias planejados/executados, diárias, passagens e outras despesas. | Apura o esforço em dias e o custeio financeiro real da missão. |
+| **5** | **Justificativas / Observações** | Campo livre de notas e justificativa obrigatória caso haja pendência documental ou atraso. | Protege a auditoria da atividade no SEI. |
+
+### 4.1 Por que a Aba de Recursos Humanos (2) vem antes da Aba de Indicadores (3)?
+Essa inversão resolve o atrito operacional: o Streamlit processa a interface de cima para baixo. Ao escolher primeiro quem é o servidor e qual a sua função de campo (Aba 2), quando o usuário clica na Aba 3 o sistema já sabe exatamente se deve manter o campo de indicador aberto ou bloqueá-lo com a trava anti-duplicidade, sem que o servidor precise alternar abas para destravar o formulário.
+
+---
+
+## 5. Motor de Governança Operacional, Limites e Apoio Interestadual
 
 O SisPNAPA incorpora um motor analítico de governança com algoritmos preditivos de sobrecarga e regras rígidas de liderança.
 
-### 4.1 Tetos Anuais de Dedicação: Pré-PNAPA vs. Pós-PNAPA
+### 5.1 Tetos Anuais de Dedicação: Pré-PNAPA vs. Pós-PNAPA
 A capacidade anual de dias de campo é calibrada conforme a responsabilidade institucional:
 
 | Perfil do Servidor | Teto Pré-PNAPA (Planejamento) | Teto Pós-PNAPA (Execução: +50%) |
@@ -116,17 +147,17 @@ A capacidade anual de dias de campo é calibrada conforme a responsabilidade ins
 | **Coordenador / Responsável Substituto** | 60 dias / ano | 90 dias / ano |
 | **Membro de Equipe Regional** | 40 dias / ano | 60 dias / ano |
 
-### 4.2 Equiparação Automática da Sede (Ceneac / Brasília)
+### 5.2 Equiparação Automática da Sede (Ceneac / Brasília)
 Servidores lotados no **DF** vinculados às divisões centrais (`Ceneac`, `CPrev`, `Coate`, `Seplog`, `Seprev`, `Secoate`) são automaticamente equiparados a **Titular/Responsável**, recebendo o teto ampliado de **90 dias (Pré) / 135 dias (Pós)** para absorver a coordenação de operações nacionais.
 
-### 4.3 Trava Anti-Rotina (Cota Máxima de 50% Ordinárias)
-Para resguardar o foco estratégico do Ibama, **no máximo 50% do teto de dias do servidor pode ser consumido por atividades com Importância "Ordinária"**. A capacidade restante deve ser destinada a iniciativas "Prioritárias" ou "Estratégicas".
+### 5.3 Trava Anti-Rotina (Cota Máxima de 50% Ordinárias)
+Para resguardar o foco estratégico do Ibama, **no máximo 50% do teto de dias do servidor pode ser consumido por atividades com Importância "Ordinária" / "Rotina"**. A capacidade restante deve ser destinada a iniciativas "Prioritárias" ou "Finalísticas".
 
-### 4.4 Limites de Liderança e Coordenação
+### 5.4 Limites de Liderança e Coordenação
 * **Teto de Coordenações por Servidor:** Máximo de **10 Ações PNAPA** sob a liderança do mesmo servidor no exercício.
-* **Regra de Ouro (Ações Nível 3):** Um mesmo coordenador pode assumir no máximo **3 Ações de Grande Porte / Nível 3** ($\ge 20$ dias de dedicação planejada acumulada).
+* **Regra de Ouro (Ações Nível 3):** Um mesmo coordenador pode assumir no máximo **3 Ações de Grande Porte / Nível 3** ($\ge 20$ dias de dedicação planejada acumulada da equipe).
 
-### 4.5 Regras Rígidas para o Regime de Apoio Interestadual
+### 5.5 Regras Rígidas para o Regime de Apoio Interestadual
 A governança para operações conjuntas interestaduais obedece às seguintes diretrizes:
 * **Meta Física Zerada no Apoio:** A UF que cadastra proposta como `Apoio` assume compromisso exclusivamente de **esforço (dias)** e **custeio (diárias/passagens)**. O campo `Meta_Indicador` é automaticamente travado em `0.0` (exibido como `—`), impedindo a duplicação ou contagem dupla da meta nacional.
 * **Titularidade do Produto:** A responsabilidade técnica pela meta física, consolidação dos relatórios e instrução do processo SEI compete exclusivamente à **UF Coordenadora**.
@@ -135,11 +166,11 @@ A governança para operações conjuntas interestaduais obedece às seguintes di
 
 ---
 
-## 5. Painel de Pactuação Pré-PNAPA em Cascata (Módulo 6)
+## 6. Painel de Pactuação Pré-PNAPA em Cascata (Módulo 6)
 
 O módulo **`🤝 Pactuação Pré-PNAPA`** promove a conciliação federativa em tempo real entre as diretrizes orçamentárias da Direção/Sede (*Top-Down*) e as demandas dos estados (*Bottom-Up*).
 
-### 5.1 Balanço Orçamentário Triplo (DIPRO $\rightarrow$ Ceneac $\rightarrow$ Estados)
+### 6.1 Balanço Orçamentário Triplo (DIPRO $\rightarrow$ Ceneac $\rightarrow$ Estados)
 O topo da página sintetiza a saúde orçamentária do ciclo em 4 cartões executivos:
 1. **🏛️ Teto Global DIPRO:** Envelope orçamentário total autorizado pela Diretoria para a Emergência Ambiental (calibrado pelo Administrador e persistido sob o identificador técnico `DIPRO_GLOBAL`).
 2. **📋 Teto Alocado Ceneac:** Soma dos tetos pré-distribuídos pela Sede nas Ações do Catálogo.
@@ -149,9 +180,7 @@ $$\text{Saldo Restante} = \text{Teto Global DIPRO} - \sum \text{Recursos Demanda
 
 ---
 
-### 5.2 Estrutura Modular da Tela de Pactuação (Seções 4.1 a 4.4)
-
-A visualização é organizada em quatro painéis analíticos sequenciais, intercalados por espaçamento suave:
+### 6.2 Estrutura Modular da Tela de Pactuação
 
 #### Seção 4.1 — Capacidade da Força de Trabalho por Equipe (Nupaem & Sede Ceneac)
 Painel retrátil com indicadores de carga horária:
@@ -166,10 +195,9 @@ Diagnóstico de prontidão institucional:
 #### Seção 4.3 — Matriz de Alocação de Esforço (Dias) e Recursos (R$) por Ação
 Painel analítico expandido por padrão, estruturado em três abas complementares com **barras de progresso nativas** (`ProgressColumn`):
 * **🎯 Consolidado por Macroação (N1):** Exibe código PNAPA, nome da macroação, liderança da Sede, quantidade de setoriais e propostas vinculadas, total de dias, percentual visual de esforço consumido, orçamento total demandado e percentual visual de orçamento consumido.
-* **📈 Consolidado por Ação Setorial (N2):** Visão sintética por modal/tema. Oculta colunas intermediárias de diárias e passagens para focar em *Total Dias*, *% Esforço*, *Total Demandado (R$)* e *% Orçamento*, facilitando a tomada de decisão pelos coordenadores.
+* **📈 Consolidado por Ação Setorial (N2):** Visão sintética por modal/tema. Foca em *Total Dias*, *% Esforço*, *Total Demandado (R$)* e *% Orçamento*, facilitando a tomada de decisão pelos coordenadores.
 * **📋 Detalhamento Analítico (Propostas):** Visão itemizada para auditoria contábil. Discrimina explicitamente *UF Proponente*, *Papel Institucional*, *UF Coordenadora (Destino)*, *Ponto Focal*, *Meta Física*, *Dias de Campo*, *Diárias (R$)*, *Passagens (R$)*, *Outras Despesas (R$)* e *Total Previsto (R$)*.
 * **Blindagem Numérica e KPIs de Rodapé:** As colunas financeiras são tratadas estritamente como números de ponto flutuante (`float`), impedindo falhas de concatenação textual. O rodapé consolida cinco métricas em cards dedicados: *Esforço de Campo*, *Total Diárias*, *Total Passagens*, *Total Outras Despesas* e *Orçamento Total*.
-* **Filtro Responsivo por UF:** Permite isolar a análise para um estado específico (ex: `SP` ou `DF`). As barras de progresso recalculam automaticamente sua escala de 100% com base nos totais daquele estado.
 
 #### Seção 4.4 — Exportações Oficiais: Minuta de Portaria em Excel e PDF
 Barra de ferramentas dedicada para download imediato de documentos padronizados:
@@ -178,40 +206,39 @@ Barra de ferramentas dedicada para download imediato de documentos padronizados:
 
 ---
 
-### 5.3 Árvore de Pactuação e Responsividade por Estado
-A Seção 5 desdobra cada Macroação (N1) em suas Setoriais filhas (N2) e propostas de estados (N3):
-* **Comportamento Responsivo:** Quando uma UF específica é selecionada no topo, a árvore filtra os cards para evidenciar o compromisso daquele estado, detalhando as ações em que ele atua como Coordenador e destacando apoios prestados a terceiros ou recebidos de outros estados.
-* **Monitoramento de Diretrizes Ceneac:** Identifica ações de adesão obrigatória nacional (27 UFs) ou estadual dirigida, apontando nominalmente os estados que ainda não lançaram proposta como Coordenadores.
+## 7. Central de Visualização, Gestão de Registros e Correção de Datas
 
----
+O menu **📊 Visualizar Base** oferece ferramentas completas para acompanhamento, filtragem e edição das operações:
 
-## 6. Central de Visualização & Gestão Operacional
+### 7.1 Exibição Real de Datas e Ordenação Cronológica Estrita
+* **Fim do Erro `01/01/1970`:** As colunas `Data de Início` e `Data de Término` são processadas na interface como objetos de data nativos do Python (`datetime.date`). Isso impede que o componente `st.column_config.DateColumn` interprete strings textuais incorretamente e caia no marco zero da era Unix.
+* **Ordenação Cronológica Real:** Ao clicar nos cabeçalhos das tabelas, os registros são ordenados de forma cronológica natural (janeiro a dezembro), eliminando ordenações alfabéticas distorcidas (onde maio aparecia antes de fevereiro).
+* **Independência dos Filtros:** Essa formatação visual afeta apenas o espelho de tela; a barra superior de filtros por período continua operando em paralelo com total precisão sobre a coluna `Data_Inicio_Datetime`.
 
-O menu **📊 Visualizar Base** oferece ferramentas para acompanhamento e edição das operações:
-
-### 6.1 Subpágina 1: Ações Estaduais (Planejamento & Metas Segmentadas por Tema)
-* **Segmentação por Modal / Tema:** Cada linha de planejamento agrega e afere seu percentual de execução cruzando `[Número da Ação PNAPA, UF_Acao_PNAPA, Tema da Atividade]`. Uma linha de Rodovias computa exclusivamente vistorias rodoviárias, isolando-se de Ferrovias ou Portos.
+### 7.2 Subpágina 1: Ações Setoriais (Planejamento & Metas por Modal)
+* **Segmentação por Modal / Tema:** Cada linha de planejamento agrega e afere seu percentual de execução cruzando `[Número da Ação PNAPA, UF_Acao_PNAPA, UF_Coordenadora]`. Uma linha de Rodovias computa exclusivamente vistorias rodoviárias, isolando-se de Ferrovias ou Portos.
 * **Trava Documental SEI:** Atividades concluídas sem número de processo SEI cadastrado pontuam **zero** no resultado físico da ação estadual.
 * **Painel de Edição da Ação:** Permite atualizar o Papel institucional, a UF Coordenadora, o Coordenador responsável e as metas físicas.
 
-### 6.2 Subpágina 2: Atividades de Campo (Operações & Execução)
+### 7.3 Subpágina 2: Atividades de Campo (Operações & Execução)
 * Central de auditoria micro: exibe código inteligente (`ATV`), servidor escalado, município polo, processo SEI, diárias pagas, passagens e situação documental.
-* **Edição em Lote:** Permite selecionar múltiplas atividades para alterar andamento, inserir números de processo SEI ou prorrogar cronogramas simultaneamente.
+* **Edição Individual Responsiva:** Permite alterar o `Codigo_Atividade` (para um novo sequencial sugerido ou pré-existente) e garante que o campo do indicador abra imediatamente se a linha for definida como Coordenador de Campo.
+* **Edição em Lote:** Permite selecionar múltiplas atividades para alterar andamento, código agregador ou função de campo. Se as atividades forem convertidas em Apoio de Campo, os indicadores legados são automaticamente saneados para `"0"`.
 
 ---
 
-## 7. Regras de Execução Física, Metas e Comprovação SEI
+## 8. Regras de Execução Física, Metas e Comprovação SEI
 
-### 7.1 Critérios de Cumprimento de Ações Estaduais
+### 8.1 Critérios de Cumprimento de Ações Estaduais
 * **Ações com Indicador Numérico:** Considerada cumprida quando o somatório das entregas das atividades homologadas com SEI alcança **$\ge 80\%$ da Meta Planejada da UF**.
 * **Ações Qualitativas / Continuadas (Meta = 0):** Cumprida se houver esforço de campo registrado (`Dias_Gastos_Exec > 0`) e ao menos uma missão concluída com processo SEI.
 * **Ações sob Regime de Apoio:** Considerada cumprida quando a equipe dedica $\ge 80\%$ dos dias planejados em socorro ao estado coordenador.
 
-### 7.2 Obrigatoriedade Estrita do Processo SEI (`Doc_Probatorio_Exec`)
+### 8.2 Obrigatoriedade Estrita do Processo SEI (`Doc_Probatorio_Exec`)
 Nenhuma entrega física é homologada sem a inserção do número de processo ou documento probatório no SEI (Relatório de Viagem, Informação Técnica, Termo de Vistoria):
 * **Atividade concluída com SEI em branco:** Enquadra-se visualmente como *🟡 Sem Documento de Conclusão*, gera pendência de auditoria e **tem seu resultado físico desconsiderado (zero)** em todas as métricas consolidadas.
 
-### 7.3 Semáforo de Status das Ações Estaduais
+### 8.3 Semáforo de Status das Ações Estaduais
 
 | Status de Execução | Marcador | Regra de Enquadramento Operacional | Impacto no Desempenho |
 | :--- | :---: | :--- | :--- |
@@ -223,39 +250,20 @@ Nenhuma entrega física é homologada sem a inserção do número de processo ou
 
 ---
 
-## 8. Prazos, Justificativas e Acompanhamento Financeiro
-
-### 8.1 Identificação Automática de Atrasos
-O sistema compara em tempo real a data de término da atividade com a data corrente: se o prazo expirou e a atividade permanece com andamento *Prevista*, é classificada como **🔴 Atrasada**.
-
-### 8.2 Regularização de Não Execução
-Em caso de inviabilidade de missão (condições meteorológicas severas, contingenciamento ou cancelamento de operação):
-1. Acesse **📊 Visualizar Base** > **📌 Atividades de Campo**.
-2. Selecione a atividade e abra o painel de edição.
-3. Altere o andamento para *Não Executada* ou *Cancelada* e preencha a lista oficial de **Justificativa da Ação**.
-4. O sistema regulariza o registro para **🟡 Não Executada (Justificada)** ou **Cancelada (Justificada)**, protegendo os indicadores da regional.
-
-### 8.3 Acompanhamento PCDP (SCDP)
-A inserção individualizada permite auditar custos reais por agente:
-* **Quantidade de Diárias e Valor de Diárias (R$)**
-* **Valor Efetivo de Passagens Aéreas/Terrestres (R$)**
-* **Número da PCDP (SCDP)**
-* **Dias de Campo Efetivamente Cumpridos**
-
----
-
 ## 9. Produtividade em Lote e Operações Conjuntas
 
-### 9.1 Inserção Multi-Servidor (Lote Operacional)
-Permite registrar missões com múltiplos agentes em um único envio:
-1. No menu `➕ Inserir Nova Linha` (Nível: Atividade), preencha os dados comuns da operação (município, datas, modal, objetivo).
-2. Na aba de servidores, selecione todos os participantes da missão via seletor múltiplo.
-3. O sistema cria um registro individual para cada agente no SharePoint, compartilhando o mesmo `Codigo_Atividade` e permitindo a apropriação exata dos custos de diárias por matrícula.
+### 9.1 Inserção Multi-Servidor (Lote Operacional com Trava de Indicador)
+Permite registrar missões com múltiplos agentes em um único envio garantindo a unicidade do indicador:
+1. No menu `➕ Inserir Nova Linha` (Nível: Atividade), preencha os dados comuns da operação (Ação, Código, Nome, Localidade, Datas, Custos).
+2. Na aba de liderança, selecione quem será o **Coordenador de Campo** e, na aba de indicadores, lance o resultado da entrega.
+3. Abra o popover `👥 Deseja cadastrar esta atividade para múltiplos servidores?` e selecione os demais colegas da equipe.
+4. O sistema gera registros simultâneos com o mesmo `Codigo_Atividade`: **apenas o coordenador recebe o resultado físico do indicador, enquanto todos os demais recebem automaticamente resultado `"0"`**.
 
-### 9.2 Edição em Lote na Central de Visualização
-1. Na tabela de **Ações** ou **Atividades**, selecione as caixas das linhas desejadas.
-2. No painel de edição em massa, selecione os atributos que deseja atualizar (ex: *Data de Término*, *Doc SEI*, *Situação*).
-3. Clique em **Confirmar e Aplicar Alterações em Massa**. As atribuições individuais dos servidores são preservadas.
+### 9.2 Edição em Lote e Unificação de Código
+1. Na tabela de **Atividades**, selecione as linhas desejadas com as caixas de seleção.
+2. Na Aba 1 da edição em lote, marque *"Alterar Código da Atividade?"* para vincular todas as linhas a um código existente ou gerar um novo código sequencial `ATVxx`.
+3. Na Aba 2, marque *"Alterar Função de Campo?"* para definir os membros como Apoio de Campo, limpando resíduos de contagem anterior.
+4. Clique em **Confirmar Alterações em Massa**. As diárias e atribuições individuais são preservadas, mas o agrupador e o indicador são uniformizados.
 
 ---
 
