@@ -99,10 +99,15 @@ Toda operação de campo envolvendo um ou mais agentes obedece a uma regra estri
 O SisPNAPA implementa cinco camadas automáticas e integradas de proteção que impedem a sobrecontagem de indicadores:
 
 [ Camada 1: Inserção Individual ] ──> Trava o indicador em "0" se a atividade já tiver Coordenador.
+
 [ Camada 2: Edição Individual ]   ──> Campo só abre para edição se a linha for o Coordenador ativo.
+
 [ Camada 3: Carga em Lote ]       ──> Só o Coordenador leva o indicador; apoios são forçados para "0".
+
 [ Camada 4: Backend / Payload ]   ──> O gerador de envio força "0" se a função != "Coordenador de Campo".
+
 [ Camada 5: Motor dos Dashboards ]──> Ignora linhas de apoio na soma de produtos físicos.
+
 
 1. **Camada 1 — Inserção Individual:** Se o usuário vincular a atividade a um código pré-existente que já possua coordenador, o sistema trava automaticamente a função em `Apoio de Campo (Travado)` e bloqueia o campo de resultado em `0`.
 2. **Camada 2 — Edição Individual:** O campo do indicador reage em tempo real à função selecionada. Se a linha for Apoio, o campo fica cinza e desabilitado em `0`. Se o usuário mudar a função para Coordenador (desde que não haja outro), o campo destrava na hora.
