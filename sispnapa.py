@@ -5012,6 +5012,17 @@ elif modo == "➕ Inserir Nova Linha":
             idx_and_atv = lista_andamentos_atividade.index(andamento_def) if andamento_def in lista_andamentos_atividade else 0
             andamento = st.selectbox("Andamento da Atividade:", lista_andamentos_atividade, index=idx_and_atv, key=f"atv_sel_andamento_{codigo_atividade}")
 
+        # ---------------------------------------------------------
+        # 🔍 VERIFICAÇÃO ANTECIPADA DE COORDENADOR DE CAMPO
+        # ---------------------------------------------------------
+        coord_existente_banco = df_atual[
+            (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+            (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(codigo_atividade).strip().upper()) &
+            (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
+        ]
+        atividade_ja_tem_coordenador = not coord_existente_banco.empty
+        nome_coordenador_ativo = coord_existente_banco["Servidor"].iloc[0] if atividade_ja_tem_coordenador else ""
+
         with aba2:
             st.markdown("##### 👥 Recursos Humanos & Liderança da Operação")
             
