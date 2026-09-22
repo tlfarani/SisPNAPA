@@ -4253,6 +4253,16 @@ elif modo == "📊 Visualizar Base":
                             idx_and_at = lista_and_at.index(reg_at_alvo.get("Andamento", "Prevista")) if reg_at_alvo.get("Andamento") in lista_and_at else 0
                             ed_andamento_at = st.selectbox("Andamento da Atividade:", lista_and_at, index=idx_and_at, key=f"t1_at_and_{id_at_ref}")
 
+                        # 🔍 VERIFICAÇÃO ANTECIPADA: Checa se já existe outro Coordenador de Campo na mesma atividade
+                        coord_outro_banco = df_atual[
+                            (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                            (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(ed_cod_atv).strip().upper()) &
+                            (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo") &
+                            (df_atual["Id"].astype(str).str.split('.').str[0] != str(id_at_ref).split('.')[0])
+                        ]
+                        ja_tem_outro_coord = not coord_outro_banco.empty
+                        nome_outro_coord = coord_outro_banco["Servidor"].iloc[0] if ja_tem_outro_coord else ""
+
                         with aba2_at:
                             st.markdown("##### 👥 Recursos Humanos & Liderança da Operação")
                             
