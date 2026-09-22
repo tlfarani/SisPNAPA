@@ -4255,6 +4255,15 @@ elif modo == "📊 Visualizar Base":
 
                         with aba2_at:
                             st.markdown("##### 👥 Recursos Humanos & Liderança da Operação")
+                            
+                            # 📍 UF Proponente da Atividade (definida antes de listar os servidores)
+                            if perfil_usuario == "Administrador":
+                                idx_uf_at_sel = LISTA_UFS_COMPLETA.index(uf_acao_at) if uf_acao_at in LISTA_UFS_COMPLETA else 0
+                                ed_uf_acao_val = st.selectbox("UF Proponente da Ação / Equipe:", LISTA_UFS_COMPLETA, index=idx_uf_at_sel, key=f"t1_at_uf_sel_{id_at_ref}")
+                            else:
+                                ed_uf_acao_val = uf_acao_at
+                                st.text_input("UF Proponente da Ação (Sua UF):", value=ed_uf_acao_val, disabled=True, key=f"t1_at_uf_dis_ro_{id_at_ref}")
+
                             lista_nomes_servidores = obter_servidores_por_uf(df_servidores, ed_uf_acao_val)
                             srv_atual_at = str(reg_at_alvo.get("Servidor", "")).strip()
                             idx_srv_at = lista_nomes_servidores.index(srv_atual_at) if srv_atual_at in lista_nomes_servidores else 0
@@ -4350,11 +4359,7 @@ elif modo == "📊 Visualizar Base":
 
                             ed_doc_at = st.text_input("Número SEI do Documento Probatório de Execução:", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
                             
-                            if perfil_usuario == "Administrador":
-                                idx_uf_at_sel = LISTA_UFS_COMPLETA.index(uf_acao_at) if uf_acao_at in LISTA_UFS_COMPLETA else 0
-                                ed_uf_acao_val = st.selectbox("UF Proponente da Ação:", LISTA_UFS_COMPLETA, index=idx_uf_at_sel, key=f"t1_at_uf_sel_{id_at_ref}")
-                            else:
-                                ed_uf_acao_val = st.text_input("UF Proponente da Ação", value=uf_acao_at, disabled=True, key=f"t1_at_uf_dis_{id_at_ref}")
+                            st.text_input("UF Proponente / Que Cede a Equipe (Definida na Aba 2):", value=str(ed_uf_acao_val), disabled=True)
 
                             st.text_input("Classificação da Atividade", value=importancia_at, disabled=True)
                             ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo.get("Tipo de Atividade", "Operação")) if reg_at_alvo.get("Tipo de Atividade", "Operação") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
