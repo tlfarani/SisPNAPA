@@ -208,6 +208,12 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         else:
             uf_coord_final = str(uf_acao).strip().upper()
 
+    # 🔒 TRAVA ANTI-DUPLICIDADE: Apenas Coordenador de Campo registra resultado físico
+    res_ind_final = str(resultado_indicador).strip() if resultado_indicador != "" else ""
+    if nivel_selecionado == "Atividade":
+        if str(coordenador_operacao).strip() != "Coordenador de Campo" or str(papel_institucional).strip() == "Apoio":
+            res_ind_final = "0"
+
     payload = {
         "Acao": acao_envio,
         "Id": id_final,
@@ -223,7 +229,7 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Andamento": str(andamento),
         "Indicador": str(val_indicador),
         "Meta_Indicador": str(meta_indicador) if meta_indicador != "" else "",
-        "Resultado_Indicador": str(resultado_indicador) if resultado_indicador != "" else "",
+        "Resultado_Indicador": res_ind_final,
         "Doc_Probatorio_Exec": str(doc_probatorio),
         "UF_Acao_PNAPA": str(uf_acao),
         "Importância da Atividade": str(importancia),
@@ -3530,6 +3536,10 @@ elif modo == "📊 Visualizar Base":
 
                 cols_ac_validas = [c for c in COLS_TABELA_ACOES if c in df_exib_ac.columns]
                 df_tab_ac = df_exib_ac[cols_ac_validas].copy()
+
+                # 🗓️ Converte para date real do Python para o DateColumn não cair no epoch 1970
+                df_tab_ac["Data de Início"] = df_exib_ac["Data_Inicio_Datetime"].dt.date
+                df_tab_ac["Data de Término"] = df_exib_ac["Data_Termino_Datetime"].dt.date
                                                 
                 df_tab_ac["Meta_Indicador"] = df_tab_ac["Meta_Indicador"].apply(lambda v: formatar_numero_br(v, 1))
                 df_tab_ac["Resultado_Indicador"] = df_tab_ac.apply(
@@ -4036,6 +4046,10 @@ elif modo == "📊 Visualizar Base":
 
                 cols_at_validas = [c for c in COLS_TABELA_ATIVIDADES if c in df_exib_at.columns]
                 df_tab_at = df_exib_at[cols_at_validas].copy()
+
+                # 🗓️ Converte para date real do Python para o DateColumn não cair no epoch 1970
+                df_tab_at["Data de Início"] = df_exib_at["Data_Inicio_Datetime"].dt.date
+                df_tab_at["Data de Término"] = df_exib_at["Data_Termino_Datetime"].dt.date
                                                 
                 df_tab_at["Resultado_Indicador"] = df_tab_at.apply(
                     lambda r: "—" if str(r.get("Papel_Institucional")).strip() == "Apoio" else formatar_numero_br(r["Resultado_Indicador"], 1), axis=1
@@ -4147,8 +4161,11 @@ elif modo == "📊 Visualizar Base":
                         uf_acao_at = str(reg_at_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
 
                         aba1_at, aba2_at, aba3_at, aba4_at, aba5_at = st.tabs([
-                            "1. Identificação & Agrupador", "2. Detalhes & Indicadores", 
-                            "3. Recursos Humanos & Liderança", "4. Cronograma & Custos", "5. Observações"
+                            "1. Identificação & Agrupador", 
+                            "2. Recursos Humanos & Liderança", 
+                            "3. Detalhes & Indicadores", 
+                            "4. Cronograma & Custos", 
+                            "5. Observações"
                         ])
                         
                         with aba1_at:
@@ -4173,35 +4190,90 @@ elif modo == "📊 Visualizar Base":
                                     ed_uf_coord_at = st.selectbox("UF Coordenadora da Missão:", lista_outras_ufs, index=idx_ufc_at, key=f"t1_at_ufc_{id_at_ref}")
 
                             st.markdown("##### 🏷️ Código da Atividade")
-                            ed_cod_atv = st.text_input("Código da Atividade/Missão:", value=str(reg_at_alvo.get("Codigo_Atividade", "")).strip().upper(), key=f"t1_at_cod_{id_at_ref}").strip().upper()
-                            ed_nome_atv = st.text_input("Nome da Atividade / Operação:", value=str(reg_at_alvo.get("Nome da Atividade", "")).strip(), key=f"t1_at_nomeatv_{id_at_ref}").strip()
+                            cod_atual_salvo = str(reg_at_alvo.get("Codigo_Atividade", "")).strip().upper()
+
+                            # 🔍 Busca atividades existentes da mesma Ação e UF para sugerir ou vincular
+                            df_atvs_mesma_acao = df_atual[
+                                (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                                (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == str(uf_acao_at).strip().upper()) &
+                                (
+                                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao_at).strip().upper()) |
+                                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == str(val_num_acao_at).split("-")[0].strip().upper())
+                                ) &
+                                (df_atual["Codigo_Atividade"].astype(str).str.strip() != "")
+                            ]
+
+                            import re
+                            maior_atv_ed = 0
+                            for cod_ex in df_atvs_mesma_acao["Codigo_Atividade"].dropna().unique():
+                                m_atv = re.search(r'ATV(\d+)', str(cod_ex).upper())
+                                if m_atv:
+                                    num_atv = int(m_atv.group(1))
+                                    if num_atv > maior_atv_ed: maior_atv_ed = num_atv
+
+                            cod_base_acao_ed = val_num_acao_at if "-" in str(val_num_acao_at) else f"{val_num_acao_at}-{val_ano_at}"
+                            novo_cod_sugerido_ed = f"{cod_base_acao_ed}-{uf_acao_at}-ATV{maior_atv_ed + 1:02d}"
+
+                            opcoes_atvs_pre = []
+                            mapa_nomes_pre = {}
+                            for c_u in sorted(df_atvs_mesma_acao["Codigo_Atividade"].dropna().unique()):
+                                linhas_c = df_atvs_mesma_acao[df_atvs_mesma_acao["Codigo_Atividade"] == c_u]
+                                nome_c = str(linhas_c["Nome da Atividade"].iloc[0]).strip() if not linhas_c.empty else ""
+                                lbl_c = f"{c_u} — {nome_c}"
+                                opcoes_atvs_pre.append(lbl_c)
+                                mapa_nomes_pre[lbl_c] = (c_u, nome_c)
+
+                            modo_cod_ed = st.radio(
+                                "Definição do Código:",
+                                ["Manter Atual", "🔗 Vincular a Código Pré-Existente", "➕ Gerar Novo Código Sequencial"],
+                                horizontal=True,
+                                key=f"t1_at_modo_cod_{id_at_ref}"
+                            )
+
+                            nome_sug_input = str(reg_at_alvo.get("Nome da Atividade", "")).strip()
+
+                            if modo_cod_ed == "🔗 Vincular a Código Pré-Existente" and opcoes_atvs_pre:
+                                idx_pre = 0
+                                for i_opc, opc_txt in enumerate(opcoes_atvs_pre):
+                                    if opc_txt.startswith(cod_atual_salvo + " ") or opc_txt.startswith(cod_atual_salvo + "—"):
+                                        idx_pre = i_opc
+                                        break
+                                sel_atv_pre = st.selectbox("Selecione a Atividade Pré-Existente:", opcoes_atvs_pre, index=idx_pre, key=f"t1_at_sel_pre_{id_at_ref}")
+                                ed_cod_atv = mapa_nomes_pre[sel_atv_pre][0]
+                                if not nome_sug_input or nome_sug_input == "":
+                                    nome_sug_input = mapa_nomes_pre[sel_atv_pre][1]
+                            elif modo_cod_ed == "➕ Gerar Novo Código Sequencial":
+                                ed_cod_atv = st.text_input("Novo Código Sequencial (Sugerido):", value=novo_cod_sugerido_ed, key=f"t1_at_cod_novo_{id_at_ref}").strip().upper()
+                            else:
+                                ed_cod_atv = st.text_input("Código da Atividade/Missão:", value=cod_atual_salvo, key=f"t1_at_cod_{id_at_ref}").strip().upper()
+
+                            ed_nome_atv = st.text_input("Nome da Atividade / Operação:", value=nome_sug_input, key=f"t1_at_nomeatv_{id_at_ref}").strip()
                             
                             lista_and_at = ["Prevista", "Concluída"]
                             idx_and_at = lista_and_at.index(reg_at_alvo.get("Andamento", "Prevista")) if reg_at_alvo.get("Andamento") in lista_and_at else 0
                             ed_andamento_at = st.selectbox("Andamento da Atividade:", lista_and_at, index=idx_and_at, key=f"t1_at_and_{id_at_ref}")
 
+                        # 🔍 VERIFICAÇÃO ANTECIPADA: Checa se já existe outro Coordenador de Campo na mesma atividade
+                        coord_outro_banco = df_atual[
+                            (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                            (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(ed_cod_atv).strip().upper()) &
+                            (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo") &
+                            (df_atual["Id"].astype(str).str.split('.').str[0] != str(id_at_ref).split('.')[0])
+                        ]
+                        ja_tem_outro_coord = not coord_outro_banco.empty
+                        nome_outro_coord = coord_outro_banco["Servidor"].iloc[0] if ja_tem_outro_coord else ""
+
                         with aba2_at:
-                            st.text_input("Indicador Oficial (Herdado)", value=val_indicador_at, disabled=True, key=f"t1_at_ind_{id_at_ref}")
+                            st.markdown("##### 👥 Recursos Humanos & Liderança da Operação")
                             
-                            if ed_papel_at == "Apoio":
-                                ed_res_ind_at = "0"
-                                st.text_input("Resultado do Indicador:", value="0 (Apoio Operacional — Produto final atribuído à Coordenação)", disabled=True)
-                            else:
-                                ed_res_ind_at = st.text_input("Resultado do Indicador (Aferição Real):", value=str(reg_at_alvo.get("Resultado_Indicador", "")), key=f"t1_at_resind_{id_at_ref}")
-                            
-                            ed_doc_at = st.text_input("Número SEI do Documento Probatório de Execução:", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
-                            
+                            # 📍 UF Proponente da Atividade (definida antes de listar os servidores)
                             if perfil_usuario == "Administrador":
                                 idx_uf_at_sel = LISTA_UFS_COMPLETA.index(uf_acao_at) if uf_acao_at in LISTA_UFS_COMPLETA else 0
-                                ed_uf_acao_val = st.selectbox("UF Proponente da Ação:", LISTA_UFS_COMPLETA, index=idx_uf_at_sel, key=f"t1_at_uf_sel_{id_at_ref}")
+                                ed_uf_acao_val = st.selectbox("UF Proponente da Ação / Equipe:", LISTA_UFS_COMPLETA, index=idx_uf_at_sel, key=f"t1_at_uf_sel_{id_at_ref}")
                             else:
-                                ed_uf_acao_val = st.text_input("UF Proponente da Ação", value=uf_acao_at, disabled=True, key=f"t1_at_uf_dis_{id_at_ref}")
+                                ed_uf_acao_val = uf_acao_at
+                                st.text_input("UF Proponente da Ação (Sua UF):", value=ed_uf_acao_val, disabled=True, key=f"t1_at_uf_dis_ro_{id_at_ref}")
 
-                            st.text_input("Classificação da Atividade", value=importancia_at, disabled=True)
-                            ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo.get("Tipo de Atividade", "Operação")) if reg_at_alvo.get("Tipo de Atividade", "Operação") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
-                            ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica")) if reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
-                                                
-                        with aba3_at:
                             lista_nomes_servidores = obter_servidores_por_uf(df_servidores, ed_uf_acao_val)
                             srv_atual_at = str(reg_at_alvo.get("Servidor", "")).strip()
                             idx_srv_at = lista_nomes_servidores.index(srv_atual_at) if srv_atual_at in lista_nomes_servidores else 0
@@ -4212,8 +4284,12 @@ elif modo == "📊 Visualizar Base":
                                 ed_servidor_at = st.selectbox(f"Servidor ({ed_uf_acao_val}):", lista_nomes_servidores, index=idx_srv_at, key=f"t1_at_srv_{id_at_ref}_{ed_uf_acao_val}")
                             with c_at_rh2:
                                 func_salva_at = str(reg_at_alvo.get("Coordenador_Operacao", "Apoio de Campo")).strip()
-                                idx_func_at = LISTA_FUNCOES_CAMPO.index(func_salva_at) if func_salva_at in LISTA_FUNCOES_CAMPO else 1
-                                ed_funcao_campo = st.selectbox("Função de Campo:", LISTA_FUNCOES_CAMPO, index=idx_func_at, key=f"t1_at_func_{id_at_ref}")
+                                if ja_tem_outro_coord:
+                                    st.text_input("Função de Campo:", value="Apoio de Campo (Travado)", disabled=True, help=f"A atividade já é coordenada por {nome_outro_coord}.")
+                                    ed_funcao_campo = "Apoio de Campo"
+                                else:
+                                    idx_func_at = LISTA_FUNCOES_CAMPO.index(func_salva_at) if func_salva_at in LISTA_FUNCOES_CAMPO else 1
+                                    ed_funcao_campo = st.selectbox("Função de Campo:", LISTA_FUNCOES_CAMPO, index=idx_func_at, key=f"t1_at_func_{id_at_ref}")
 
                             match_srv_at_t1 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
                             if not match_srv_at_t1.empty:
@@ -4254,7 +4330,6 @@ elif modo == "📊 Visualizar Base":
                             st.text_input("Lotação", value=ed_lot_at, disabled=True)
                             ed_pcdp_at = st.text_input("Número da PCDP:", value=str(reg_at_alvo.get("Número da PCDP", "")), key=f"t1_at_pcdp_{id_at_ref}")
                             
-                            # 🚀 Local exato da Missão
                             st.markdown("<p style='font-weight:bold; margin-top:12px; color:#03170a;'>📍 Local de Realização da Missão de Campo</p>", unsafe_allow_html=True)
                             uf_oc_atual = str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "SP"))
                             idx_uf_oc_at = LISTA_UFS_COMPLETA.index(uf_oc_atual) if uf_oc_atual in LISTA_UFS_COMPLETA else 0
@@ -4266,6 +4341,39 @@ elif modo == "📊 Visualizar Base":
                             mun_atual_at = str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", ""))
                             idx_mun_at = mun_lista_at.index(mun_atual_at) if mun_atual_at in mun_lista_at else 0
                             ed_mun_at = st.selectbox("Município Polo / Cidade da Operação:", mun_lista_at if mun_lista_at else ["Superintendência Sede"], index=idx_mun_at, key=f"t1_at_mun_{id_at_ref}")
+
+                        with aba3_at:
+                            st.text_input("Indicador Oficial (Herdado)", value=val_indicador_at, disabled=True, key=f"t1_at_ind_{id_at_ref}")
+                            
+                            eh_coord_esta_linha = (ed_funcao_campo == "Coordenador de Campo") and not ja_tem_outro_coord
+
+                            if ed_papel_at == "Apoio":
+                                ed_res_ind_at = "0"
+                                st.text_input("Resultado do Indicador:", value="0 (Apoio Operacional — Produto atribuído à Coordenação)", disabled=True, key=f"t1_at_res_dis_ap_{id_at_ref}")
+                            elif not eh_coord_esta_linha:
+                                ed_res_ind_at = "0"
+                                if ja_tem_outro_coord:
+                                    st.info(f"ℹ️ **Trava Anti-Duplicidade:** O Coordenador de Campo desta atividade é **{nome_outro_coord}**. Linhas de Apoio de Campo registram compulsoriamente resultado `0`.")
+                                else:
+                                    st.info("ℹ️ **Função de Apoio:** Esta linha está definida como **Apoio de Campo** na Aba 2, portanto o resultado do indicador fica travado em `0`.")
+                                st.text_input("Resultado do Indicador:", value="0 (Exclusivo do Coordenador de Campo)", disabled=True, key=f"t1_at_resind_dis_{id_at_ref}")
+                            else:
+                                st.caption("👑 Função: **Coordenador de Campo** (Habilitado para preencher o resultado da atividade)")
+                                res_ind_salvo = str(reg_at_alvo.get("Resultado_Indicador", "")).strip()
+                                ed_res_ind_at = st.text_input(
+                                    "Resultado do Indicador (Aferição Real):", 
+                                    value=res_ind_salvo if res_ind_salvo != "0" else "", 
+                                    key=f"t1_at_resind_{id_at_ref}", 
+                                    help="Apenas o Coordenador de Campo deve preencher este campo."
+                                )
+
+                            ed_doc_at = st.text_input("Número SEI do Documento Probatório de Execução:", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
+                            
+                            st.text_input("UF Proponente / Que Cede a Equipe (Definida na Aba 2):", value=str(ed_uf_acao_val), disabled=True)
+
+                            st.text_input("Classificação da Atividade", value=importancia_at, disabled=True)
+                            ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo.get("Tipo de Atividade", "Operação")) if reg_at_alvo.get("Tipo de Atividade", "Operação") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
+                            ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica")) if reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
 
                         with aba4_at:
                             val_dti_at = converter_para_data_segura(reg_at_alvo.get("Data de Início"))
@@ -4370,6 +4478,58 @@ elif modo == "📊 Visualizar Base":
                         ])
 
                         with l_aba1:
+                            if st.checkbox("Alterar Código da Atividade?", key="chk_cod_lt"):
+                                uf_lote = str(df_at_sel["UF_Acao_PNAPA"].iloc[0]).strip().upper() if not df_at_sel.empty else "SP"
+                                num_acao_lote = str(df_at_sel["Número da Ação PNAPA"].iloc[0]).strip().upper() if not df_at_sel.empty else "CEN02.01"
+                                ano_lote = str(df_at_sel["Ano da Ação"].iloc[0]).split('.')[0].strip() if not df_at_sel.empty else "2027"
+
+                                df_atvs_lote_pool = df_atual[
+                                    (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                                    (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_lote) &
+                                    (
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == num_acao_lote) |
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == num_acao_lote.split("-")[0].strip().upper())
+                                    ) &
+                                    (df_atual["Codigo_Atividade"].astype(str).str.strip() != "")
+                                ]
+
+                                import re
+                                maior_atv_lt = 0
+                                for cod_ex in df_atvs_lote_pool["Codigo_Atividade"].dropna().unique():
+                                    m_atv = re.search(r'ATV(\d+)', str(cod_ex).upper())
+                                    if m_atv:
+                                        n_atv = int(m_atv.group(1))
+                                        if n_atv > maior_atv_lt: maior_atv_lt = n_atv
+
+                                cod_base_lt = num_acao_lote if "-" in num_acao_lote else f"{num_acao_lote}-{ano_lote}"
+                                novo_cod_sugerido_lt = f"{cod_base_lt}-{uf_lote}-ATV{maior_atv_lt + 1:02d}"
+
+                                opcoes_atvs_lt = []
+                                mapa_nomes_lt = {}
+                                for c_u in sorted(df_atvs_lote_pool["Codigo_Atividade"].dropna().unique()):
+                                    linhas_c = df_atvs_lote_pool[df_atvs_lote_pool["Codigo_Atividade"] == c_u]
+                                    nome_c = str(linhas_c["Nome da Atividade"].iloc[0]).strip() if not linhas_c.empty else ""
+                                    lbl_c = f"{c_u} — {nome_c}"
+                                    opcoes_atvs_lt.append(lbl_c)
+                                    mapa_nomes_lt[lbl_c] = (c_u, nome_c)
+
+                                modo_cod_lt = st.radio(
+                                    "Definição do Código em Lote:", 
+                                    ["🔗 Vincular a Código Pré-Existente", "➕ Gerar Novo Código Sequencial"], 
+                                    horizontal=True, 
+                                    key="radio_modo_cod_lt"
+                                )
+
+                                if modo_cod_lt == "🔗 Vincular a Código Pré-Existente" and opcoes_atvs_lt:
+                                    sel_pre_lt = st.selectbox("Selecione a Atividade Pré-Existente:", opcoes_atvs_lt, key="sel_atv_pre_lt")
+                                    cod_final_lt = mapa_nomes_lt[sel_pre_lt][0]
+                                    st.caption(f"💡 Todas as {qtd_at_sel} atividades selecionadas serão agrupadas sob o código `{cod_final_lt}`.")
+                                    edicoes_lote["Codigo_Atividade"] = cod_final_lt
+                                else:
+                                    cod_final_lt = st.text_input("Novo Código Sequencial (Sugerido):", value=novo_cod_sugerido_lt, key="in_cod_novo_lt").strip().upper()
+                                    st.caption(f"💡 Todas as {qtd_at_sel} atividades selecionadas formarão a nova atividade `{cod_final_lt}`.")
+                                    edicoes_lote["Codigo_Atividade"] = cod_final_lt
+
                             if st.checkbox("Alterar Nome da Atividade?", key="chk_nome_lt"):
                                 edicoes_lote["Nome da Atividade"] = st.text_input("Novo Nome da Atividade:", key="in_nome_lt").strip()
                             if st.checkbox("Alterar Andamento?", key="chk_and_lt"):
@@ -4383,7 +4543,18 @@ elif modo == "📊 Visualizar Base":
 
                         with l_aba3:
                             if st.checkbox("Alterar Função de Campo?", key="chk_func_lt"):
-                                edicoes_lote["Coordenador_Operacao"] = st.selectbox("Nova Função:", LISTA_FUNCOES_CAMPO, key="in_func_lt")
+                                nova_funcao_lote = st.selectbox(
+                                    "Nova Função para os Servidores Selecionados:", 
+                                    LISTA_FUNCOES_CAMPO, 
+                                    index=1, # Padrão: Apoio de Campo
+                                    key="in_func_lt"
+                                )
+                                if nova_funcao_lote == "Coordenador de Campo":
+                                    st.error("⛔ **Operação Não Permitida:** Não é possível definir múltiplos servidores como 'Coordenador de Campo' em lote. A designação de coordenador deve ser feita na Edição Individual.")
+                                else:
+                                    st.info("ℹ️ Os servidores selecionados serão definidos como **Apoio de Campo**. O resultado do indicador dessas linhas será automaticamente saneado para **0**.")
+                                    edicoes_lote["Coordenador_Operacao"] = "Apoio de Campo"
+                                    edicoes_lote["Resultado_Indicador"] = "0"
 
                         with l_aba4:
                             col_ld1, col_ld2 = st.columns(2)
@@ -4404,7 +4575,13 @@ elif modo == "📊 Visualizar Base":
 
                         if edicoes_lote:
                             st.json(edicoes_lote)
-                            if st.button("🚀 Confirmar Alterações em Massa", type="primary", key="btn_confirm_lote_at"):
+                            
+                            # Trava para não permitir confirmar se tentou colocar Coordenador de Campo em lote
+                            pode_confirmar_lote = True
+                            if edicoes_lote.get("Coordenador_Operacao") == "Coordenador de Campo":
+                                pode_confirmar_lote = False
+
+                            if st.button("🚀 Confirmar Alterações em Massa", type="primary", disabled=not pode_confirmar_lote, key="btn_confirm_lote_at"):
                                 payloads_lote = []
                                 for _, row in df_at_sel.iterrows():
                                     p_item = {col: row[col] for col in df_atual.columns if col in row}
@@ -4412,6 +4589,11 @@ elif modo == "📊 Visualizar Base":
                                     p_item["Id"] = str(row["Id"])
                                     for k_alt, v_alt in edicoes_lote.items():
                                         p_item[k_alt] = str(v_alt) if isinstance(v_alt, (date, datetime)) else v_alt
+                                    
+                                    # 🔒 Se a linha virou Apoio de Campo, zera o indicador legado (ex: 1,67)
+                                    if p_item.get("Coordenador_Operacao") == "Apoio de Campo":
+                                        p_item["Resultado_Indicador"] = "0"
+                                        
                                     payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
                                     payloads_lote.append(payload_sanit)
                                 executar_envio_sharepoint(payloads_lote)
@@ -4715,8 +4897,8 @@ elif modo == "➕ Inserir Nova Linha":
     elif nivel_selecionado == "Atividade":
         aba1, aba2, aba3, aba4, aba5 = st.tabs([
             "1. Identificação & Agrupador", 
-            "2. Detalhes & Indicadores", 
-            "3. Recursos Humanos & Liderança", 
+            "2. Recursos Humanos & Liderança", 
+            "3. Detalhes & Indicadores", 
             "4. Cronograma & Custos", 
             "5. Justificativas"
         ])
@@ -4845,44 +5027,18 @@ elif modo == "➕ Inserir Nova Linha":
             idx_and_atv = lista_andamentos_atividade.index(andamento_def) if andamento_def in lista_andamentos_atividade else 0
             andamento = st.selectbox("Andamento da Atividade:", lista_andamentos_atividade, index=idx_and_atv, key=f"atv_sel_andamento_{codigo_atividade}")
 
+        # ---------------------------------------------------------
+        # 🔍 VERIFICAÇÃO ANTECIPADA DE COORDENADOR DE CAMPO
+        # ---------------------------------------------------------
+        coord_existente_banco = df_atual[
+            (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+            (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(codigo_atividade).strip().upper()) &
+            (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
+        ]
+        atividade_ja_tem_coordenador = not coord_existente_banco.empty
+        nome_coordenador_ativo = coord_existente_banco["Servidor"].iloc[0] if atividade_ja_tem_coordenador else ""
+
         with aba2:
-            st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True, key=f"atv_ind_dis_{val_num_acao}_{codigo_atividade}")
-            
-            # 🚀 Trava de produto físico em Apoio
-            if papel_inst == "Apoio":
-                st.info("ℹ️ Em atividade de Apoio, o produto físico de campo pertence à UF Coordenadora. Aferição física desabilitada.")
-                resultado_indicador = "0"
-                st.text_input("Resultado do Indicador:", value="0 (Apoio Operacional — Produto final atribuído à Coordenação)", disabled=True)
-            else:
-                res_ind_def = str(extrair_padrao_atv("Resultado_Indicador", "")).strip()
-                resultado_indicador = st.text_input("Resultado do Indicador (Aferição Real):", value=res_ind_def, key=f"atv_res_ind_{codigo_atividade}")
-            
-            doc_sei_def = str(extrair_padrao_atv("Doc_Probatorio_Exec", "")).strip()
-            doc_probatorio = st.text_input("Número SEI do Documento Probatório de Execução:", value=doc_sei_def, key=f"atv_doc_sei_{codigo_atividade}")
-            
-            st.text_input("UF Proponente / Que Cede a Equipe (Automático):", value=str(uf_filtro_pna), disabled=True, key=f"atv_uf_dis_{codigo_atividade}")
-            
-            imp_base_def = str(extrair_padrao_atv("Importância da Atividade", importancia)).strip()
-            idx_imp_padrao = 0 if imp_base_def == "Finalística" else 1
-            importancia = st.selectbox("Classificação da Atividade:", ["Finalística", "Rotina"], index=idx_imp_padrao, key=f"atv_sel_imp_{val_num_acao}_{codigo_atividade}")
-            
-            c_atv_t1, c_atv_t2 = st.columns(2)
-            with c_atv_t1:
-                st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado, disabled=True, key=f"atv_txt_tema_dis_{val_num_acao}_{codigo_atividade}")
-                tema = tema_herdado
-            with c_atv_t2:
-                st.text_input("Objetivo Estratégico (Herdado):", value=objetivo_herdado, disabled=True, key=f"atv_txt_obj_dis_{val_num_acao}_{codigo_atividade}")
-                objetivo = objetivo_herdado
-
-            tipo_atv_def = str(extrair_padrao_atv("Tipo de Atividade", "Operação")).strip()
-            idx_tipo_atv = LISTA_TIPOS_ATIVIDADE.index(tipo_atv_def) if tipo_atv_def in LISTA_TIPOS_ATIVIDADE else 0
-            tipo_atividade = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=idx_tipo_atv, key=f"atv_sel_tipo_{codigo_atividade}")
-            
-            perigo_def = str(extrair_padrao_atv("Periculosidade/Insalubridade", "Não se Aplica")).strip()
-            idx_perigo = LISTA_PERIGOS.index(perigo_def) if perigo_def in LISTA_PERIGOS else 0
-            periculosidade = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=idx_perigo, key=f"atv_sel_perigo_{codigo_atividade}")
-
-        with aba3:
             st.markdown("##### 👥 Recursos Humanos & Liderança da Operação")
             
             lista_nomes_servidores = obter_servidores_por_uf(df_servidores, uf_filtro_pna)
@@ -4893,13 +5049,24 @@ elif modo == "➕ Inserir Nova Linha":
                 servidor = st.selectbox(f"Servidor Integrante / Responsável ({uf_filtro_pna}):", lista_nomes_servidores, key=f"atv_sel_servidor_{codigo_atividade}_{uf_filtro_pna}")
 
             with c_rh2:
-                if dados_atv_origem is not None:
-                    idx_funcao_sugerida = 1
+                if atividade_ja_tem_coordenador:
+                    st.info(f"👑 Coordenador desta Atividade: **{nome_coordenador_ativo}**")
+                    funcao_campo = "Apoio de Campo"
+                    st.text_input("Função na Atividade de Campo:", value="Apoio de Campo (Travado)", disabled=True)
                 else:
-                    eh_ponto_focal = bool(ponto_focal_estado and str(servidor).strip().lower() == str(ponto_focal_estado).strip().lower())
-                    idx_funcao_sugerida = 0 if eh_ponto_focal and papel_inst == "Coordenação" else 1
+                    if dados_atv_origem is not None:
+                        idx_funcao_sugerida = 1
+                    else:
+                        eh_ponto_focal = bool(ponto_focal_estado and str(servidor).strip().lower() == str(ponto_focal_estado).strip().lower())
+                        idx_funcao_sugerida = 0 if eh_ponto_focal and papel_inst == "Coordenação" else 1
 
-                funcao_campo = st.selectbox("Função na Atividade de Campo:", LISTA_FUNCOES_CAMPO, index=idx_funcao_sugerida, key=f"atv_funcao_campo_{codigo_atividade}_{servidor}")
+                    funcao_campo = st.selectbox(
+                        "Função na Atividade de Campo:", 
+                        LISTA_FUNCOES_CAMPO, 
+                        index=idx_funcao_sugerida, 
+                        key=f"atv_funcao_campo_{codigo_atividade}",
+                        help="Cada atividade deve possuir exatamente 1 Coordenador de Campo."
+                    )
 
             match_srv_atv = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
             if not match_srv_atv.empty:
@@ -4942,11 +5109,9 @@ elif modo == "➕ Inserir Nova Linha":
             st.text_input("Lotação (Automático)", value=lotacao, disabled=True)
             num_pcdp = st.text_input("Número da PCDP:", value=str(extrair_padrao_atv("Número da PCDP", "")).strip(), key=f"atv_num_pcdp_{codigo_atividade}")
             
-            # 🚀 GEOLOCALIZAÇÃO OBRIGATÓRIA DA MISSÃO REAL
             st.markdown("<p style='font-weight: bold; margin-top:15px; color:#03170a;'>📍 Local Exato de Realização da Missão de Campo</p>", unsafe_allow_html=True)
             pais = st.text_input("País (Automático):", value="Brasil", disabled=True)
             
-            # Sugere a UF coordenadora caso seja apoio, mas permite selecionar a UF exata
             uf_oc_sug = uf_coordenadora_val if papel_inst == "Apoio" else uf_filtro_pna
             uf_oc_def = str(extrair_padrao_atv("UF Onde Ocorreu/Ocorrerá a Ação", uf_oc_sug)).strip()
             idx_uf_oc = LISTA_UFS_COMPLETA.index(uf_oc_def) if uf_oc_def in LISTA_UFS_COMPLETA else 0
@@ -4958,6 +5123,59 @@ elif modo == "➕ Inserir Nova Linha":
             mun_def = str(extrair_padrao_atv("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
             idx_mun = lista_municipios_uf.index(mun_def) if mun_def in lista_municipios_uf else 0
             municipio = st.selectbox("Município Polo / Cidade de Operação:", lista_municipios_uf if lista_municipios_uf else ["Superintendência Sede"], index=idx_mun, key=f"atv_sel_municipio_{codigo_atividade}")
+
+        with aba3:
+            st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True, key=f"atv_ind_dis_{val_num_acao}_{codigo_atividade}")
+            
+            # Como a função_campo acabou de ser escolhida na Aba 2, a checagem aqui é direta:
+            eh_coord_ins = (funcao_campo == "Coordenador de Campo") and not atividade_ja_tem_coordenador and (papel_inst == "Coordenação")
+
+            if papel_inst == "Apoio":
+                st.info("ℹ️ Em atividade de Apoio à outra UF, o produto físico de campo pertence à UF Coordenadora.")
+                resultado_indicador = "0"
+                st.text_input("Resultado do Indicador:", value="0 (Apoio Operacional)", disabled=True, key=f"atv_res_dis_ap_{codigo_atividade}")
+            elif atividade_ja_tem_coordenador:
+                st.info(f"ℹ️ **Trava Anti-Duplicidade:** O Coordenador de Campo desta atividade é **{nome_coordenador_ativo}**. Apenas a linha do coordenador registra o indicador.")
+                resultado_indicador = "0"
+                st.text_input("Resultado do Indicador:", value="0 (Exclusivo do Coordenador de Campo)", disabled=True, key=f"atv_res_dis_cd_{codigo_atividade}")
+            elif not eh_coord_ins:
+                st.info("ℹ️ **Função de Apoio:** A função selecionada na Aba 2 é **Apoio de Campo**. O resultado do indicador fica travado em `0`.")
+                resultado_indicador = "0"
+                st.text_input("Resultado do Indicador:", value="0 (Apoio de Campo)", disabled=True, key=f"atv_res_dis_ap_user_{codigo_atividade}")
+            else:
+                st.caption("👑 Função: **Coordenador de Campo** (Habilitado para preencher o resultado da atividade)")
+                res_ind_def = str(extrair_padrao_atv("Resultado_Indicador", "")).strip()
+                resultado_indicador = st.text_input(
+                    "Resultado do Indicador (Aferição Real):", 
+                    value=res_ind_def if res_ind_def != "0" else "", 
+                    key=f"atv_res_ind_{codigo_atividade}",
+                    help="Apenas o Coordenador de Campo deve preencher este campo."
+                )
+
+            doc_sei_def = str(extrair_padrao_atv("Doc_Probatorio_Exec", "")).strip()
+            doc_probatorio = st.text_input("Número SEI do Documento Probatório de Execução:", value=doc_sei_def, key=f"atv_doc_sei_{codigo_atividade}")
+            
+            st.text_input("UF Proponente / Que Cede a Equipe (Automático):", value=str(uf_filtro_pna), disabled=True, key=f"atv_uf_dis_{codigo_atividade}")
+            
+            imp_base_def = str(extrair_padrao_atv("Importância da Atividade", importancia)).strip()
+            idx_imp_padrao = 0 if imp_base_def == "Finalística" else 1
+            importancia = st.selectbox("Classificação da Atividade:", ["Finalística", "Rotina"], index=idx_imp_padrao, key=f"atv_sel_imp_{val_num_acao}_{codigo_atividade}")
+            
+            c_atv_t1, c_atv_t2 = st.columns(2)
+            with c_atv_t1:
+                st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado, disabled=True, key=f"atv_txt_tema_dis_{val_num_acao}_{codigo_atividade}")
+                tema = tema_herdado
+            with c_atv_t2:
+                st.text_input("Objetivo Estratégico (Herdado):", value=objetivo_herdado, disabled=True, key=f"atv_txt_obj_dis_{val_num_acao}_{codigo_atividade}")
+                objetivo = objetivo_herdado
+
+            tipo_atv_def = str(extrair_padrao_atv("Tipo de Atividade", "Operação")).strip()
+            idx_tipo_atv = LISTA_TIPOS_ATIVIDADE.index(tipo_atv_def) if tipo_atv_def in LISTA_TIPOS_ATIVIDADE else 0
+            tipo_atividade = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=idx_tipo_atv, key=f"atv_sel_tipo_{codigo_atividade}")
+            
+            perigo_def = str(extrair_padrao_atv("Periculosidade/Insalubridade", "Não se Aplica")).strip()
+            idx_perigo = LISTA_PERIGOS.index(perigo_def) if perigo_def in LISTA_PERIGOS else 0
+            periculosidade = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=idx_perigo, key=f"atv_sel_perigo_{codigo_atividade}")
 
         with aba4:
             dti_def = converter_para_data_segura(extrair_padrao_atv("Data de Início", val_dt_inicio))
@@ -5179,7 +5397,13 @@ elif modo == "➕ Inserir Nova Linha":
                         
                         p_nome_atv = nome_atividade if espelhar_detalhes else ""
                         p_andamento = andamento if espelhar_detalhes else "Não Iniciada"
-                        p_res_ind = resultado_indicador if espelhar_detalhes else ""
+                        
+                        # 🔒 REGRA DE OURO NO LOTE: Apenas o Coordenador de Campo recebe o resultado; os demais ficam com "0"
+                        if espelhar_detalhes and funcao_lote == "Coordenador de Campo" and papel_inst == "Coordenação":
+                            p_res_ind = str(resultado_indicador).strip()
+                        else:
+                            p_res_ind = "0"
+
                         p_doc = doc_probatorio if espelhar_detalhes else ""
                         
                         p_pais = pais if espelhar_local else "Brasil"
