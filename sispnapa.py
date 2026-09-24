@@ -5743,12 +5743,12 @@ elif modo == "🏢 Gerenciar Unidades":
                 # --- DISPARO DA ATUALIZAÇÃO EM CASCATA ---
                 from concurrent.futures import ThreadPoolExecutor
 
-                if st.button("💾 Salvar Alterações e Sincronizar Equipes/Base Principal", type="primary", key=f"btn_salvar_uni_{id_uf_edit}"):
+                if st.button("💾 Salvar Alterações e Sincronizar Equipes", type="primary", key=f"btn_salvar_uni_{id_uf_edit}"):
                     if not novo_nome_uni:
                         st.error("⚠️ O Nome da Unidade não pode ficar em branco.")
                     else:
                         # 1. Atualiza a Tabela Auxiliar de Unidades
-                        with st.spinner(f"1/3 Atualizando Unidade '{novo_nome_uni}' no SharePoint..."):
+                        with st.spinner(f"1/2 Atualizando Unidade '{novo_nome_uni}'..."):
                             executar_api_unidades({
                                 "Acao": "Editar", 
                                 "ID_UF": id_uf_edit, 
@@ -5756,7 +5756,7 @@ elif modo == "🏢 Gerenciar Unidades":
                                 "Unidade": novo_nome_uni
                             })
 
-                        # 2. Atualiza em Cascata os Servidores (Equipes.xlsx)
+                        # 2. Atualiza em Cascata apenas os Servidores afetados (servidores.xlsx)
                         servidores_afetados = df_servidores[
                             (df_servidores["Lotacao"].astype(str).str.strip() == str(sel_uni).strip()) &
                             (df_servidores["UF_Servidor"].astype(str).str.strip() == str(val_atual_uf_uni).strip())
@@ -5764,7 +5764,7 @@ elif modo == "🏢 Gerenciar Unidades":
                         qtd_srv_afetados = len(servidores_afetados)
 
                         if qtd_srv_afetados > 0:
-                            with st.spinner(f"2/3 Atualizando lotação de {qtd_srv_afetados} servidor(es) na tabela de equipes..."):
+                            with st.spinner(f"2/2 Sincronizando lotação de {qtd_srv_afetados} servidor(es)..."):
                                 for _, srv_row in servidores_afetados.iterrows():
                                     payload_srv_cascata = {
                                         "Acao": "Editar",
@@ -5782,53 +5782,18 @@ elif modo == "🏢 Gerenciar Unidades":
                                     }
                                     executar_api_equipes(payload_srv_cascata)
 
-                        # 3. Atualiza em Cascata as Atividades na Planilha Principal (Macro)
-                        linhas_macro_afetadas = df_atual[
-                            (df_atual["Lotação"].astype(str).str.strip() == str(sel_uni).strip()) &
-                            (df_atual["UF_Servidor"].astype(str).str.strip() == str(val_atual_uf_uni).strip())
-                        ]
-                        qtd_macro_afetadas = len(linhas_macro_afetadas)
-                        sucessos_macro = 0
-
-                        if qtd_macro_afetadas > 0:
-                            with st.spinner(f"3/3 Atualizando {qtd_macro_afetadas} atividade(s) vinculadas na Planilha Principal..."):
-                                payloads_cascata_macro = []
-                                for _, row_orig in linhas_macro_afetadas.iterrows():
-                                    p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
-                                    p_item["Acao"] = "Editar"
-                                    p_item["Id"] = str(row_orig["Id"])
-                                    p_item["Lotação"] = str(novo_nome_uni)
-                                    p_item["UF_Servidor"] = str(nova_uf_uni)
-                                    
-                                    payload_sanit = {
-                                        k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) 
-                                        for k, v in p_item.items()
-                                    }
-                                    payloads_cascata_macro.append(payload_sanit)
-
-                                def enviar_req_macro(p):
-                                    try:
-                                        r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
-                                        return 1 if r.status_code in [200, 202] else 0
-                                    except:
-                                        return 0
-
-                                with ThreadPoolExecutor(max_workers=10) as executor:
-                                    resultados = list(executor.map(enviar_req_macro, payloads_cascata_macro))
-                                    sucessos_macro = sum(resultados)
-
-                        # 4. Limpeza de cache e feedback
-                        time.sleep(2.0)
+                        # 3. Limpeza de cache e reload da interface
+                        time.sleep(1.5)
                         st.cache_data.clear()
                         if "df" in st.session_state:
                             del st.session_state.df
 
                         msg_sucesso = f"🎉 Unidade **{novo_nome_uni}** atualizada com sucesso!"
-                        if qtd_srv_afetados > 0 or qtd_macro_afetadas > 0:
-                            msg_sucesso += f" ({qtd_srv_afetados} servidores e {sucessos_macro}/{qtd_macro_afetadas} atividades sincronizados em cascata)."
+                        if qtd_srv_afetados > 0:
+                            msg_sucesso += f" ({qtd_srv_afetados} servidores atualizados. As atividades herdam a nova lotação automaticamente)."
                         st.success(msg_sucesso)
                         
-                        time.sleep(1.5)
+                        time.sleep(1)
                         st.rerun()
 
     # =================================================================
