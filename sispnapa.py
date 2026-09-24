@@ -2190,9 +2190,20 @@ if modo == "📈 Dashboards Executivos":
 
         # --- ATIVIDADES (Micro) ---
         df_dash_atv = df_atual[df_atual["Nível"].astype(str).str.strip() == "Atividade"].copy()
-        df_dash_atv["Data_Inicio_DT"] = df_dash_atv["Data de Início"].apply(converter_dt_seguro)
-        df_dash_atv["Data_Fim_DT"] = df_dash_atv["Data de Término"].apply(converter_dt_seguro)
+
+        # 🚀 Blindagem: Força o Pandas a registrar a coluna como datetime64[ns]
+        df_dash_atv["Data_Inicio_DT"] = pd.to_datetime(
+            df_dash_atv["Data de Início"].apply(converter_dt_seguro), 
+            errors='coerce'
+        )
+        df_dash_atv["Data_Fim_DT"] = pd.to_datetime(
+            df_dash_atv["Data de Término"].apply(converter_dt_seguro), 
+            errors='coerce'
+        )
+
+        # Agora o .dt.month funciona perfeitamente
         df_dash_atv["Mes_Inicio"] = df_dash_atv["Data_Inicio_DT"].dt.month
+        
         df_dash_atv["Dias_Gastos_Plan"] = pd.to_numeric(df_dash_atv.get("Dias_Gastos_Plan", 0), errors='coerce').fillna(0.0)
         df_dash_atv["Dias_Gastos_Exec"] = pd.to_numeric(df_dash_atv.get("Dias_Gastos_Exec", 0), errors='coerce').fillna(0.0)
         df_dash_atv["Resultado_Indicador"] = pd.to_numeric(df_dash_atv.get("Resultado_Indicador", 0), errors='coerce').fillna(0.0)
@@ -2200,7 +2211,7 @@ if modo == "📈 Dashboards Executivos":
         df_dash_atv["Rec_Plan_Total"] = pd.to_numeric(df_dash_atv.get("Rec_Plan_Total", 0), errors='coerce').fillna(0.0)
         
         meses_pt = {1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'}
-        df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt)
+        df_dash_atv["Mes_Nome"] = df_dash_atv["Mes_Inicio"].map(meses_pt).fillna("Não Definido")
 
         def classificar_status_atv(row):
             andamento = str(row.get("Andamento", "")).strip()
