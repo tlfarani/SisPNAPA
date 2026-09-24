@@ -208,10 +208,28 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         else:
             uf_coord_final = str(uf_acao).strip().upper()
 
-    res_ind_final = str(resultado_indicador).strip() if resultado_indicador != "" else ""
+    # 🚀 1. TRATAMENTO DA META DO INDICADOR (Gera float ou None para o SharePoint)
+    meta_ind_final = None
+    if meta_indicador is not None and str(meta_indicador).strip() not in ["", "None", "nan"]:
+        try:
+            meta_ind_final = float(str(meta_indicador).strip().replace(",", "."))
+        except Exception:
+            meta_ind_final = None
+
+    # 🚀 2. TRATAMENTO DO RESULTADO DO INDICADOR (Gera float ou None)
     if nivel_selecionado == "Atividade":
         if str(coordenador_operacao).strip() != "Coordenador de Campo" or str(papel_institucional).strip() == "Apoio":
-            res_ind_final = "0"
+            res_ind_final = 0.0
+        else:
+            try:
+                res_ind_final = float(str(resultado_indicador).strip().replace(",", ".")) if str(resultado_indicador).strip() else 0.0
+            except Exception:
+                res_ind_final = 0.0
+    else:
+        try:
+            res_ind_final = float(str(resultado_indicador).strip().replace(",", ".")) if str(resultado_indicador).strip() else None
+        except Exception:
+            res_ind_final = None
 
     # Dicionário contendo estritamente as colunas físicas da lista do SharePoint
     payload = {
@@ -228,8 +246,8 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Nome da Atividade": str(nome_atividade),
         "Andamento": str(andamento),
         "Indicador": str(val_indicador),
-        "Meta_Indicador": str(meta_indicador) if meta_indicador != "" else "",
-        "Resultado_Indicador": res_ind_final,
+        "Meta_Indicador": meta_ind_final,          # 👈 Agora envia float ou None (vira null no JSON)
+        "Resultado_Indicador": res_ind_final,      # 👈 Agora envia float (0.0) ou None
         "Doc_Probatorio_Exec": str(doc_probatorio),
         "UF_Acao_PNAPA": str(uf_acao),
         "Importância da Atividade": str(importancia),
@@ -238,7 +256,6 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Tipo de Atividade": str(tipo_atividade),
         "Periculosidade/Insalubridade": str(periculosidade),
         "Servidor": str(servidor),
-        # 🛡️ As 6 colunas do Servidor foram removidas da escrita física no SharePoint
         "Número da PCDP": str(num_pcdp),
         "País": str(pais),
         "UF Onde Ocorreu/Ocorrerá a Ação": str(uf_ocorrencia),
