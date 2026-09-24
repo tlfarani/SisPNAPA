@@ -483,26 +483,38 @@ def carregar_dados_da_nuvem():
         st.error(f"❌ Erro ao conectar ao Power Automate: {e}")
         return pd.DataFrame(columns=COLUNAS_PNAPA)
 
-def converter_para_data_segura(valor):
-    """Converte com segurança qualquer formato (serial Excel, ISO, string BR) para date."""
-    if pd.isna(valor) or valor is None:
-        return date.today()
-    if isinstance(valor, (datetime, pd.Timestamp)):
-        return valor.date()
-    if isinstance(valor, date):
-        return valor
-    val_str = str(valor).strip()
-    if val_str == "" or val_str.lower() in ["none", "nat", "nan"]:
-        return date.today()
-    # Serial do Excel (ex: 45678)
-    if val_str.replace('.', '', 1).isdigit():
-        try:
-            return pd.to_datetime(int(float(val_str)), unit='D', origin='1899-12-30').date()
-        except:
-            pass
-    # Força o parsing com dia primeiro (Padrão Brasil)
-    dt = pd.to_datetime(val_str, errors='coerce', dayfirst=True)
-    return dt.date() if pd.notna(dt) else date.today()
+import datetime as _dt
+
+def converter_para_data_segura(valor, data_padrao=None):
+    if data_padrao is None:
+        data_padrao = _dt.date.today()
+        
+    if pd.isna(valor) or valor is None or str(valor).strip() in ["", "None", "nan", "0"]:
+        return data_padrao
+        
+    # 🚀 Blindagem: aceita date, datetime e Timestamp sem conflito de namespace
+    if isinstance(valor, (_dt.date, _dt.datetime, pd.Timestamp)):
+        return valor.date() if hasattr(valor, "date") else valor
+        
+    s = str(valor).strip()
+    
+    # Suporte a número serial do Excel (ex: 46082)
+    try:
+        f = float(s.replace(',', '.'))
+        if 30000 < f < 60000:
+            return _dt.date(1899, 12, 30) + _dt.timedelta(days=int(f))
+    except (ValueError, TypeError):
+        pass
+        
+    # Conversão de string (ISO '2026-03-01' ou BR '01/03/2026')
+    try:
+        dt = pd.to_datetime(s, dayfirst=True, errors='coerce')
+        if pd.notna(dt):
+            return dt.date()
+    except Exception:
+        pass
+        
+    return data_padrao
 
 def classificar_nivel_acao(dias):
     try:
