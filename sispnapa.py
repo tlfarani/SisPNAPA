@@ -4106,27 +4106,46 @@ elif modo == "📊 Visualizar Base":
                             with st.spinner("⏳ Atualizando ações em lote no SharePoint..."):
                                 payloads_lote_ac = []
                                 for _, row_orig in df_ac_sel.iterrows():
-                                    p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
-                                    p_item["Acao"] = "Editar"
-                                    p_item["Id"] = str(row_orig["Id"])
-                                    p_item["Andamento"] = str(novo_and_ac_lote)
-                                    
-                                    # Sanitiza e remove colunas desvinculadas
-                                    for c_drop in ["UF_Servidor", "Lotação", "Faz parte da Equipe de Emergências", "Fiscal", "AEAC", "Funcao"]:
-                                        p_item.pop(c_drop, None)
-                                        
-                                    p_item["Data de Início"] = converter_data_para_serial(p_item.get("Data de Início"))
-                                    p_item["Data de Término"] = converter_data_para_serial(p_item.get("Data de Término"))
-                                    p_item["Meta_Indicador"] = float(p_item["Meta_Indicador"]) if p_item.get("Meta_Indicador") not in [None, ""] else None
-                                    p_item["Resultado_Indicador"] = float(p_item["Resultado_Indicador"]) if p_item.get("Resultado_Indicador") not in [None, ""] else None
-                                    
-                                    payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
-                                    payloads_lote_ac.append(payload_sanit)
+                                    r_dict = row_orig.to_dict()
+                                    payload_ac = payload_gerador(
+                                        val_ano=r_dict.get("Ano da Ação"),
+                                        val_num_acao=r_dict.get("Número da Ação PNAPA"),
+                                        val_nome_acao=r_dict.get("Nome da Ação PNAPA"),
+                                        val_indicador=r_dict.get("Indicador"),
+                                        nivel_selecionado="Ação Setorial",
+                                        nome_atividade="",
+                                        andamento=novo_and_ac_lote,
+                                        resultado_indicador="",
+                                        doc_probatorio="",
+                                        uf_acao=r_dict.get("UF_Acao_PNAPA"),
+                                        importancia=r_dict.get("Importância da Atividade", "Finalística"),
+                                        tema=r_dict.get("Tema da Atividade"),
+                                        objetivo=r_dict.get("Objetivo da Atividade"),
+                                        tipo_atividade=r_dict.get("Tipo de Atividade"),
+                                        periculosidade="Não se Aplica",
+                                        servidor=r_dict.get("Servidor"),
+                                        dt_inicio=r_dict.get("Data de Início"),
+                                        dt_termino=r_dict.get("Data de Término"),
+                                        dias_plan=r_dict.get("Dias_Gastos_Plan", 0.0),
+                                        origem_recurso=r_dict.get("Origem do Recurso", "SP"),
+                                        rec_p_diarias=r_dict.get("Rec_Plan_Diarias", 0.0),
+                                        rec_p_passagens=r_dict.get("Rec_Plan_Passagens", 0.0),
+                                        rec_p_outras=r_dict.get("Rec_Plan_Outras_Despesas", 0.0),
+                                        obs=r_dict.get("Observações", ""),
+                                        justificativa=r_dict.get("Justificativa_Acao_PNAPA", ""),
+                                        id_atual=normalizar_id_t1(row_orig.get("Id")),
+                                        modo="📝 Editar Linha Existente",
+                                        df_atual=df_atual,
+                                        papel_institucional=r_dict.get("Papel_Institucional"),
+                                        coordenador_operacao="",
+                                        meta_indicador=r_dict.get("Meta_Indicador"),
+                                        codigo_atividade="",
+                                        uf_coordenadora=r_dict.get("UF_Coordenadora")
+                                    )
+                                    payloads_lote_ac.append(payload_ac)
                                     
                                 executar_envio_sharepoint(payloads_lote_ac)
                                 st.session_state["selecoes_acoes"] = {}
-                                
-                                # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
                                 st.cache_data.clear()
                                 if "df" in st.session_state: del st.session_state.df
                                 liberar_trava(chave_trava)
@@ -4888,32 +4907,69 @@ elif modo == "📊 Visualizar Base":
                             if btn_conf_lt:
                                 chave_trava = f"edit_lt_at_{qtd_at_sel}"
                                 verificar_duplo_clique(chave_trava)
+                                
                                 with st.spinner("⏳ Processando alterações em lote no SharePoint..."):
                                     payloads_lote = []
                                     for _, row in df_at_sel.iterrows():
-                                        p_item = {col: row[col] for col in df_atual.columns if col in row}
-                                        p_item["Acao"] = "Editar"
-                                        p_item["Id"] = str(row["Id"])
-                                        for k_alt, v_alt in edicoes_lote.items():
-                                            p_item[k_alt] = v_alt
+                                        # 1. Mescla os dados atuais da linha com as alterações escolhidas no lote
+                                        r_dict = row.to_dict()
+                                        r_dict.update(edicoes_lote)
                                         
-                                        # Sanitizações estritas de tipo para o SharePoint
-                                        p_item["Data de Início"] = converter_data_para_serial(p_item.get("Data de Início"))
-                                        p_item["Data de Término"] = converter_data_para_serial(p_item.get("Data de Término"))
-                                        p_item["Meta_Indicador"] = None
-                                        
-                                        if p_item.get("Coordenador_Operacao") == "Apoio de Campo":
-                                            p_item["Resultado_Indicador"] = 0.0
+                                        # 2. Se virou Apoio de Campo, o indicador obrigatoriamente vira 0.0
+                                        func_final_linha = r_dict.get("Coordenador_Operacao", "Apoio de Campo")
+                                        if func_final_linha == "Apoio de Campo":
+                                            res_ind_linha = 0.0
                                         else:
-                                            try: p_item["Resultado_Indicador"] = float(p_item.get("Resultado_Indicador", 0.0))
-                                            except: p_item["Resultado_Indicador"] = 0.0
+                                            res_ind_linha = r_dict.get("Resultado_Indicador", 0.0)
 
-                                        # Exclui colunas auxiliares de servidor da gravação
-                                        for c_drop in ["UF_Servidor", "Lotação", "Faz parte da Equipe de Emergências", "Fiscal", "AEAC", "Funcao"]:
-                                            p_item.pop(c_drop, None)
-                                            
-                                        payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
-                                        payloads_lote.append(payload_sanit)
+                                        # 🚀 3. Monta o payload blindado via payload_gerador (trata datas seriais, nulls e números)
+                                        payload_at = payload_gerador(
+                                            val_ano=r_dict.get("Ano da Ação"),
+                                            val_num_acao=r_dict.get("Número da Ação PNAPA"),
+                                            val_nome_acao=r_dict.get("Nome da Ação PNAPA"),
+                                            val_indicador=r_dict.get("Indicador"),
+                                            nivel_selecionado="Atividade",
+                                            nome_atividade=r_dict.get("Nome da Atividade"),
+                                            andamento=r_dict.get("Andamento"),
+                                            resultado_indicador=res_ind_linha,
+                                            doc_probatorio=r_dict.get("Doc_Probatorio_Exec"),
+                                            uf_acao=r_dict.get("UF_Acao_PNAPA"),
+                                            importancia=r_dict.get("Importância da Atividade", "Finalística"),
+                                            tema=r_dict.get("Tema da Atividade", "Outros temas"),
+                                            objetivo=r_dict.get("Objetivo da Atividade", "Prevenção"),
+                                            tipo_atividade=r_dict.get("Tipo de Atividade", "Operação"),
+                                            periculosidade=r_dict.get("Periculosidade/Insalubridade", "Não se Aplica"),
+                                            servidor=r_dict.get("Servidor"),
+                                            num_pcdp=r_dict.get("Número da PCDP"),
+                                            pais=r_dict.get("País", "Brasil"),
+                                            uf_ocorrencia=r_dict.get("UF Onde Ocorreu/Ocorrerá a Ação"),
+                                            estado_local=r_dict.get("Estado_Local_Acao"),
+                                            municipio=r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação"),
+                                            dt_inicio=r_dict.get("Data de Início"),
+                                            dt_termino=r_dict.get("Data de Término"),
+                                            dias_plan=r_dict.get("Dias_Gastos_Plan", 0.0),
+                                            dias_exec=r_dict.get("Dias_Gastos_Exec", 0.0),
+                                            origem_recurso=r_dict.get("Origem do Recurso", "SP"),
+                                            rec_p_diarias=r_dict.get("Rec_Plan_Diarias", 0.0),
+                                            rec_p_passagens=r_dict.get("Rec_Plan_Passagens", 0.0),
+                                            rec_p_outras=r_dict.get("Rec_Plan_Outras_Despesas", 0.0),
+                                            rec_e_diarias=r_dict.get("Rec_Exec_Diarias", 0.0),
+                                            rec_e_passagens=r_dict.get("Rec_Exec_Passagens", 0.0),
+                                            rec_e_outras=r_dict.get("Rec_Exec_Outras_Despesas", 0.0),
+                                            obs=r_dict.get("Observações", ""),
+                                            justificativa=r_dict.get("Justificativa_Acao_PNAPA", ""),
+                                            id_atual=normalizar_id_t1(row.get("Id")), # 👈 ID limpo, sem .0
+                                            modo="📝 Editar Linha Existente",
+                                            df_atual=df_atual,
+                                            papel_institucional=r_dict.get("Papel_Institucional", "Coordenação"),
+                                            coordenador_operacao=func_final_linha,
+                                            meta_indicador=None,
+                                            codigo_atividade=r_dict.get("Codigo_Atividade", ""),
+                                            aval_qualidade=None,
+                                            aval_feedback=None,
+                                            uf_coordenadora=r_dict.get("UF_Coordenadora", "")
+                                        )
+                                        payloads_lote.append(payload_at)
                                         
                                     executar_envio_sharepoint(payloads_lote)
                                     st.session_state["selecoes_atividades"] = {}
