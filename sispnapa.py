@@ -124,12 +124,13 @@ COLUNAS_PNAPA = [
     "Nome da Atividade", "Andamento", "Indicador", "Meta_Indicador", "Resultado_Indicador", 
     "Doc_Probatorio_Exec", "UF_Acao_PNAPA", "Importância da Atividade", "Tema da Atividade", 
     "Objetivo da Atividade", "Tipo de Atividade", "Periculosidade/Insalubridade", "Servidor", 
-    "UF_Servidor", "Lotação", "Faz parte da Equipe de Emergências", "Número da PCDP", 
-    "País", "UF Onde Ocorreu/Ocorrerá a Ação", "Estado_Local_Acao", "Municipio Onde Ocorreu/Ocorrerá a Ação", 
-    "Data de Início", "Data de Término", "Dias_Gastos_Plan", "Dias_Gastos_Exec", "Origem do Recurso", 
+    "Número da PCDP", "País", "UF Onde Ocorreu/Ocorrerá a Ação", "Estado_Local_Acao", 
+    "Municipio Onde Ocorreu/Ocorrerá a Ação", "Data de Início", "Data de Término", 
+    "Dias_Gastos_Plan", "Dias_Gastos_Exec", "Origem do Recurso", 
     "Rec_Plan_Diarias", "Rec_Plan_Passagens", "Rec_Plan_Outras_Despesas", "Rec_Plan_Total", 
     "Rec_Exec_Diarias", "Rec_Exec_Passagens", "Rec_Exec_Outras_Despesas", "Rec_Exec_Total", 
-    "Observações", "Justificativa_Acao_PNAPA", "Avaliacao_Qualidade", "Avaliacao_Feedback", "UF_Coordenadora"
+    "Observações", "Justificativa_Acao_PNAPA", "Avaliacao_Qualidade", "Avaliacao_Feedback",
+    "UF_Coordenadora"
 ]
 
 # Função auxiliar defensiva para preenchimento de UF_Coordenadora em linhas legadas
@@ -189,18 +190,16 @@ def obter_float_limpo(val):
 def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
                     nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
                     importancia, tema, objetivo, tipo_atividade, periculosidade, servidor, 
-                    uf_servidor, lotacao, equipe_emergencia, num_pcdp, pais, uf_ocorrencia, 
-                    estado_local, municipio, dt_inicio, dt_termino, dias_plan, dias_exec, 
-                    origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
-                    rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual,
+                    uf_servidor="", lotacao="", equipe_emergencia="", num_pcdp="", pais="Brasil", 
+                    uf_ocorrencia="", estado_local="", municipio="", dt_inicio="", dt_termino="", 
+                    dias_plan=0.0, dias_exec=0.0, origem_recurso="", rec_p_diarias=0.0, 
+                    rec_p_passagens=0.0, rec_p_outras=0.0, rec_e_diarias=0.0, rec_e_passagens=0.0, 
+                    rec_e_outras=0.0, obs="", justificativa="", id_atual="", modo="", df_atual=None,
                     papel_institucional="Coordenação", coordenador_operacao="", meta_indicador="",
-                    codigo_atividade="", aval_qualidade="", aval_feedback="", uf_coordenadora=""):
+                    codigo_atividade="", aval_qualidade="", aval_feedback="", uf_coordenadora="", **kwargs):
     
     acao_envio = "Editar" if str(id_atual).strip() else "Inserir"
-    if acao_envio == "Inserir":
-        id_final = ""
-    else:
-        id_final = str(id_atual)
+    id_final = "" if acao_envio == "Inserir" else str(id_atual)
 
     uf_coord_final = str(uf_coordenadora).strip().upper()
     if not uf_coord_final or uf_coord_final in ["NONE", "NAN", ""]:
@@ -214,6 +213,7 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         if str(coordenador_operacao).strip() != "Coordenador de Campo" or str(papel_institucional).strip() == "Apoio":
             res_ind_final = "0"
 
+    # Dicionário contendo estritamente as colunas físicas da lista do SharePoint
     payload = {
         "Acao": acao_envio,
         "Id": id_final,
@@ -238,9 +238,7 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Tipo de Atividade": str(tipo_atividade),
         "Periculosidade/Insalubridade": str(periculosidade),
         "Servidor": str(servidor),
-        "UF_Servidor": str(uf_servidor),
-        "Lotação": str(lotacao),
-        "Faz parte da Equipe de Emergências": str(equipe_emergencia),
+        # 🛡️ As 6 colunas do Servidor foram removidas da escrita física no SharePoint
         "Número da PCDP": str(num_pcdp),
         "País": str(pais),
         "UF Onde Ocorreu/Ocorrerá a Ação": str(uf_ocorrencia),
@@ -1476,6 +1474,47 @@ if "df" not in st.session_state:
         st.session_state.df = carregar_dados_da_nuvem()
 
 df_atual = st.session_state.df
+
+# 🚀 Função de enriquecimento em memória das 6 colunas do Servidor
+def enriquecer_com_servidores(df_base, df_srv):
+    if df_base is None or df_base.empty:
+        return df_base
+    df_res = df_base.copy()
+    
+    cols_srv = [
+        "UF_Servidor", "Lotação", "Faz parte da Equipe de Emergências", 
+        "Fiscal", "AEAC", "Funcao"
+    ]
+    # Remove resíduos antigos caso existam para evitar colunas _x e _y
+    df_res = df_res.drop(columns=cols_srv, errors="ignore")
+    
+    if df_srv is not None and not df_srv.empty and "Servidor" in df_res.columns:
+        df_s = df_srv.copy()
+        # Padroniza nomes de colunas com acentos para bater com a interface
+        renames = {
+            "Lotacao": "Lotação", 
+            "Equipe_Emergencias": "Faz parte da Equipe de Emergências"
+        }
+        df_s = df_s.rename(columns=renames)
+        
+        cols_para_merge = ["Servidor", "UF_Servidor", "Lotação", "Faz parte da Equipe de Emergências", "Fiscal", "AEAC", "Funcao"]
+        cols_existentes = [c for c in cols_para_merge if c in df_s.columns]
+        df_s_aux = df_s[cols_existentes].drop_duplicates(subset=["Servidor"])
+        
+        df_res = pd.merge(df_res, df_s_aux, on="Servidor", how="left")
+        
+    # Garante valores padrão limpos caso o servidor não esteja cadastrado na tabela de equipes
+    for c in ["UF_Servidor", "Lotação", "Funcao"]:
+        if c not in df_res.columns: df_res[c] = ""
+        df_res[c] = df_res[c].fillna("")
+    for c in ["Faz parte da Equipe de Emergências", "Fiscal", "AEAC"]:
+        if c not in df_res.columns: df_res[c] = "Não"
+        df_res[c] = df_res[c].fillna("Não")
+        
+    return df_res
+
+# Aplica o enriquecimento em tempo de execução
+df_atual = enriquecer_com_servidores(st.session_state.df, df_servidores)
 
 # 🛡️ BLINDAGEM CONTRA KEYERROR: Garante que todas as colunas oficiais existam no DataFrame
 for col_oficial in COLUNAS_PNAPA:
@@ -5547,9 +5586,8 @@ elif modo == "➕ Inserir Nova Linha":
                                         "Tipo de Atividade": tipo_atividade,
                                         "Periculosidade/Insalubridade": periculosidade, 
                                         "Servidor": serv_lote, 
-                                        "UF_Servidor": p_uf_srv,
-                                        "Lotação": p_lot, 
-                                        "Faz parte da Equipe de Emergências": p_eq, 
+                                        # ❌ "UF_Servidor", "Lotação", "Faz parte da Equipe de Emergências",
+                                        # ❌ "Fiscal", "AEAC" e "Funcao" removidos daqui
                                         "Número da PCDP": num_pcdp,
                                         "País": p_pais, 
                                         "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
@@ -5569,7 +5607,7 @@ elif modo == "➕ Inserir Nova Linha":
                                         "Rec_Exec_Outras_Despesas": p_re_o, 
                                         "Rec_Exec_Total": (p_re_d + p_re_p + p_re_o),
                                         "Observações": p_obs, 
-                                        "Justificativa_Acao_PNAPA": "",                                        
+                                        "Justificativa_Acao_PNAPA": ""
                                     }
                                     payloads_lote.append(payload_linha)
                                 
