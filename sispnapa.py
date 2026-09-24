@@ -227,18 +227,6 @@ def converter_data_para_serial(val):
         
     return None
 
-# 🚀 Tratamento de Avaliação (field_41 e field_42 são Number no SharePoint)
-    def tratar_num_avaliacao(val):
-        if val is None or pd.isna(val) or str(val).strip() in ["", "None", "nan", "🔒 Restrito"]:
-            return None
-        try:
-            return float(str(val).strip().replace(",", "."))
-        except (ValueError, TypeError):
-            return None
-
-    aval_qualidade_final = tratar_num_avaliacao(aval_qualidade)
-    aval_feedback_final = tratar_num_avaliacao(aval_feedback)
-
 def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
                     nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
                     importancia, tema, objetivo, tipo_atividade, periculosidade, servidor, 
@@ -284,6 +272,19 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
             res_ind_final = None
 
     # Dicionário contendo estritamente as colunas físicas da lista do SharePoint
+    # 🚀 Tratamento de Avaliação (field_41 e field_42 são Number no SharePoint)
+    def tratar_num_avaliacao(val):
+        if val is None or pd.isna(val) or str(val).strip() in ["", "None", "nan", "🔒 Restrito"]:
+            return None
+        try:
+            return float(str(val).strip().replace(",", "."))
+        except (ValueError, TypeError):
+            return None
+
+    aval_qualidade_final = tratar_num_avaliacao(aval_qualidade)
+    aval_feedback_final = tratar_num_avaliacao(aval_feedback)
+
+    # Dicionário contendo estritamente as colunas físicas da lista do SharePoint
     payload = {
         "Acao": acao_envio,
         "Id": id_final,
@@ -298,8 +299,8 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Nome da Atividade": str(nome_atividade),
         "Andamento": str(andamento),
         "Indicador": str(val_indicador),
-        "Meta_Indicador": meta_ind_final,          # 👈 Agora envia float ou None (vira null no JSON)
-        "Resultado_Indicador": res_ind_final,      # 👈 Agora envia float (0.0) ou None
+        "Meta_Indicador": meta_ind_final,
+        "Resultado_Indicador": res_ind_final,
         "Doc_Probatorio_Exec": str(doc_probatorio),
         "UF_Acao_PNAPA": str(uf_acao),
         "Importância da Atividade": str(importancia),
@@ -328,8 +329,8 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Rec_Exec_Total": float((rec_e_diarias or 0.0) + (rec_e_passagens or 0.0) + (rec_e_outras or 0.0)),
         "Observações": str(obs),
         "Justificativa_Acao_PNAPA": str(justificativa),
-        "Avaliacao_Qualidade": aval_qualidade_final,  
-        "Avaliacao_Feedback": aval_feedback_final  
+        "Avaliacao_Qualidade": aval_qualidade_final,
+        "Avaliacao_Feedback": aval_feedback_final
     }
     return payload
 
