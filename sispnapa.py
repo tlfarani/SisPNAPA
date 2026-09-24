@@ -372,12 +372,23 @@ def carregar_sugestoes():
 # Função de Leitura Blindada contra Chaves Ausentes do Power Automate
 def carregar_dados_da_nuvem():
     try:
-        resposta = requests.post(URL_FLOW_PRINCIPAL, json={"Acao": "Ler"}, timeout=20)
+        resposta = requests.post(URL_FLOW_PRINCIPAL, json={"Acao": "Ler"}, timeout=25)
         if resposta.status_code == 200:
             dados_json = resposta.json()
-            if dados_json:
-                df = pd.DataFrame(dados_json)
+            
+            # Suporte para retorno do SharePoint (chave 'value') ou array direto
+            lista_registros = dados_json.get("value", dados_json) if isinstance(dados_json, dict) else dados_json
+            
+            if lista_registros and isinstance(lista_registros, list):
+                df = pd.DataFrame(lista_registros)
                 df.columns = [str(col).replace('\xa0', ' ').strip() for col in df.columns]
+                
+                # O SharePoint usa 'ID' por padrão; garantimos 'Id' no DataFrame
+                if "ID" in df.columns and "Id" not in df.columns:
+                    df["Id"] = df["ID"].astype(str)
+                elif "Id" in df.columns:
+                    df["Id"] = df["Id"].astype(str)
+                    
                 df = df.reindex(columns=COLUNAS_PNAPA, fill_value="")
                 return df
         return pd.DataFrame(columns=COLUNAS_PNAPA)
