@@ -187,6 +187,46 @@ def obter_float_limpo(val):
     num = pd.to_numeric(val_str, errors='coerce')
     return 0.0 if pd.isna(num) else float(num)
 
+import datetime as _dt
+
+def converter_data_para_serial(val):
+    """Converte qualquer formato de data (string 'YYYY-MM-DD', 'DD/MM/AAAA' ou objeto date) 
+       para o número serial do Excel (ex: 46289.0) ou None (null), que o SharePoint aceita."""
+    if val is None or pd.isna(val) or str(val).strip() in ["", "None", "nan", "0"]:
+        return None
+        
+    # Se já for número serial
+    try:
+        f = float(str(val).strip().replace(',', '.'))
+        if 30000 < f < 60000:
+            return f
+    except (ValueError, TypeError):
+        pass
+        
+    dt_val = None
+    if isinstance(val, (_dt.date, _dt.datetime, pd.Timestamp)):
+        dt_val = val.date() if hasattr(val, "date") else val
+    else:
+        s = str(val).strip()
+        if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+            try:
+                dt_val = _dt.date.fromisoformat(s[:10])
+            except Exception:
+                pass
+        if not dt_val:
+            try:
+                dt = pd.to_datetime(s, dayfirst=True, errors='coerce')
+                if pd.notna(dt):
+                    dt_val = dt.date()
+            except Exception:
+                pass
+                
+    if dt_val:
+        base_excel = _dt.date(1899, 12, 30)
+        return float((dt_val - base_excel).days)
+        
+    return None
+
 def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_selecionado, 
                     nome_atividade, andamento, resultado_indicador, doc_probatorio, uf_acao, 
                     importancia, tema, objetivo, tipo_atividade, periculosidade, servidor, 
@@ -261,8 +301,8 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "UF Onde Ocorreu/Ocorrerá a Ação": str(uf_ocorrencia),
         "Estado_Local_Acao": str(estado_local),
         "Municipio Onde Ocorreu/Ocorrerá a Ação": str(municipio),
-        "Data de Início": str(dt_inicio) if pd.notna(dt_inicio) and str(dt_inicio).strip() else "",
-        "Data de Término": str(dt_termino) if pd.notna(dt_termino) and str(dt_termino).strip() else "",
+        "Data de Início": converter_data_para_serial(dt_inicio),
+        "Data de Término": converter_data_para_serial(dt_termino),
         "Dias_Gastos_Plan": float(dias_plan) if pd.notna(dias_plan) else 0.0,
         "Dias_Gastos_Exec": float(dias_exec) if pd.notna(dias_exec) else 0.0,
         "Origem do Recurso": str(origem_recurso),
@@ -5730,15 +5770,13 @@ elif modo == "➕ Inserir Nova Linha":
                                         "Tipo de Atividade": tipo_atividade,
                                         "Periculosidade/Insalubridade": periculosidade, 
                                         "Servidor": serv_lote, 
-                                        # ❌ "UF_Servidor", "Lotação", "Faz parte da Equipe de Emergências",
-                                        # ❌ "Fiscal", "AEAC" e "Funcao" removidos daqui
                                         "Número da PCDP": num_pcdp,
                                         "País": p_pais, 
                                         "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
                                         "Estado_Local_Acao": p_est,
                                         "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun, 
-                                        "Data de Início": p_ini, 
-                                        "Data de Término": p_fim,
+                                        "Data de Início": converter_data_para_serial(p_ini), 
+                                        "Data de Término": converter_data_para_serial(p_fim),
                                         "Dias_Gastos_Plan": p_d_pl, 
                                         "Dias_Gastos_Exec": p_d_ex, 
                                         "Origem do Recurso": p_origem,
