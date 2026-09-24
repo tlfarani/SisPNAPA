@@ -6069,11 +6069,11 @@ elif modo == "👥 Gerenciar Equipes":
             # --- DISPARO DE ATUALIZAÇÃO COM CASCATA ULTRA-RÁPIDA (PARALELA) ---
             from concurrent.futures import ThreadPoolExecutor
 
-            if st.button("💾 Salvar Modificações e Sincronizar Base Principal", type="primary", key=f"btn_salvar_srv_{id_srv_edit}"):
+            if st.button("💾 Salvar Modificações", type="primary", key=f"btn_salvar_srv_{id_srv_edit}"):
                 if not novo_nome_srv:
                     st.error("⚠️ O Nome do Servidor não pode ficar vazio.")
                 else:
-                    # 1. Payload da tabela de Equipes
+                    # 1. Atualiza apenas a tabela oficial de Servidores
                     payload_editar_srv = {
                         "Acao": "Editar", 
                         "ID_SERV": id_srv_edit, 
@@ -6089,58 +6089,35 @@ elif modo == "👥 Gerenciar Equipes":
                         "Token": novo_token
                     }
                     
-                    with st.spinner(f"1/2 Atualizando cadastro de '{novo_nome_srv}'..."):
+                    with st.spinner(f"Atualizando cadastro de '{novo_nome_srv}'..."):
                         executar_api_equipes(payload_editar_srv)
 
-                    # 2. Busca atividades vinculadas pelo NOME ANTERIOR (sel_srv)
-                    linhas_servidor_macro = df_atual[df_atual["Servidor"].astype(str).str.strip() == str(sel_srv).strip()]
-                    qtd_vinculadas = len(linhas_servidor_macro)
-                    sucessos_cascata = 0
+                    # 2. Só mexe na base principal se o NOME do servidor foi corrigido
+                    nome_mudou = (novo_nome_srv.strip() != val_atual_nome.strip())
+                    if nome_mudou:
+                        linhas_servidor_macro = df_atual[df_atual["Servidor"].astype(str).str.strip() == val_atual_nome.strip()]
+                        qtd_vinculadas = len(linhas_servidor_macro)
+                        if qtd_vinculadas > 0:
+                            with st.spinner(f"Sincronizando novo nome em {qtd_vinculadas} atividade(s)..."):
+                                payloads_cascata = []
+                                for _, row_orig in linhas_servidor_macro.iterrows():
+                                    p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
+                                    p_item["Acao"] = "Editar"
+                                    p_item["Id"] = str(row_orig["Id"])
+                                    p_item["Servidor"] = str(novo_nome_srv)
+                                    payload_sanit = {k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) for k, v in p_item.items()}
+                                    payloads_cascata.append(payload_sanit)
 
-                    if qtd_vinculadas > 0:
-                        with st.spinner(f"2/2 Atualizando {qtd_vinculadas} atividade(s) na Planilha Principal..."):
-                            payloads_cascata = []
-                            for _, row_orig in linhas_servidor_macro.iterrows():
-                                p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
-                                p_item["Acao"] = "Editar"
-                                p_item["Id"] = str(row_orig["Id"])
-                                
-                                # Atualiza dados do servidor em todas as atividades
-                                p_item["Servidor"] = str(novo_nome_srv)
-                                p_item["UF_Servidor"] = str(nova_uf_srv)
-                                p_item["Lotação"] = str(nova_lot_srv)
-                                p_item["Faz parte da Equipe de Emergências"] = str(n_eq_emerg)
-                                
-                                # Sanitização
-                                payload_sanit = {
-                                    k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v)) 
-                                    for k, v in p_item.items()
-                                }
-                                payloads_cascata.append(payload_sanit)
+                                with ThreadPoolExecutor(max_workers=10) as executor:
+                                    list(executor.map(lambda p: requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20), payloads_cascata))
 
-                            def enviar_req(p):
-                                try:
-                                    r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
-                                    return 1 if r.status_code in [200, 202] else 0
-                                except:
-                                    return 0
-
-                            with ThreadPoolExecutor(max_workers=10) as executor:
-                                resultados = list(executor.map(enviar_req, payloads_cascata))
-                                sucessos_cascata = sum(resultados)
-
-                    # 3. Limpeza de cache e recarga
-                    time.sleep(2.0)
+                    time.sleep(1.5)
                     st.cache_data.clear()
                     if "df" in st.session_state:
                         del st.session_state.df
 
-                    if qtd_vinculadas > 0:
-                        st.success(f"🎉 Cadastro atualizado e **{sucessos_cascata}/{qtd_vinculadas}** atividades sincronizadas!")
-                    else:
-                        st.success(f"🎉 Cadastro de **{novo_nome_srv}** atualizado com sucesso!")
-                    
-                    time.sleep(1.5)
+                    st.success(f"🎉 Dados de **{novo_nome_srv}** atualizados com sucesso!")
+                    time.sleep(1)
                     st.rerun()
 
     with ts_del:
