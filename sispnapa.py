@@ -375,13 +375,13 @@ def carregar_dados_da_nuvem():
         resposta = requests.post(URL_FLOW_PRINCIPAL, json={"Acao": "Ler"}, timeout=25)
         if resposta.status_code == 200:
             dados_json = resposta.json()
-            
-            # Suporte para retorno do SharePoint (chave 'value') ou array direto
             lista_registros = dados_json.get("value", dados_json) if isinstance(dados_json, dict) else dados_json
             
             if lista_registros and isinstance(lista_registros, list):
-                df = pd.DataFrame(lista_registros)
-                df.columns = [str(col).replace('\xa0', ' ').strip() for col in df.columns]
+                # 🔍 LINHAS DE DIAGNÓSTICO (TEMPORÁRIAS)
+                st.write("🔍 Chaves REAIS que o SharePoint enviou:")
+                st.write(list(lista_registros[0].keys()))
+                st.json(lista_registros[0])
                 
                 # O SharePoint usa 'ID' por padrão; garantimos 'Id' no DataFrame
                 if "ID" in df.columns and "Id" not in df.columns:
@@ -389,7 +389,7 @@ def carregar_dados_da_nuvem():
                 elif "Id" in df.columns:
                     df["Id"] = df["Id"].astype(str)
                     
-                df = df.reindex(columns=COLUNAS_PNAPA, fill_value="")
+                df = pd.DataFrame(lista_registros)
                 return df
         return pd.DataFrame(columns=COLUNAS_PNAPA)
     except Exception as e:
@@ -1486,10 +1486,6 @@ if "df" not in st.session_state:
 
 df_atual = st.session_state.df
 
-st.warning(f"Linhas recebidas no DataFrame: {len(df_atual)}")
-if not df_atual.empty:
-    st.write("Colunas recebidas da API:", list(df_atual.columns[:10]))
-    st.write("Valores encontrados na coluna Nível:", df_atual["Nível"].unique())
 
 # 🚀 Função de enriquecimento em memória das 6 colunas do Servidor
 def enriquecer_com_servidores(df_base, df_srv):
