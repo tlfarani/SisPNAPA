@@ -129,8 +129,7 @@ COLUNAS_PNAPA = [
     "Data de Início", "Data de Término", "Dias_Gastos_Plan", "Dias_Gastos_Exec", "Origem do Recurso", 
     "Rec_Plan_Diarias", "Rec_Plan_Passagens", "Rec_Plan_Outras_Despesas", "Rec_Plan_Total", 
     "Rec_Exec_Diarias", "Rec_Exec_Passagens", "Rec_Exec_Outras_Despesas", "Rec_Exec_Total", 
-    "Observações", "Justificativa_Acao_PNAPA", "Avaliacao_Qualidade", "Avaliacao_Feedback",
-    "Fiscal", "AEAC", "Funcao", "UF_Coordenadora"
+    "Observações", "Justificativa_Acao_PNAPA", "Avaliacao_Qualidade", "Avaliacao_Feedback", "UF_Coordenadora"
 ]
 
 # Função auxiliar defensiva para preenchimento de UF_Coordenadora em linhas legadas
@@ -195,18 +194,14 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
                     origem_recurso, rec_p_diarias, rec_p_passagens, rec_p_outras, rec_e_diarias, 
                     rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual,
                     papel_institucional="Coordenação", coordenador_operacao="", meta_indicador="",
-                    codigo_atividade="", aval_qualidade="", aval_feedback="",
-                    fiscal="Não", aeac="Não", funcao_servidor="", uf_coordenadora=""):
+                    codigo_atividade="", aval_qualidade="", aval_feedback="", uf_coordenadora=""):
     
     acao_envio = "Editar" if str(id_atual).strip() else "Inserir"
     if acao_envio == "Inserir":
-        # 🛡️ Deixa em branco para o SharePoint assumir o ID nativo autoincremental
-        # ou envia None/vazio para evitar colisão entre usuários simultâneos
         id_final = ""
     else:
         id_final = str(id_atual)
 
-    # 🛡️ Fallback defensivo para UF_Coordenadora
     uf_coord_final = str(uf_coordenadora).strip().upper()
     if not uf_coord_final or uf_coord_final in ["NONE", "NAN", ""]:
         if papel_institucional == "Apoio" and str(uf_ocorrencia).strip():
@@ -214,7 +209,6 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         else:
             uf_coord_final = str(uf_acao).strip().upper()
 
-    # 🔒 TRAVA ANTI-DUPLICIDADE: Apenas Coordenador de Campo registra resultado físico
     res_ind_final = str(resultado_indicador).strip() if resultado_indicador != "" else ""
     if nivel_selecionado == "Atividade":
         if str(coordenador_operacao).strip() != "Coordenador de Campo" or str(papel_institucional).strip() == "Apoio":
@@ -268,10 +262,7 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Observações": str(obs),
         "Justificativa_Acao_PNAPA": str(justificativa),
         "Avaliacao_Qualidade": str(aval_qualidade),
-        "Avaliacao_Feedback": str(aval_feedback),
-        "Fiscal": str(fiscal),
-        "AEAC": str(aeac),
-        "Funcao": str(funcao_servidor)
+        "Avaliacao_Feedback": str(aval_feedback)
     }
     return payload
 
@@ -3894,15 +3885,16 @@ elif modo == "📊 Visualizar Base":
         with tab_sub_atividades:
             df_base_atvs = df_trabalho[df_trabalho["Nível"].astype(str).str.strip() == "Atividade"].copy()
             
+            # Remove se por ventura vier algum resíduo da planilha
+            df_base_atvs = df_base_atvs.drop(columns=["Fiscal", "AEAC", "Funcao"], errors="ignore")
+
+            # 🚀 Cruza em tempo real com a tabela viva de servidores
             if not df_servidores.empty:
                 df_s_aux = df_servidores[["Servidor", "Fiscal", "AEAC", "Funcao"]].drop_duplicates(subset=["Servidor"])
                 df_base_atvs = pd.merge(df_base_atvs, df_s_aux, on="Servidor", how="left")
             
-            for col_nova in ["Fiscal", "AEAC"]:
-                if col_nova not in df_base_atvs.columns: df_base_atvs[col_nova] = "Não"
-                df_base_atvs[col_nova] = df_base_atvs[col_nova].fillna("Não")
-                
-            if "Funcao" not in df_base_atvs.columns: df_base_atvs["Funcao"] = ""
+            df_base_atvs["Fiscal"] = df_base_atvs["Fiscal"].fillna("Não")
+            df_base_atvs["AEAC"] = df_base_atvs["AEAC"].fillna("Não")
             df_base_atvs["Funcao"] = df_base_atvs["Funcao"].fillna("")
 
             st.caption(f"📌 Total de Atividades de Campo cadastradas: **{len(df_base_atvs)}** registros.")
@@ -5412,9 +5404,6 @@ elif modo == "➕ Inserir Nova Linha":
                         rec_e_passagens, rec_e_outras, obs, justificativa, id_atual, modo, df_atual,
                         papel_institucional=papel_inst, coordenador_operacao=coord_op_final, meta_indicador=meta_indicador,
                         codigo_atividade=cod_atv_final,
-                        fiscal=cad_fiscal if nivel_selecionado == "Atividade" else "Não",
-                        aeac=cad_aeac if nivel_selecionado == "Atividade" else "Não",
-                        funcao_servidor=cad_funcao_srv if nivel_selecionado == "Atividade" else "",
                         uf_coordenadora=uf_coordenadora_val
                     )
                     executar_envio_sharepoint([payload_unico])
@@ -5580,10 +5569,7 @@ elif modo == "➕ Inserir Nova Linha":
                                         "Rec_Exec_Outras_Despesas": p_re_o, 
                                         "Rec_Exec_Total": (p_re_d + p_re_p + p_re_o),
                                         "Observações": p_obs, 
-                                        "Justificativa_Acao_PNAPA": "",
-                                        "Fiscal": p_fiscal, 
-                                        "AEAC": p_aeac, 
-                                        "Funcao": p_funcao
+                                        "Justificativa_Acao_PNAPA": "",                                        
                                     }
                                     payloads_lote.append(payload_linha)
                                 
