@@ -8057,7 +8057,7 @@ elif modo == "💡 Sugestões & Melhorias":
             key="sug_input_desc"
         )
         
-        st.caption(f"👤 **Autor Identificado:** `{email_logado}` | **UF:** `{uf_usuario}` | **Data:** {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        st.caption(f"👤 **Autor Identificado:** `{email_logado}` | **UF:** `{uf_usuario}` | **Data:** {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
         
         if st.button("🚀 Enviar Sugestão", type="primary", key="btn_enviar_sugestao"):
             if not sug_titulo.strip() or not sug_descricao.strip():
