@@ -50,17 +50,35 @@ DEFAULT_GOV_PARAMS = {
 if "gov_params" not in st.session_state:
     st.session_state["gov_params"] = DEFAULT_GOV_PARAMS.copy()
 
+# --- FUNÇÃO LIBERAR TRAVAS
+def liberar_trava(chave):
+    """Reseta a trava de clique imediatamente após a conclusão bem-sucedida do envio."""
+    st.session_state[f"ts_{chave}"] = 0
+    
 # --- FUNÇÃO DE TRAVA ANTI-DUPLO ClIQUE ---
 def verificar_duplo_clique(chave, intervalo=6.0):
-    """Bloqueia cliques múltiplos acidentais no mesmo botão dentro do intervalo de segundos,
-       sem alterar o atributo disabled do widget (eliminando o risco de travamento da tela)."""
+    """
+    Controla o debounce de cliques. Se um segundo clique ocorrer enquanto a 
+    primeira requisição ainda está em trânsito no SharePoint:
+    1. Não reenvia o payload (evita duplicidade no banco).
+    2. Aguarda a gravação em curso no SharePoint finalizar.
+    3. Limpa o cache e força o rerun, atualizando a tela sem refresh manual.
+    """
     agora = time.time()
     chave_estado = f"ts_{chave}"
     ultimo_clique = st.session_state.get(chave_estado, 0)
     
     if (agora - ultimo_clique) < intervalo:
-        st.warning("⚠️ Operação já em processamento. Por favor, aguarde a sincronização!")
-        st.stop()
+        with st.spinner("⏳ Gravação em andamento na nuvem... Sincronizando dados com o SharePoint."):
+            # Aguarda a requisição anterior completar no Power Automate/SharePoint
+            time.sleep(2.5)
+            st.cache_data.clear()
+            if "df" in st.session_state:
+                del st.session_state.df
+                
+        # Reseta a trava e recarrega a página automaticamente com o novo item
+        st.session_state[chave_estado] = 0
+        st.rerun()
         
     st.session_state[chave_estado] = agora
 
@@ -3842,11 +3860,17 @@ elif modo == "📊 Visualizar Base":
                         st.markdown(f"⚠️ Deseja apagar definitivamente a(s) Ação(ões) ID: **{', '.join(ids_ac_lista)}**?")
                         btn_del_ac = st.button("Confirmar Exclusão de Ações", type="primary", key="btn_del_ac_tab_t1")
                         if btn_del_ac:
-                            verificar_duplo_clique(f"del_ac_{'_'.join(ids_ac_lista)}")
+                            chave_trava = f"del_ac_{'_'.join(ids_ac_lista)}"
+                            verificar_duplo_clique(chave_trava)
                             with st.spinner("⏳ Excluindo ação(ões) no SharePoint..."):
                                 payloads_del = [{"Acao": "Excluir", "Id": str(id_del)} for id_del in ids_ac_lista]
                                 executar_envio_sharepoint(payloads_del)
                                 st.session_state["selecoes_acoes"] = {}
+                                
+                                # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
+                                st.cache_data.clear()
+                                if "df" in st.session_state: del st.session_state.df
+                                liberar_trava(chave_trava)
                                 time.sleep(1)
                                 st.rerun()
 
@@ -3999,7 +4023,8 @@ elif modo == "📊 Visualizar Base":
 
                         btn_salvar_ac = st.button("💾 Gravar Alterações da Ação", type="primary", key=f"btn_salvar_ac_t1_{id_ac_ref}")
                         if btn_salvar_ac:
-                            verificar_duplo_clique(f"edit_ac_{id_ac_ref}")
+                            chave_trava = f"edit_ac_{id_ac_ref}"
+                            verificar_duplo_clique(chave_trava)
                             
                             bloquear_edicao_ac = False
                             cod_puro_ed = str(val_num_acao_ac).split("-")[0].strip().upper()
@@ -4062,6 +4087,11 @@ elif modo == "📊 Visualizar Base":
                                 with st.spinner("⏳ Gravando alterações no SharePoint..."):
                                     executar_envio_sharepoint([payload_ac])
                                     st.session_state["selecoes_acoes"] = {}
+                                    
+                                    # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
+                                    st.cache_data.clear()
+                                    if "df" in st.session_state: del st.session_state.df
+                                    liberar_trava(chave_trava)
                                     time.sleep(1)
                                     st.rerun()
 
@@ -4071,7 +4101,8 @@ elif modo == "📊 Visualizar Base":
                         novo_and_ac_lote = st.selectbox("Alterar Andamento para TODAS as Ações:", ["Planejada", "Cancelada", "Não Demandada", "Não Executada"], key="lt_ac_and_t1")
                         btn_salvar_lt_ac = st.button(f"💾 Atualizar Andamento de {len(ids_ac_lista)} Ações", type="primary", key="btn_salvar_lote_ac_t1")
                         if btn_salvar_lt_ac:
-                            verificar_duplo_clique(f"edit_lt_ac_{len(ids_ac_lista)}")
+                            chave_trava = f"edit_lt_ac_{len(ids_ac_lista)}"
+                            verificar_duplo_clique(chave_trava)
                             with st.spinner("⏳ Atualizando ações em lote no SharePoint..."):
                                 payloads_lote_ac = []
                                 for _, row_orig in df_ac_sel.iterrows():
@@ -4094,6 +4125,11 @@ elif modo == "📊 Visualizar Base":
                                     
                                 executar_envio_sharepoint(payloads_lote_ac)
                                 st.session_state["selecoes_acoes"] = {}
+                                
+                                # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
+                                st.cache_data.clear()
+                                if "df" in st.session_state: del st.session_state.df
+                                liberar_trava(chave_trava)
                                 time.sleep(1)
                                 st.rerun()
 
@@ -4393,11 +4429,17 @@ elif modo == "📊 Visualizar Base":
                         st.markdown(f"⚠️ Deseja apagar definitivamente a(s) Atividade(s) ID: **{', '.join(ids_at_lista)}**?")
                         btn_del_at = st.button("Confirmar Exclusão de Atividades", type="primary", key="btn_del_at_tab_t1")
                         if btn_del_at:
-                            verificar_duplo_clique(f"del_at_{'_'.join(ids_at_lista)}")
+                            chave_trava = f"del_at_{'_'.join(ids_at_lista)}"
+                            verificar_duplo_clique(chave_trava)
                             with st.spinner("⏳ Excluindo atividade(s) no SharePoint..."):
                                 payloads_del = [{"Acao": "Excluir", "Id": str(id_del)} for id_del in ids_at_lista]
                                 executar_envio_sharepoint(payloads_del)
                                 st.session_state["selecoes_atividades"] = {}
+                                
+                                # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
+                                st.cache_data.clear()
+                                if "df" in st.session_state: del st.session_state.df
+                                liberar_trava(chave_trava)
                                 time.sleep(1)
                                 st.rerun()
 
@@ -4660,7 +4702,8 @@ elif modo == "📊 Visualizar Base":
 
                         btn_salvar_at = st.button("💾 Gravar Alterações da Atividade", type="primary", key=f"btn_salvar_at_t1_{id_at_ref}")
                         if btn_salvar_at:
-                            verificar_duplo_clique(f"edit_at_{id_at_ref}")
+                            chave_trava = f"edit_at_{id_at_ref}"
+                            verificar_duplo_clique(chave_trava)
                             
                             bloqueio_coord = False
                             res_val_atv_ed = calcular_termometro_carga(
@@ -4713,6 +4756,11 @@ elif modo == "📊 Visualizar Base":
                                 with st.spinner("⏳ Gravando alterações no SharePoint..."):
                                     executar_envio_sharepoint([payload_at])
                                     st.session_state["selecoes_atividades"] = {}
+                                    
+                                    # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
+                                    st.cache_data.clear()
+                                    if "df" in st.session_state: del st.session_state.df
+                                    liberar_trava(chave_trava)
                                     time.sleep(1)
                                     st.rerun()
 
@@ -4838,7 +4886,8 @@ elif modo == "📊 Visualizar Base":
                                 key="btn_confirm_lote_at"
                             )
                             if btn_conf_lt:
-                                verificar_duplo_clique(f"edit_lt_at_{qtd_at_sel}")
+                                chave_trava = f"edit_lt_at_{qtd_at_sel}"
+                                verificar_duplo_clique(chave_trava)
                                 with st.spinner("⏳ Processando alterações em lote no SharePoint..."):
                                     payloads_lote = []
                                     for _, row in df_at_sel.iterrows():
@@ -4868,6 +4917,11 @@ elif modo == "📊 Visualizar Base":
                                         
                                     executar_envio_sharepoint(payloads_lote)
                                     st.session_state["selecoes_atividades"] = {}
+                                    
+                                    # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
+                                    st.cache_data.clear()
+                                    if "df" in st.session_state: del st.session_state.df
+                                    liberar_trava(chave_trava)
                                     time.sleep(1)
                                     st.rerun()
 
@@ -5480,7 +5534,8 @@ elif modo == "➕ Inserir Nova Linha":
     btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", key="btn_gravar_individual_reativo")
 
     if btn_enviar_individual:
-        verificar_duplo_clique(f"ins_ind_{val_num_acao}_{servidor}_{dt_inicio}_{dt_termino}")
+        chave_trava = f"ins_ind_{val_num_acao}_{servidor}_{dt_inicio}_{dt_termino}"
+        verificar_duplo_clique(chave_trava)
         bloquear_envio = False
         
         if nivel_selecionado in ["Ação", "Ação Setorial"]:
@@ -5556,8 +5611,14 @@ elif modo == "➕ Inserir Nova Linha":
                 codigo_atividade=cod_atv_final,
                 uf_coordenadora=uf_coordenadora_val
             )
+            
             with st.spinner("⏳ Gravando com segurança no SharePoint..."):
                 executar_envio_sharepoint([payload_unico])
+                
+                # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
+                st.cache_data.clear()
+                if "df" in st.session_state: del st.session_state.df
+                liberar_trava(chave_trava)
                 time.sleep(1)
                 st.rerun()
 
@@ -5598,10 +5659,12 @@ elif modo == "➕ Inserir Nova Linha":
             btn_disparar_lote = st.button("🔥 Disparar Carga em Lote para o SharePoint", type="primary", use_container_width=True, key="btn_disparar_lote_final")
 
             if btn_disparar_lote:
-                verificar_duplo_clique(f"ins_lote_{codigo_atividade}_{len(servidores_finais)}")
+                chave_trava = f"ins_lote_{codigo_atividade}_{len(servidores_finais)}"
+                verificar_duplo_clique(chave_trava)
                 
                 if not servidores_finais:
                     st.error("⚠️ Selecione pelo menos um servidor na lista acima.")
+                    liberar_trava(chave_trava)  # 👈 Libera caso não tenha selecionado ninguém
                 else:
                     bloqueio_lote = False
                     dias_lote_check = dias_plan if espelhar_crono else 0.0
@@ -5622,7 +5685,9 @@ elif modo == "➕ Inserir Nova Linha":
                             st.error(f"⛔ **Lote Impedido (2027+):** O servidor **{srv_lote_chk}** excederá os limites de capacidade.")
                             bloqueio_lote = True
 
-                    if not bloqueio_lote:
+                    if bloqueio_lote:
+                        liberar_trava(chave_trava)  # 👈 Libera se o termômetro barrar o envio
+                    else:
                         payloads_lote = []
                         for idx, serv_lote in enumerate(servidores_finais):
                             funcao_lote = funcao_campo if serv_lote == servidor else "Apoio de Campo"
@@ -5706,6 +5771,11 @@ elif modo == "➕ Inserir Nova Linha":
                         
                         with st.spinner("⏳ Processando carga em lote no SharePoint..."):
                             executar_envio_sharepoint(payloads_lote)
+                            
+                            # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
+                            st.cache_data.clear()
+                            if "df" in st.session_state: del st.session_state.df
+                            liberar_trava(chave_trava)
                             time.sleep(1)
                             st.rerun()
 
