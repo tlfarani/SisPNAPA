@@ -8064,7 +8064,7 @@ elif modo == "💡 Sugestões & Melhorias":
                 st.error("⚠️ Por favor, preencha o Título e o Detalhamento antes de enviar.")
             else:
                 id_nova_sug = int(pd.to_numeric(df_sugestoes["Id"], errors='coerce').max() + 1) if not df_sugestoes.empty and "Id" in df_sugestoes.columns else 1
-                data_hora_envio = datetime.now().strftime('%d/%m/%Y %H:%M')
+                data_hora_envio = pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')
                 
                 payload_sugestao = {
                     "Acao": "Inserir",
