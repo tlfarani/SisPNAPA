@@ -453,8 +453,14 @@ def carregar_dados_da_nuvem():
             if lista_registros and isinstance(lista_registros, list):
                 df = pd.DataFrame(lista_registros)
                 
-                # 1. Traduz os campos field_X do SharePoint para os nomes oficiais do PNAPA
+                # Traduz os campos field_X do SharePoint para os nomes oficiais do PNAPA
                 df = df.rename(columns=MAPA_SHAREPOINT)
+                
+                # 🚀 Blindagem de tipos de texto para colunas que vieram com 0 do SharePoint
+                for col_txt in ["Avaliacao_Qualidade", "Avaliacao_Feedback", "Observações", "Justificativa_Acao_PNAPA", "Doc_Probatorio_Exec", "Número da PCDP"]:
+                    if col_txt in df.columns:
+                        df[col_txt] = df[col_txt].astype(object)
+                        df[col_txt] = df[col_txt].replace(0, "").replace("0", "").fillna("")
                 
                 # 2. Define o 'Id' oficial como o ID numérico nativo do SharePoint (usado em Editar/Excluir)
                 if "ID" in df.columns:
@@ -4256,6 +4262,11 @@ elif modo == "📊 Visualizar Base":
                     return False
 
                 mascara_visibilidade = df_tab_at.apply(visibilidade_avaliacao, axis=1)
+                # 🚀 Conversão explícita para evitar o erro de LossySetitemError no Pandas moderno
+                df_tab_at["Avaliacao_Qualidade"] = df_tab_at["Avaliacao_Qualidade"].astype(object)
+                df_tab_at["Avaliacao_Feedback"] = df_tab_at["Avaliacao_Feedback"].astype(object)
+                
+                # Agora a atribuição roda sem erro:
                 df_tab_at.loc[~mascara_visibilidade, "Avaliacao_Qualidade"] = "🔒 Restrito"
                 df_tab_at.loc[~mascara_visibilidade, "Avaliacao_Feedback"] = "🔒 Restrito"
 
