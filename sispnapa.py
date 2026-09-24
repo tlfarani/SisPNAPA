@@ -370,6 +370,79 @@ def carregar_sugestoes():
 
         
 # Função de Leitura Blindada contra Chaves Ausentes do Power Automate
+import datetime
+
+# 🗺️ Mapeamento oficial das colunas internas do SharePoint para os nomes do SisPNAPA
+MAPA_SHAREPOINT = {
+    "field_1": "Ano da Ação",
+    "field_2": "Número da Ação PNAPA",
+    "field_3": "Nome da Ação PNAPA",
+    "field_4": "Nível",
+    "field_5": "Nome da Atividade",
+    "field_6": "Andamento",
+    "field_7": "Indicador",
+    "field_8": "Meta_Indicador",
+    "field_9": "Resultado_Indicador",
+    "field_10": "Doc_Probatorio_Exec",
+    "field_11": "UF_Acao_PNAPA",
+    "field_12": "Importância da Atividade",
+    "field_13": "Tema da Atividade",
+    "field_14": "Objetivo da Atividade",
+    "field_15": "Tipo de Atividade",
+    "field_16": "Periculosidade/Insalubridade",
+    "field_17": "Servidor",
+    "field_18": "Número da PCDP",
+    "field_19": "País",
+    "field_20": "UF Onde Ocorreu/Ocorrerá a Ação",
+    "field_21": "Estado_Local_Acao",
+    "field_22": "Municipio Onde Ocorreu/Ocorrerá a Ação",
+    "field_23": "Data de Início",
+    "field_24": "Data de Término",
+    "field_25": "Dias_Gastos_Plan",
+    "field_26": "Dias_Gastos_Exec",
+    "field_27": "Origem do Recurso",
+    "field_28": "Rec_Plan_Diarias",
+    "field_29": "Rec_Plan_Passagens",
+    "field_30": "Rec_Plan_Outras_Despesas",
+    "field_31": "Rec_Plan_Total",
+    "field_32": "Rec_Exec_Diarias",
+    "field_33": "Rec_Exec_Passagens",
+    "field_34": "Rec_Exec_Outras_Despesas",
+    "field_35": "Rec_Exec_Total",
+    "field_36": "Observações",
+    "field_37": "Justificativa_Acao_PNAPA",
+    "field_38": "Papel_Institucional",
+    "field_39": "Coordenador_Operacao",
+    "field_40": "Codigo_Atividade",
+    "field_41": "Avaliacao_Qualidade",
+    "field_42": "Avaliacao_Feedback",
+    "field_43": "UF_Coordenadora"
+}
+
+def formatar_data_segura_sp(val):
+    """Converte números seriais do Excel (ex: 46082) ou strings para formato YYYY-MM-DD"""
+    if pd.isna(val) or val is None or str(val).strip() in ["", "None", "nan", "0"]:
+        return ""
+    if isinstance(val, (datetime.date, datetime.datetime)):
+        return val.strftime("%Y-%m-%d")
+    s = str(val).strip()
+    try:
+        f = float(s.replace(',', '.'))
+        if 30000 < f < 60000:
+            d = datetime.date(1899, 12, 30) + datetime.timedelta(days=int(f))
+            return d.strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        pass
+    if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+        return s[:10]
+    try:
+        dt = pd.to_datetime(s, dayfirst=True, errors='coerce')
+        if pd.notna(dt):
+            return dt.strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    return s
+
 def carregar_dados_da_nuvem():
     try:
         resposta = requests.post(URL_FLOW_PRINCIPAL, json={"Acao": "Ler"}, timeout=25)
@@ -378,19 +451,27 @@ def carregar_dados_da_nuvem():
             lista_registros = dados_json.get("value", dados_json) if isinstance(dados_json, dict) else dados_json
             
             if lista_registros and isinstance(lista_registros, list):
-                # 🔍 LINHAS DE DIAGNÓSTICO (TEMPORÁRIAS)
-                st.write("🔍 Chaves REAIS que o SharePoint enviou:")
-                st.write(list(lista_registros[0].keys()))
-                st.json(lista_registros[0])
-                
-                # O SharePoint usa 'ID' por padrão; garantimos 'Id' no DataFrame
-                if "ID" in df.columns and "Id" not in df.columns:
-                    df["Id"] = df["ID"].astype(str)
-                elif "Id" in df.columns:
-                    df["Id"] = df["Id"].astype(str)
-                    
                 df = pd.DataFrame(lista_registros)
+                
+                # 1. Traduz os campos field_X do SharePoint para os nomes oficiais do PNAPA
+                df = df.rename(columns=MAPA_SHAREPOINT)
+                
+                # 2. Define o 'Id' oficial como o ID numérico nativo do SharePoint (usado em Editar/Excluir)
+                if "ID" in df.columns:
+                    df["Id"] = df["ID"].astype(str)
+                elif "Id" not in df.columns and "Title" in df.columns:
+                    df["Id"] = df["Title"].astype(str)
+                
+                # 3. Tratamento defensivo das datas seriais
+                if "Data de Início" in df.columns:
+                    df["Data de Início"] = df["Data de Início"].apply(formatar_data_segura_sp)
+                if "Data de Término" in df.columns:
+                    df["Data de Término"] = df["Data de Término"].apply(formatar_data_segura_sp)
+                
+                # 4. Garante que todas as colunas oficiais existam
+                df = df.reindex(columns=COLUNAS_PNAPA, fill_value="")
                 return df
+                
         return pd.DataFrame(columns=COLUNAS_PNAPA)
     except Exception as e:
         st.error(f"❌ Erro ao conectar ao Power Automate: {e}")
