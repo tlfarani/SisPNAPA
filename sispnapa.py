@@ -1486,6 +1486,11 @@ if "df" not in st.session_state:
 
 df_atual = st.session_state.df
 
+st.warning(f"Linhas recebidas no DataFrame: {len(df_atual)}")
+if not df_atual.empty:
+    st.write("Colunas recebidas da API:", list(df_atual.columns[:10]))
+    st.write("Valores encontrados na coluna Nível:", df_atual["Nível"].unique())
+
 # 🚀 Função de enriquecimento em memória das 6 colunas do Servidor
 def enriquecer_com_servidores(df_base, df_srv):
     if df_base is None or df_base.empty:
