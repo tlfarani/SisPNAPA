@@ -328,8 +328,8 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Rec_Exec_Total": float((rec_e_diarias or 0.0) + (rec_e_passagens or 0.0) + (rec_e_outras or 0.0)),
         "Observações": str(obs),
         "Justificativa_Acao_PNAPA": str(justificativa),
-        "Avaliacao_Qualidade": aval_qualidade_final,  # 👈 Envia float ou None (null no JSON)
-        "Avaliacao_Feedback": aval_feedback_final   # 👈 Envia float ou None (null no JSON)
+        "Avaliacao_Qualidade": aval_qualidade_final,  
+        "Avaliacao_Feedback": aval_feedback_final  
     }
     return payload
 
