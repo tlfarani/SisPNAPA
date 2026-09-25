@@ -342,7 +342,6 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         # 🛡️ Blindagem de Periculosidade (envia com barra e com underline para o Power Automate)
         "Periculosidade/Insalubridade": str(periculosidade),
         "Periculosidade_Insalubridade": str(periculosidade),
-        "Periculosidade": str(periculosidade),
         "Servidor": str(servidor),
         "Número da PCDP": str(num_pcdp),
         "País": str(pais),
@@ -5480,10 +5479,21 @@ elif modo == "➕ Inserir Nova Linha":
                     codigo_atividade = str(dados_atv_origem["Codigo_Atividade"]).strip().upper()
                     st.success(f"✅ Integrando à atividade **{codigo_atividade}**. Dados operacionais preenchidos automaticamente.")
 
+            # 🚀 1. Função de extração inteligente (testa com/sem acento e underline)
             def extrair_padrao_atv(col, fallback=""):
-                if dados_atv_origem is not None and col in dados_atv_origem:
-                    val = dados_atv_origem[col]
-                    return val if pd.notna(val) and str(val).strip() not in ["None", "nan", "NaT"] else fallback
+                if dados_atv_origem is not None:
+                    variacoes = [
+                        col,
+                        col.replace("Municipio", "Município"),
+                        col.replace("Município", "Municipio"),
+                        col.replace("/", "_"),
+                        col.replace("_", "/")
+                    ]
+                    for c in variacoes:
+                        if c in dados_atv_origem:
+                            val = dados_atv_origem[c]
+                            if pd.notna(val) and str(val).strip() not in ["None", "nan", "NaT", ""]:
+                                return str(val).strip()
                 return fallback
 
             nome_atv_def = str(extrair_padrao_atv("Nome da Atividade", "")).strip()
@@ -5579,10 +5589,23 @@ elif modo == "➕ Inserir Nova Linha":
             estado_local = MAPEAMENTO_ESTADOS_COMPLETO.get(uf_ocorrencia, "")
             st.text_input("Estado de Realização (Automático):", value=estado_local, disabled=True)
             
+            # 🚀 2. Garante que o município herdado seja preservado mesmo se não vier da API do IBGE
             lista_municipios_uf = obter_municipios_ibge(uf_ocorrencia)
             mun_def = str(extrair_padrao_atv("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
-            idx_mun = lista_municipios_uf.index(mun_def) if mun_def in lista_municipios_uf else 0
-            municipio = st.selectbox("Município Polo / Cidade de Operação:", lista_municipios_uf if lista_municipios_uf else ["Superintendência Sede"], index=idx_mun, key=f"atv_sel_municipio_{codigo_atividade}")
+
+            opcoes_mun = list(lista_municipios_uf) if lista_municipios_uf else ["Superintendência Sede"]
+            
+            # Se mun_def tem valor e não está na lista do IBGE (ex: "Superintendência Sede"), insere na lista:
+            if mun_def and mun_def not in opcoes_mun:
+                opcoes_mun.insert(0, mun_def)
+
+            idx_mun = opcoes_mun.index(mun_def) if mun_def in opcoes_mun else 0
+            municipio = st.selectbox(
+                "Município Polo / Cidade de Operação:", 
+                opcoes_mun, 
+                index=idx_mun, 
+                key=f"atv_sel_municipio_{codigo_atividade}"
+            )
 
         with aba3:
             st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True, key=f"atv_ind_dis_{val_num_acao}_{codigo_atividade}")
