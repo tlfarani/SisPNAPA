@@ -5388,12 +5388,17 @@ elif modo == "➕ Inserir Nova Linha":
                     p_inst = str(r_pl.get("Papel_Institucional", "Coordenação")).strip()
                     uf_c = obter_uf_coordenadora_segura(r_pl)
                     tema_pl = str(r_pl.get("Tema da Atividade", "")).strip()
+                    
+                    # 👈 Adicione esta linha que estava faltando:
+                    obj_pl = str(r_pl.get("Objetivo da Atividade", objetivo_herdado)).strip()
+                    
                     if p_inst == "Coordenação":
                         lbl = f"👑 Coordenação Própria ({uf_filtro_pna}) — Modal: {tema_pl}"
                     else:
                         lbl = f"🤝 Apoio à Operação Coordenada por: {uf_c} — Modal: {tema_pl}"
                     opcoes_gov.append(lbl)
-                    # 🚀 Guarda também Tema e Objetivo da linha da Ação Setorial:
+                    
+                    # Agora a variável obj_pl existe e roda perfeitamente:
                     mapa_gov[lbl] = (p_inst, uf_c, tema_pl, obj_pl)
             
             opcoes_gov.append("⚙️ Definir Manualmente...")
