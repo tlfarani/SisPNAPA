@@ -347,7 +347,9 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "País": str(pais),
         "UF Onde Ocorreu/Ocorrerá a Ação": str(uf_ocorrencia),
         "Estado_Local_Acao": str(estado_local),
-        # 🛡️ Blindagem de Município (envia com e sem acento)
+       # 🛡️ Município: Chave blindada sem barra para o Power Automate
+        "Municipio_Ocorrencia": str(municipio),
+        # Mantém as originais por compatibilidade com a base
         "Municipio Onde Ocorreu/Ocorrerá a Ação": str(municipio),
         "Município Onde Ocorreu/Ocorrerá a Ação": str(municipio),
         "Data de Início": converter_data_para_serial(dt_inicio),
@@ -5933,6 +5935,7 @@ elif modo == "➕ Inserir Nova Linha":
                                 "País": p_pais, 
                                 "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
                                 "Estado_Local_Acao": p_est,
+                                "Municipio_Ocorrencia": p_mun,
                                 "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun, 
                                 "Data de Início": converter_data_para_serial(p_ini), 
                                 "Data de Término": converter_data_para_serial(p_fim),
