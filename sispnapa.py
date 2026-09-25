@@ -316,6 +316,21 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
     aval_qualidade_final = tratar_num_avaliacao(aval_qualidade)
     aval_feedback_final = tratar_num_avaliacao(aval_feedback)
 
+    # -------------------------------------------------------------
+    # 📍 LOCALIZAÇÃO: Logo antes de 'payload = {'
+    # -------------------------------------------------------------
+    # 🚀 1. Soma automática das parcelas planejadas
+    p_diarias = float(pd.to_numeric(rec_p_diarias, errors='coerce') or 0.0)
+    p_passagens = float(pd.to_numeric(rec_p_passagens, errors='coerce') or 0.0)
+    p_outras = float(pd.to_numeric(rec_p_outras, errors='coerce') or 0.0)
+    total_plan_calculado = p_diarias + p_passagens + p_outras
+
+    # 🚀 2. Soma automática das parcelas executadas
+    e_diarias = float(pd.to_numeric(rec_e_diarias, errors='coerce') or 0.0)
+    e_passagens = float(pd.to_numeric(rec_e_passagens, errors='coerce') or 0.0)
+    e_outras = float(pd.to_numeric(rec_e_outras, errors='coerce') or 0.0)
+    total_exec_calculado = e_diarias + e_passagens + e_outras
+                        
     # Dicionário contendo estritamente as colunas físicas da lista do SharePoint
     payload = {
         "Acao": acao_envio,
@@ -339,26 +354,34 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Tema da Atividade": str(tema),
         "Objetivo da Atividade": str(objetivo),
         "Tipo de Atividade": str(tipo_atividade),
+        # 🛡️ Blindagem de Periculosidade (envia com barra e com underline para o Power Automate)
         "Periculosidade/Insalubridade": str(periculosidade),
+        "Periculosidade_Insalubridade": str(periculosidade),
         "Servidor": str(servidor),
         "Número da PCDP": str(num_pcdp),
         "País": str(pais),
         "UF Onde Ocorreu/Ocorrerá a Ação": str(uf_ocorrencia),
         "Estado_Local_Acao": str(estado_local),
+       # 🛡️ Município: Chave blindada sem barra para o Power Automate
+        "Municipio_Ocorrencia": str(municipio),
+        # Mantém as originais por compatibilidade com a base
         "Municipio Onde Ocorreu/Ocorrerá a Ação": str(municipio),
+        "Município Onde Ocorreu/Ocorrerá a Ação": str(municipio),
         "Data de Início": converter_data_para_serial(dt_inicio),
         "Data de Término": converter_data_para_serial(dt_termino),
         "Dias_Gastos_Plan": float(dias_plan) if pd.notna(dias_plan) else 0.0,
         "Dias_Gastos_Exec": float(dias_exec) if pd.notna(dias_exec) else 0.0,
+        # 💰 Parcelas individuais:
         "Origem do Recurso": str(origem_recurso),
-        "Rec_Plan_Diarias": float(rec_p_diarias) if pd.notna(rec_p_diarias) else 0.0,
-        "Rec_Plan_Passagens": float(rec_p_passagens) if pd.notna(rec_p_passagens) else 0.0,
-        "Rec_Plan_Outras_Despesas": float(rec_p_outras) if pd.notna(rec_p_outras) else 0.0,
-        "Rec_Plan_Total": float((rec_p_diarias or 0.0) + (rec_p_passagens or 0.0) + (rec_p_outras or 0.0)),
-        "Rec_Exec_Diarias": float(rec_e_diarias) if pd.notna(rec_e_diarias) else 0.0,
-        "Rec_Exec_Passagens": float(rec_e_passagens) if pd.notna(rec_e_passagens) else 0.0,
-        "Rec_Exec_Outras_Despesas": float(rec_e_outras) if pd.notna(rec_e_outras) else 0.0,
-        "Rec_Exec_Total": float((rec_e_diarias or 0.0) + (rec_e_passagens or 0.0) + (rec_e_outras or 0.0)),
+        "Rec_Plan_Diarias": p_diarias,
+        "Rec_Plan_Passagens": p_passagens,
+        "Rec_Plan_Outras_Despesas": p_outras,
+        "Rec_Exec_Diarias": e_diarias,
+        "Rec_Exec_Passagens": e_passagens,
+        "Rec_Exec_Outras_Despesas": e_outras,
+        # 🚀 TOTAIS CONSOLIDADOS (gravados no SharePoint e lidos pelos Dashboards):
+        "Rec_Plan_Total": total_plan_calculado,
+        "Rec_Exec_Total": total_exec_calculado,
         "Observações": str(obs),
         "Justificativa_Acao_PNAPA": str(justificativa),
         "Avaliacao_Qualidade": aval_qualidade_final,
@@ -4734,8 +4757,26 @@ elif modo == "📊 Visualizar Base":
                             ed_doc_at = st.text_input("Número SEI do Documento Probatório de Execução:", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
                             st.text_input("UF Proponente / Que Cede a Equipe (Definida na Aba 2):", value=str(ed_uf_acao_val), disabled=True)
                             st.text_input("Classificação da Atividade", value=importancia_at, disabled=True)
-                            ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo.get("Tipo de Atividade", "Operação")) if reg_at_alvo.get("Tipo de Atividade", "Operação") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
-                            ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica")) if reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
+                            
+                            # 🎯 TEMA (Editável) e OBJETIVO (Travado)
+                            c_t_obj1, c_t_obj2 = st.columns(2)
+                            with c_t_obj1:
+                                tema_atv_atual = str(reg_at_alvo.get("Tema da Atividade", "Outros temas")).strip()
+                                idx_tema_atv = LISTA_TEMAS.index(tema_atv_atual) if tema_atv_atual in LISTA_TEMAS else 0
+                                ed_tema_at = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, index=idx_tema_atv, key=f"t1_at_tema_{id_at_ref}")
+                            with c_t_obj2:
+                                obj_atv_atual = str(reg_at_alvo.get("Objetivo da Atividade", "Prevenção e Gestão de Riscos")).strip()
+                                st.text_input("Objetivo Estratégico (Herdado da Ação):", value=obj_atv_atual, disabled=True, key=f"t1_at_obj_dis_{id_at_ref}")
+                                ed_obj_at = obj_atv_atual
+
+                            # 🛠️ TIPO E PERICULOSIDADE
+                            c_tip_per1, c_tip_per2 = st.columns(2)
+                            with c_tip_per1:
+                                ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo.get("Tipo de Atividade", "Operação")) if reg_at_alvo.get("Tipo de Atividade", "Operação") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
+                            with c_tip_per2:
+                                perigo_atual = str(reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica")).strip()
+                                idx_perigo_at = LISTA_PERIGOS.index(perigo_atual) if perigo_atual in LISTA_PERIGOS else 0
+                                ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=idx_perigo_at, key=f"t1_at_perigo_{id_at_ref}")
 
                         with aba4_at:
                             val_dti_at = converter_para_data_segura(reg_at_alvo.get("Data de Início"))
@@ -4818,8 +4859,7 @@ elif modo == "📊 Visualizar Base":
                                 payload_at = payload_gerador(
                                     val_ano_at, val_num_acao_at, val_nome_acao_at, val_indicador_at, "Atividade",
                                     ed_nome_atv, ed_andamento_at, ed_res_ind_at, ed_doc_at, ed_uf_acao_val,
-                                    importancia_at, str(reg_at_alvo.get("Tema da Atividade", "Outros temas")), 
-                                    str(reg_at_alvo.get("Objetivo da Atividade", "Prevenção")), ed_tipo_at, ed_perigo_at, ed_servidor_at,
+                                    importancia_at, ed_tema_at, ed_obj_at, ed_tipo_at, ed_perigo_at, ed_servidor_at,
                                     ed_uf_srv_at, ed_lot_at, ed_eq_at, ed_pcdp_at, "Brasil", ed_uf_oc_at,
                                     ed_est_loc_at, ed_mun_at, ed_dt_i_at, ed_dt_f_at, ed_dias_pl_at, ed_dias_ex_at,
                                     ed_orig_at, ed_rp_d_at, ed_rp_p_at, ed_rp_o_at, ed_re_d_at,
@@ -4845,7 +4885,7 @@ elif modo == "📊 Visualizar Base":
                         edicoes_lote = {}
                         l_aba1, l_aba2, l_aba3, l_aba4, l_aba5 = st.tabs([
                             "1. Identificação & Agrupador", 
-                            "2. Recursos Humanos & Liderança", 
+                            "2. Recursos Humanos, Liderança & Local", 
                             "3. Detalhes & Indicadores", 
                             "4. Cronograma & Custos", 
                             "5. Observações"
@@ -4926,11 +4966,47 @@ elif modo == "📊 Visualizar Base":
                                     edicoes_lote["Coordenador_Operacao"] = "Apoio de Campo"
                                     edicoes_lote["Resultado_Indicador"] = 0.0
 
+                            # 🚀 LOTE: LOCAL DE OCORRÊNCIA E MUNICÍPIO POLO
+                            chk_alt_mun_lt = st.checkbox("Alterar Local de Ocorrência (UF e Município)?", key="chk_lt_mun_at")
+                            if chk_alt_mun_lt:
+                                c_lt_m1, c_lt_m2 = st.columns(2)
+                                with c_lt_m1:
+                                    # Identifica a UF da primeira linha selecionada como sugestão inicial
+                                    ufs_sel = df_at_sel["UF Onde Ocorreu/Ocorrerá a Ação"].dropna().unique().tolist()
+                                    uf_ini = ufs_sel[0] if ufs_sel and ufs_sel[0] in LISTA_UFS_COMPLETA else "SP"
+                                    nova_uf_oc_lt = st.selectbox("UF de Ocorrência:", LISTA_UFS_COMPLETA, index=LISTA_UFS_COMPLETA.index(uf_ini), key="sel_lt_uf_oc_at")
+                                
+                                with c_lt_m2:
+                                    # Carrega as cidades da UF selecionada via API do IBGE
+                                    muns_ibge_lote = obter_municipios_ibge(nova_uf_oc_lt) or ["Superintendência Sede"]
+                                    novo_mun_lt = st.selectbox("Novo Município Polo:", muns_ibge_lote, key="sel_lt_mun_at")
+    
+                                # Grava em todas as chaves blindadas
+                                edicoes_lote["UF Onde Ocorreu/Ocorrerá a Ação"] = nova_uf_oc_lt
+                                edicoes_lote["Estado_Local_Acao"] = nova_uf_oc_lt
+                                edicoes_lote["Municipio_Ocorrencia"] = novo_mun_lt
+                                edicoes_lote["Municipio Onde Ocorreu/Ocorrerá a Ação"] = novo_mun_lt
+                                edicoes_lote["Município Onde Ocorreu/Ocorrerá a Ação"] = novo_mun_lt
+
                         with l_aba3:
                             if st.checkbox("Alterar Número SEI do Documento Probatório?", key="chk_doc_lt"):
                                 edicoes_lote["Doc_Probatorio_Exec"] = st.text_input("Novo SEI:", key="in_doc_lt").strip()
 
+                            # 🚀 LOTE: TEMA DA ATIVIDADE
+                            chk_alt_tema_lt = st.checkbox("Alterar Tema / Modal Operacional?", key="chk_lt_tema_at")
+                            if chk_alt_tema_lt:
+                                novo_tema_lt = st.selectbox("Novo Tema / Modal:", LISTA_TEMAS, key="sel_lt_tema_at")
+                                edicoes_lote["Tema da Atividade"] = novo_tema_lt
+    
+                            # 🚀 LOTE: PERICULOSIDADE / INSALUBRIDADE
+                            chk_alt_perigo_lt = st.checkbox("Alterar Periculosidade / Insalubridade?", key="chk_lt_perigo_at")
+                            if chk_alt_perigo_lt:
+                                novo_perigo_lt = st.selectbox("Nova Periculosidade/Insalubridade:", LISTA_PERIGOS, key="sel_lt_perigo_at")
+                                edicoes_lote["Periculosidade/Insalubridade"] = novo_perigo_lt
+                                edicoes_lote["Periculosidade_Insalubridade"] = novo_perigo_lt
+
                         with l_aba4:
+                            st.markdown("##### 🗓️ 1. Cronograma & Esforço (Datas e Dias)")
                             col_ld1, col_ld2 = st.columns(2)
                             with col_ld1:
                                 if st.checkbox("Alterar Data de Início?", key="chk_dti_lt"):
@@ -4942,6 +5018,42 @@ elif modo == "📊 Visualizar Base":
                                     edicoes_lote["Dias_Gastos_Plan"] = st.number_input("Novos Dias Planejados:", min_value=0.0, step=0.5, format="%.1f", key="in_dpl_lt")
                                 if st.checkbox("Alterar Dias Executados?", key="chk_dex_lt"):
                                     edicoes_lote["Dias_Gastos_Exec"] = st.number_input("Novos Dias Executados:", min_value=0.0, step=0.5, format="%.1f", key="in_dex_lt")
+
+                            st.markdown("---")
+                            st.markdown("##### 💰 2. Recursos & Custos Financeiros")
+                            
+                            # 2.1 Origem do Recurso
+                            if st.checkbox("Alterar Origem do Recurso?", key="chk_orig_lt"):
+                                lista_origens_disp = ["SP", "DIPRO", "Outros"]
+                                if "LISTA_ORIGENS" in globals():
+                                    lista_origens_disp = globals()["LISTA_ORIGENS"]
+                                edicoes_lote["Origem do Recurso"] = st.selectbox("Nova Origem do Recurso:", lista_origens_disp, key="sel_orig_lt")
+
+                            # 2.2 Custos Planejados (Previsão)
+                            st.markdown("**📋 Custos Planejados (Previsão Orçamentária)**")
+                            cp1, cp2, cp3 = st.columns(3)
+                            with cp1:
+                                if st.checkbox("Alterar Diárias Plan.?", key="chk_rpd_lt"):
+                                    edicoes_lote["Rec_Plan_Diarias"] = st.number_input("Diárias Plan. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_rpd_lt")
+                            with cp2:
+                                if st.checkbox("Alterar Passagens Plan.?", key="chk_rpp_lt"):
+                                    edicoes_lote["Rec_Plan_Passagens"] = st.number_input("Passagens Plan. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_rpp_lt")
+                            with cp3:
+                                if st.checkbox("Alterar Outras Desp. Plan.?", key="chk_rpo_lt"):
+                                    edicoes_lote["Rec_Plan_Outras_Despesas"] = st.number_input("Outras Desp. Plan. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_rpo_lt")
+
+                            # 2.3 Custos Executados (Realizados)
+                            st.markdown("**💳 Custos Executados (Prestação de Contas)**")
+                            ce1, ce2, ce3 = st.columns(3)
+                            with ce1:
+                                if st.checkbox("Alterar Diárias Exec.?", key="chk_red_lt"):
+                                    edicoes_lote["Rec_Exec_Diarias"] = st.number_input("Diárias Exec. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_red_lt")
+                            with ce2:
+                                if st.checkbox("Alterar Passagens Exec.?", key="chk_rep_lt"):
+                                    edicoes_lote["Rec_Exec_Passagens"] = st.number_input("Passagens Exec. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_rep_lt")
+                            with ce3:
+                                if st.checkbox("Alterar Outras Desp. Exec.?", key="chk_reo_lt"):
+                                    edicoes_lote["Rec_Exec_Outras_Despesas"] = st.number_input("Outras Desp. Exec. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_reo_lt")
 
                         with l_aba5:
                             if st.checkbox("Alterar Observações?", key="chk_obs_lt"):
@@ -4967,18 +5079,29 @@ elif modo == "📊 Visualizar Base":
                                 with st.spinner("⏳ Processando alterações em lote no SharePoint..."):
                                     payloads_lote = []
                                     for _, row in df_at_sel.iterrows():
-                                        # 1. Mescla os dados atuais da linha com as alterações escolhidas no lote
+                                        # 1. Mescla a linha atual com os campos marcados no painel de lote
                                         r_dict = row.to_dict()
                                         r_dict.update(edicoes_lote)
                                         
-                                        # 2. Se virou Apoio de Campo, o indicador obrigatoriamente vira 0.0
+                                        # 2. Regra de Apoio de Campo
                                         func_final_linha = r_dict.get("Coordenador_Operacao", "Apoio de Campo")
-                                        if func_final_linha == "Apoio de Campo":
-                                            res_ind_linha = 0.0
-                                        else:
-                                            res_ind_linha = r_dict.get("Resultado_Indicador", 0.0)
+                                        res_ind_linha = 0.0 if func_final_linha == "Apoio de Campo" else r_dict.get("Resultado_Indicador", 0.0)
 
-                                        # 🚀 3. Monta o payload blindado via payload_gerador (trata datas seriais, nulls e números)
+                                        # 3. Chaves sanitizadas de Município, Perigo e Tema
+                                        mun_final = r_dict.get("Municipio_Ocorrencia") or r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")
+                                        perigo_final = r_dict.get("Periculosidade_Insalubridade") or r_dict.get("Periculosidade/Insalubridade", "Não se Aplica")
+                                        tema_final = r_dict.get("Tema da Atividade", "Outros temas")
+
+                                        # 4. Custos individuais em float
+                                        rec_p_d = float(pd.to_numeric(r_dict.get("Rec_Plan_Diarias", 0.0), errors='coerce') or 0.0)
+                                        rec_p_p = float(pd.to_numeric(r_dict.get("Rec_Plan_Passagens", 0.0), errors='coerce') or 0.0)
+                                        rec_p_o = float(pd.to_numeric(r_dict.get("Rec_Plan_Outras_Despesas", 0.0), errors='coerce') or 0.0)
+                                        
+                                        rec_e_d = float(pd.to_numeric(r_dict.get("Rec_Exec_Diarias", 0.0), errors='coerce') or 0.0)
+                                        rec_e_p = float(pd.to_numeric(r_dict.get("Rec_Exec_Passagens", 0.0), errors='coerce') or 0.0)
+                                        rec_e_o = float(pd.to_numeric(r_dict.get("Rec_Exec_Outras_Despesas", 0.0), errors='coerce') or 0.0)
+
+                                        # 🚀 5. Geração do payload (as somas totais são calculadas internamente)
                                         payload_at = payload_gerador(
                                             val_ano=r_dict.get("Ano da Ação"),
                                             val_num_acao=r_dict.get("Número da Ação PNAPA"),
@@ -4991,30 +5114,30 @@ elif modo == "📊 Visualizar Base":
                                             doc_probatorio=r_dict.get("Doc_Probatorio_Exec"),
                                             uf_acao=r_dict.get("UF_Acao_PNAPA"),
                                             importancia=r_dict.get("Importância da Atividade", "Finalística"),
-                                            tema=r_dict.get("Tema da Atividade", "Outros temas"),
+                                            tema=tema_final,
                                             objetivo=r_dict.get("Objetivo da Atividade", "Prevenção"),
                                             tipo_atividade=r_dict.get("Tipo de Atividade", "Operação"),
-                                            periculosidade=r_dict.get("Periculosidade/Insalubridade", "Não se Aplica"),
+                                            periculosidade=perigo_final,
                                             servidor=r_dict.get("Servidor"),
                                             num_pcdp=r_dict.get("Número da PCDP"),
                                             pais=r_dict.get("País", "Brasil"),
                                             uf_ocorrencia=r_dict.get("UF Onde Ocorreu/Ocorrerá a Ação"),
                                             estado_local=r_dict.get("Estado_Local_Acao"),
-                                            municipio=r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação"),
+                                            municipio=mun_final,
                                             dt_inicio=r_dict.get("Data de Início"),
                                             dt_termino=r_dict.get("Data de Término"),
                                             dias_plan=r_dict.get("Dias_Gastos_Plan", 0.0),
                                             dias_exec=r_dict.get("Dias_Gastos_Exec", 0.0),
                                             origem_recurso=r_dict.get("Origem do Recurso", "SP"),
-                                            rec_p_diarias=r_dict.get("Rec_Plan_Diarias", 0.0),
-                                            rec_p_passagens=r_dict.get("Rec_Plan_Passagens", 0.0),
-                                            rec_p_outras=r_dict.get("Rec_Plan_Outras_Despesas", 0.0),
-                                            rec_e_diarias=r_dict.get("Rec_Exec_Diarias", 0.0),
-                                            rec_e_passagens=r_dict.get("Rec_Exec_Passagens", 0.0),
-                                            rec_e_outras=r_dict.get("Rec_Exec_Outras_Despesas", 0.0),
+                                            rec_p_diarias=rec_p_d,
+                                            rec_p_passagens=rec_p_p,
+                                            rec_p_outras=rec_p_o,
+                                            rec_e_diarias=rec_e_d,
+                                            rec_e_passagens=rec_e_p,
+                                            rec_e_outras=rec_e_o,
                                             obs=r_dict.get("Observações", ""),
                                             justificativa=r_dict.get("Justificativa_Acao_PNAPA", ""),
-                                            id_atual=normalizar_id_t1(row.get("Id")), # 👈 ID limpo, sem .0
+                                            id_atual=normalizar_id_t1(row.get("Id")),
                                             modo="📝 Editar Linha Existente",
                                             df_atual=df_atual,
                                             papel_institucional=r_dict.get("Papel_Institucional", "Coordenação"),
@@ -5029,8 +5152,6 @@ elif modo == "📊 Visualizar Base":
                                         
                                     executar_envio_sharepoint(payloads_lote)
                                     st.session_state["selecoes_atividades"] = {}
-                                    
-                                    # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
                                     st.cache_data.clear()
                                     if "df" in st.session_state: del st.session_state.df
                                     liberar_trava(chave_trava)
@@ -5366,22 +5487,30 @@ elif modo == "➕ Inserir Nova Linha":
                     p_inst = str(r_pl.get("Papel_Institucional", "Coordenação")).strip()
                     uf_c = obter_uf_coordenadora_segura(r_pl)
                     tema_pl = str(r_pl.get("Tema da Atividade", "")).strip()
+                    
+                    # 👈 Adicione esta linha que estava faltando:
+                    obj_pl = str(r_pl.get("Objetivo da Atividade", objetivo_herdado)).strip()
+                    
                     if p_inst == "Coordenação":
                         lbl = f"👑 Coordenação Própria ({uf_filtro_pna}) — Modal: {tema_pl}"
                     else:
                         lbl = f"🤝 Apoio à Operação Coordenada por: {uf_c} — Modal: {tema_pl}"
                     opcoes_gov.append(lbl)
-                    mapa_gov[lbl] = (p_inst, uf_c)
+                    
+                    # Agora a variável obj_pl existe e roda perfeitamente:
+                    mapa_gov[lbl] = (p_inst, uf_c, tema_pl, obj_pl)
             
             opcoes_gov.append("⚙️ Definir Manualmente...")
             sel_gov = st.selectbox("Vincular a qual Planejamento da UF?:", opcoes_gov, key=f"sel_gov_atv_{val_num_acao}")
             
             if sel_gov != "⚙️ Definir Manualmente...":
-                papel_inst, uf_coordenadora_val = mapa_gov[sel_gov]
+                papel_inst, uf_coordenadora_val, tema_sugerido_acao, objetivo_acao_fixo = mapa_gov[sel_gov]
                 c_gv1, c_gv2 = st.columns(2)
                 with c_gv1: st.text_input("Papel Institucional:", value=papel_inst, disabled=True)
                 with c_gv2: st.text_input("UF Coordenadora da Missão:", value=uf_coordenadora_val, disabled=True)
             else:
+                tema_sugerido_acao = tema_herdado
+                objetivo_acao_fixo = objetivo_herdado
                 c_gv1, c_gv2 = st.columns(2)
                 with c_gv1:
                     papel_inst = st.selectbox("Papel na Atividade:", LISTA_PAPEIS_INSTITUCIONAIS, key="man_papel_atv")
@@ -5450,10 +5579,21 @@ elif modo == "➕ Inserir Nova Linha":
                     codigo_atividade = str(dados_atv_origem["Codigo_Atividade"]).strip().upper()
                     st.success(f"✅ Integrando à atividade **{codigo_atividade}**. Dados operacionais preenchidos automaticamente.")
 
+            # 🚀 1. Função de extração inteligente (testa com/sem acento e underline)
             def extrair_padrao_atv(col, fallback=""):
-                if dados_atv_origem is not None and col in dados_atv_origem:
-                    val = dados_atv_origem[col]
-                    return val if pd.notna(val) and str(val).strip() not in ["None", "nan", "NaT"] else fallback
+                if dados_atv_origem is not None:
+                    variacoes = [
+                        col,
+                        col.replace("Municipio", "Município"),
+                        col.replace("Município", "Municipio"),
+                        col.replace("/", "_"),
+                        col.replace("_", "/")
+                    ]
+                    for c in variacoes:
+                        if c in dados_atv_origem:
+                            val = dados_atv_origem[c]
+                            if pd.notna(val) and str(val).strip() not in ["None", "nan", "NaT", ""]:
+                                return str(val).strip()
                 return fallback
 
             nome_atv_def = str(extrair_padrao_atv("Nome da Atividade", "")).strip()
@@ -5549,10 +5689,23 @@ elif modo == "➕ Inserir Nova Linha":
             estado_local = MAPEAMENTO_ESTADOS_COMPLETO.get(uf_ocorrencia, "")
             st.text_input("Estado de Realização (Automático):", value=estado_local, disabled=True)
             
+            # 🚀 2. Garante que o município herdado seja preservado mesmo se não vier da API do IBGE
             lista_municipios_uf = obter_municipios_ibge(uf_ocorrencia)
             mun_def = str(extrair_padrao_atv("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
-            idx_mun = lista_municipios_uf.index(mun_def) if mun_def in lista_municipios_uf else 0
-            municipio = st.selectbox("Município Polo / Cidade de Operação:", lista_municipios_uf if lista_municipios_uf else ["Superintendência Sede"], index=idx_mun, key=f"atv_sel_municipio_{codigo_atividade}")
+
+            opcoes_mun = list(lista_municipios_uf) if lista_municipios_uf else ["Superintendência Sede"]
+            
+            # Se mun_def tem valor e não está na lista do IBGE (ex: "Superintendência Sede"), insere na lista:
+            if mun_def and mun_def not in opcoes_mun:
+                opcoes_mun.insert(0, mun_def)
+
+            idx_mun = opcoes_mun.index(mun_def) if mun_def in opcoes_mun else 0
+            municipio = st.selectbox(
+                "Município Polo / Cidade de Operação:", 
+                opcoes_mun, 
+                index=idx_mun, 
+                key=f"atv_sel_municipio_{codigo_atividade}"
+            )
 
         with aba3:
             st.text_input("Indicador Oficial (Herdado)", value=val_indicador, disabled=True, key=f"atv_ind_dis_{val_num_acao}_{codigo_atividade}")
@@ -5590,11 +5743,15 @@ elif modo == "➕ Inserir Nova Linha":
             
             c_atv_t1, c_atv_t2 = st.columns(2)
             with c_atv_t1:
-                st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado, disabled=True, key=f"atv_txt_tema_dis_{val_num_acao}_{codigo_atividade}")
-                tema = tema_herdado
+                # 🎯 TEMA: Pré-carrega o tema da ação, mas permite escolher outro (Fauna, Porto, etc.)
+                tema_def = str(extrair_padrao_atv("Tema da Atividade", tema_sugerido_acao)).strip()
+                idx_t_atv = LISTA_TEMAS.index(tema_def) if tema_def in LISTA_TEMAS else 0
+                tema = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, index=idx_t_atv, key=f"atv_sel_tema_{codigo_atividade}")
+
             with c_atv_t2:
-                st.text_input("Objetivo Estratégico (Herdado):", value=objetivo_herdado, disabled=True, key=f"atv_txt_obj_dis_{val_num_acao}_{codigo_atividade}")
-                objetivo = objetivo_herdado
+                # 🔒 OBJETIVO: Herdado e travado
+                objetivo = str(extrair_padrao_atv("Objetivo da Atividade", objetivo_acao_fixo)).strip()
+                st.text_input("Objetivo Estratégico (Herdado da Ação):", value=objetivo, disabled=True, key=f"atv_txt_obj_dis_{val_num_acao}_{codigo_atividade}")
 
             tipo_atv_def = str(extrair_padrao_atv("Tipo de Atividade", "Operação")).strip()
             idx_tipo_atv = LISTA_TIPOS_ATIVIDADE.index(tipo_atv_def) if tipo_atv_def in LISTA_TIPOS_ATIVIDADE else 0
@@ -5796,7 +5953,16 @@ elif modo == "➕ Inserir Nova Linha":
                 else:
                     bloqueio_lote = False
                     dias_lote_check = dias_plan if espelhar_crono else 0.0
-
+            
+                    # 🚀 Resgate seguro da periculosidade para o lote (alinhado corretamente):
+                    perigo_lote = "Não se Aplica"
+                    if f"atv_sel_perigo_{codigo_atividade}" in st.session_state:
+                        perigo_lote = str(st.session_state[f"atv_sel_perigo_{codigo_atividade}"]).strip()
+                    elif "periculosidade" in locals() and periculosidade:
+                        perigo_lote = str(periculosidade).strip()
+                    elif dados_atv_origem is not None:
+                        perigo_lote = str(extrair_padrao_atv("Periculosidade/Insalubridade", "Não se Aplica")).strip()
+                    
                     for srv_lote_chk in servidores_finais:
                         func_chk = funcao_campo if srv_lote_chk == servidor else "Apoio de Campo"
                         res_chk_lt = calcular_termometro_carga(
@@ -5812,7 +5978,7 @@ elif modo == "➕ Inserir Nova Linha":
                         if res_chk_lt["status_geral"] == "BLOQUEADO":
                             st.error(f"⛔ **Lote Impedido (2027+):** O servidor **{srv_lote_chk}** excederá os limites de capacidade.")
                             bloqueio_lote = True
-
+            
                     if bloqueio_lote:
                         liberar_trava(chave_trava)  # 👈 Libera se o termômetro barrar o envio
                     else:
@@ -5829,7 +5995,7 @@ elif modo == "➕ Inserir Nova Linha":
                                 except: p_res_ind = 0.0
                             else:
                                 p_res_ind = 0.0
-
+            
                             p_doc = doc_probatorio if espelhar_detalhes else ""
                             p_pais = pais if espelhar_local else "Brasil"
                             p_uf_oc = uf_ocorrencia if espelhar_local else ""
@@ -5862,7 +6028,7 @@ elif modo == "➕ Inserir Nova Linha":
                                 "Nome da Atividade": p_nome_atv, 
                                 "Andamento": p_andamento,
                                 "Indicador": str(val_indicador), 
-                                "Meta_Indicador": None,               # 👈 Blindado: None vira null no JSON
+                                "Meta_Indicador": None,                # 👈 Blindado: None vira null no JSON
                                 "Resultado_Indicador": p_res_ind,      # 👈 Blindado: float
                                 "Doc_Probatorio_Exec": p_doc, 
                                 "UF_Acao_PNAPA": uf_acao, 
@@ -5870,13 +6036,18 @@ elif modo == "➕ Inserir Nova Linha":
                                 "Tema da Atividade": tema, 
                                 "Objetivo da Atividade": objetivo, 
                                 "Tipo de Atividade": tipo_atividade,
-                                "Periculosidade/Insalubridade": periculosidade, 
+                                # 🛡️ Blindagem de Periculosidade para o Power Automate (com e sem barra):
+                                "Periculosidade_Insalubridade": perigo_lote,
+                                "Periculosidade/Insalubridade": perigo_lote,
                                 "Servidor": serv_lote, 
                                 "Número da PCDP": num_pcdp,
                                 "País": p_pais, 
                                 "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
                                 "Estado_Local_Acao": p_est,
-                                "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun, 
+                                # 🛡️ Blindagem de Município (sem barra para o Power Automate):
+                                "Municipio_Ocorrencia": p_mun,
+                                "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun,
+                                "Município Onde Ocorreu/Ocorrerá a Ação": p_mun,
                                 "Data de Início": converter_data_para_serial(p_ini), 
                                 "Data de Término": converter_data_para_serial(p_fim),
                                 "Dias_Gastos_Plan": p_d_pl, 
