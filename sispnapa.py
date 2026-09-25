@@ -5944,139 +5944,139 @@ elif modo == "➕ Inserir Nova Linha":
             btn_disparar_lote = st.button("🔥 Disparar Carga em Lote para o SharePoint", type="primary", use_container_width=True, key="btn_disparar_lote_final")
 
             if btn_disparar_lote:
-    chave_trava = f"ins_lote_{codigo_atividade}_{len(servidores_finais)}"
-    verificar_duplo_clique(chave_trava)
-    
-    if not servidores_finais:
-        st.error("⚠️ Selecione pelo menos um servidor na lista acima.")
-        liberar_trava(chave_trava)  # 👈 Libera caso não tenha selecionado ninguém
-    else:
-        bloqueio_lote = False
-        dias_lote_check = dias_plan if espelhar_crono else 0.0
-
-        # 🚀 Resgate seguro da periculosidade para o lote (alinhado corretamente):
-        perigo_lote = "Não se Aplica"
-        if f"atv_sel_perigo_{codigo_atividade}" in st.session_state:
-            perigo_lote = str(st.session_state[f"atv_sel_perigo_{codigo_atividade}"]).strip()
-        elif "periculosidade" in locals() and periculosidade:
-            perigo_lote = str(periculosidade).strip()
-        elif dados_atv_origem is not None:
-            perigo_lote = str(extrair_padrao_atv("Periculosidade/Insalubridade", "Não se Aplica")).strip()
-        
-        for srv_lote_chk in servidores_finais:
-            func_chk = funcao_campo if srv_lote_chk == servidor else "Apoio de Campo"
-            res_chk_lt = calcular_termometro_carga(
-                df=df_atual,
-                df_srv_base=df_servidores,
-                nome_servidor=srv_lote_chk,
-                ano_alvo=val_ano if val_ano else 2026,
-                dias_novos=float(dias_lote_check),
-                importancia_nova=importancia,
-                funcao_campo=func_chk,
-                nivel_registro="Atividade"
-            )
-            if res_chk_lt["status_geral"] == "BLOQUEADO":
-                st.error(f"⛔ **Lote Impedido (2027+):** O servidor **{srv_lote_chk}** excederá os limites de capacidade.")
-                bloqueio_lote = True
-
-        if bloqueio_lote:
-            liberar_trava(chave_trava)  # 👈 Libera se o termômetro barrar o envio
-        else:
-            payloads_lote = []
-            for idx, serv_lote in enumerate(servidores_finais):
-                funcao_lote = funcao_campo if serv_lote == servidor else "Apoio de Campo"
+                chave_trava = f"ins_lote_{codigo_atividade}_{len(servidores_finais)}"
+                verificar_duplo_clique(chave_trava)
                 
-                p_nome_atv = nome_atividade if espelhar_detalhes else ""
-                p_andamento = andamento if espelhar_detalhes else "Não Iniciada"
-                
-                # 🛡️ Resultado do Indicador: sempre float para o SharePoint
-                if espelhar_detalhes and funcao_lote == "Coordenador de Campo" and papel_inst == "Coordenação":
-                    try: p_res_ind = float(str(resultado_indicador).strip().replace(",", ".")) if str(resultado_indicador).strip() else 0.0
-                    except: p_res_ind = 0.0
+                if not servidores_finais:
+                    st.error("⚠️ Selecione pelo menos um servidor na lista acima.")
+                    liberar_trava(chave_trava)  # 👈 Libera caso não tenha selecionado ninguém
                 else:
-                    p_res_ind = 0.0
-
-                p_doc = doc_probatorio if espelhar_detalhes else ""
-                p_pais = pais if espelhar_local else "Brasil"
-                p_uf_oc = uf_ocorrencia if espelhar_local else ""
-                p_est = estado_local if espelhar_local else ""
-                p_mun = municipio if espelhar_local else ""
-                p_ini = dt_inicio if espelhar_crono else ""
-                p_fim = dt_termino if espelhar_crono else ""
-                p_d_pl = dias_plan if espelhar_crono else 0.0
-                p_d_ex = dias_exec if espelhar_crono else 0.0
-                p_origem = origem_recurso if espelhar_custos else ""
-                p_rp_d = rec_p_diarias if espelhar_custos else 0.0
-                p_rp_p = rec_p_passagens if espelhar_custos else 0.0
-                p_rp_o = rec_p_outras if espelhar_custos else 0.0
-                p_re_d = rec_e_diarias if espelhar_custos else 0.0
-                p_re_p = rec_e_passagens if espelhar_custos else 0.0
-                p_re_o = rec_e_outras if espelhar_custos else 0.0
-                p_obs = obs if espelhar_just else ""
-                
-                payload_linha = {
-                    "Acao": "Inserir", 
-                    "Id": "", 
-                    "Codigo_Atividade": str(codigo_atividade),
-                    "Ano da Ação": int(val_ano) if val_ano else 2026,
-                    "Número da Ação PNAPA": str(val_num_acao), 
-                    "Nome da Ação PNAPA": str(val_nome_acao), 
-                    "Nível": nivel_selecionado, 
-                    "Papel_Institucional": papel_inst,
-                    "UF_Coordenadora": uf_coordenadora_val,
-                    "Coordenador_Operacao": funcao_lote,
-                    "Nome da Atividade": p_nome_atv, 
-                    "Andamento": p_andamento,
-                    "Indicador": str(val_indicador), 
-                    "Meta_Indicador": None,                # 👈 Blindado: None vira null no JSON
-                    "Resultado_Indicador": p_res_ind,      # 👈 Blindado: float
-                    "Doc_Probatorio_Exec": p_doc, 
-                    "UF_Acao_PNAPA": uf_acao, 
-                    "Importância da Atividade": importancia,
-                    "Tema da Atividade": tema, 
-                    "Objetivo da Atividade": objetivo, 
-                    "Tipo de Atividade": tipo_atividade,
-                    # 🛡️ Blindagem de Periculosidade para o Power Automate (com e sem barra):
-                    "Periculosidade_Insalubridade": perigo_lote,
-                    "Periculosidade/Insalubridade": perigo_lote,
-                    "Servidor": serv_lote, 
-                    "Número da PCDP": num_pcdp,
-                    "País": p_pais, 
-                    "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
-                    "Estado_Local_Acao": p_est,
-                    # 🛡️ Blindagem de Município (sem barra para o Power Automate):
-                    "Municipio_Ocorrencia": p_mun,
-                    "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun,
-                    "Município Onde Ocorreu/Ocorrerá a Ação": p_mun,
-                    "Data de Início": converter_data_para_serial(p_ini), 
-                    "Data de Término": converter_data_para_serial(p_fim),
-                    "Dias_Gastos_Plan": p_d_pl, 
-                    "Dias_Gastos_Exec": p_d_ex, 
-                    "Origem do Recurso": p_origem,
-                    "Rec_Plan_Diarias": p_rp_d, 
-                    "Rec_Plan_Passagens": p_rp_p, 
-                    "Rec_Plan_Outras_Despesas": p_rp_o,
-                    "Rec_Plan_Total": (p_rp_d + p_rp_p + p_rp_o), 
-                    "Rec_Exec_Diarias": p_re_d, 
-                    "Rec_Exec_Passagens": p_re_p, 
-                    "Rec_Exec_Outras_Despesas": p_re_o, 
-                    "Rec_Exec_Total": (p_re_d + p_re_p + p_re_o),
-                    "Observações": p_obs, 
-                    "Justificativa_Acao_PNAPA": "",
-                    "Avaliacao_Qualidade": None,          # 👈 Blindado: None vira null
-                    "Avaliacao_Feedback": None            # 👈 Blindado: None vira null
-                }
-                payloads_lote.append(payload_linha)
+                    bloqueio_lote = False
+                    dias_lote_check = dias_plan if espelhar_crono else 0.0
             
-            with st.spinner("⏳ Processando carga em lote no SharePoint..."):
-                executar_envio_sharepoint(payloads_lote)
-                
-                # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
-                st.cache_data.clear()
-                if "df" in st.session_state: del st.session_state.df
-                liberar_trava(chave_trava)
-                time.sleep(1)
-                st.rerun()
+                    # 🚀 Resgate seguro da periculosidade para o lote (alinhado corretamente):
+                    perigo_lote = "Não se Aplica"
+                    if f"atv_sel_perigo_{codigo_atividade}" in st.session_state:
+                        perigo_lote = str(st.session_state[f"atv_sel_perigo_{codigo_atividade}"]).strip()
+                    elif "periculosidade" in locals() and periculosidade:
+                        perigo_lote = str(periculosidade).strip()
+                    elif dados_atv_origem is not None:
+                        perigo_lote = str(extrair_padrao_atv("Periculosidade/Insalubridade", "Não se Aplica")).strip()
+                    
+                    for srv_lote_chk in servidores_finais:
+                        func_chk = funcao_campo if srv_lote_chk == servidor else "Apoio de Campo"
+                        res_chk_lt = calcular_termometro_carga(
+                            df=df_atual,
+                            df_srv_base=df_servidores,
+                            nome_servidor=srv_lote_chk,
+                            ano_alvo=val_ano if val_ano else 2026,
+                            dias_novos=float(dias_lote_check),
+                            importancia_nova=importancia,
+                            funcao_campo=func_chk,
+                            nivel_registro="Atividade"
+                        )
+                        if res_chk_lt["status_geral"] == "BLOQUEADO":
+                            st.error(f"⛔ **Lote Impedido (2027+):** O servidor **{srv_lote_chk}** excederá os limites de capacidade.")
+                            bloqueio_lote = True
+            
+                    if bloqueio_lote:
+                        liberar_trava(chave_trava)  # 👈 Libera se o termômetro barrar o envio
+                    else:
+                        payloads_lote = []
+                        for idx, serv_lote in enumerate(servidores_finais):
+                            funcao_lote = funcao_campo if serv_lote == servidor else "Apoio de Campo"
+                            
+                            p_nome_atv = nome_atividade if espelhar_detalhes else ""
+                            p_andamento = andamento if espelhar_detalhes else "Não Iniciada"
+                            
+                            # 🛡️ Resultado do Indicador: sempre float para o SharePoint
+                            if espelhar_detalhes and funcao_lote == "Coordenador de Campo" and papel_inst == "Coordenação":
+                                try: p_res_ind = float(str(resultado_indicador).strip().replace(",", ".")) if str(resultado_indicador).strip() else 0.0
+                                except: p_res_ind = 0.0
+                            else:
+                                p_res_ind = 0.0
+            
+                            p_doc = doc_probatorio if espelhar_detalhes else ""
+                            p_pais = pais if espelhar_local else "Brasil"
+                            p_uf_oc = uf_ocorrencia if espelhar_local else ""
+                            p_est = estado_local if espelhar_local else ""
+                            p_mun = municipio if espelhar_local else ""
+                            p_ini = dt_inicio if espelhar_crono else ""
+                            p_fim = dt_termino if espelhar_crono else ""
+                            p_d_pl = dias_plan if espelhar_crono else 0.0
+                            p_d_ex = dias_exec if espelhar_crono else 0.0
+                            p_origem = origem_recurso if espelhar_custos else ""
+                            p_rp_d = rec_p_diarias if espelhar_custos else 0.0
+                            p_rp_p = rec_p_passagens if espelhar_custos else 0.0
+                            p_rp_o = rec_p_outras if espelhar_custos else 0.0
+                            p_re_d = rec_e_diarias if espelhar_custos else 0.0
+                            p_re_p = rec_e_passagens if espelhar_custos else 0.0
+                            p_re_o = rec_e_outras if espelhar_custos else 0.0
+                            p_obs = obs if espelhar_just else ""
+                            
+                            payload_linha = {
+                                "Acao": "Inserir", 
+                                "Id": "", 
+                                "Codigo_Atividade": str(codigo_atividade),
+                                "Ano da Ação": int(val_ano) if val_ano else 2026,
+                                "Número da Ação PNAPA": str(val_num_acao), 
+                                "Nome da Ação PNAPA": str(val_nome_acao), 
+                                "Nível": nivel_selecionado, 
+                                "Papel_Institucional": papel_inst,
+                                "UF_Coordenadora": uf_coordenadora_val,
+                                "Coordenador_Operacao": funcao_lote,
+                                "Nome da Atividade": p_nome_atv, 
+                                "Andamento": p_andamento,
+                                "Indicador": str(val_indicador), 
+                                "Meta_Indicador": None,                # 👈 Blindado: None vira null no JSON
+                                "Resultado_Indicador": p_res_ind,      # 👈 Blindado: float
+                                "Doc_Probatorio_Exec": p_doc, 
+                                "UF_Acao_PNAPA": uf_acao, 
+                                "Importância da Atividade": importancia,
+                                "Tema da Atividade": tema, 
+                                "Objetivo da Atividade": objetivo, 
+                                "Tipo de Atividade": tipo_atividade,
+                                # 🛡️ Blindagem de Periculosidade para o Power Automate (com e sem barra):
+                                "Periculosidade_Insalubridade": perigo_lote,
+                                "Periculosidade/Insalubridade": perigo_lote,
+                                "Servidor": serv_lote, 
+                                "Número da PCDP": num_pcdp,
+                                "País": p_pais, 
+                                "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
+                                "Estado_Local_Acao": p_est,
+                                # 🛡️ Blindagem de Município (sem barra para o Power Automate):
+                                "Municipio_Ocorrencia": p_mun,
+                                "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun,
+                                "Município Onde Ocorreu/Ocorrerá a Ação": p_mun,
+                                "Data de Início": converter_data_para_serial(p_ini), 
+                                "Data de Término": converter_data_para_serial(p_fim),
+                                "Dias_Gastos_Plan": p_d_pl, 
+                                "Dias_Gastos_Exec": p_d_ex, 
+                                "Origem do Recurso": p_origem,
+                                "Rec_Plan_Diarias": p_rp_d, 
+                                "Rec_Plan_Passagens": p_rp_p, 
+                                "Rec_Plan_Outras_Despesas": p_rp_o,
+                                "Rec_Plan_Total": (p_rp_d + p_rp_p + p_rp_o), 
+                                "Rec_Exec_Diarias": p_re_d, 
+                                "Rec_Exec_Passagens": p_re_p, 
+                                "Rec_Exec_Outras_Despesas": p_re_o, 
+                                "Rec_Exec_Total": (p_re_d + p_re_p + p_re_o),
+                                "Observações": p_obs, 
+                                "Justificativa_Acao_PNAPA": "",
+                                "Avaliacao_Qualidade": None,          # 👈 Blindado: None vira null
+                                "Avaliacao_Feedback": None            # 👈 Blindado: None vira null
+                            }
+                            payloads_lote.append(payload_linha)
+                        
+                        with st.spinner("⏳ Processando carga em lote no SharePoint..."):
+                            executar_envio_sharepoint(payloads_lote)
+                            
+                            # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
+                            st.cache_data.clear()
+                            if "df" in st.session_state: del st.session_state.df
+                            liberar_trava(chave_trava)
+                            time.sleep(1)
+                            st.rerun()
 
 # --- TELA 3: GERENCIAR UNIDADES (COM PREENCHIMENTO AUTOMÁTICO E CASCATA) ---
 elif modo == "🏢 Gerenciar Unidades":
