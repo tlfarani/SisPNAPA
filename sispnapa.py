@@ -5063,11 +5063,27 @@ elif modo == "➕ Inserir Nova Linha":
         if not anos_aux_disponiveis:
             anos_aux_disponiveis = [2027, 2026]
             
-        ano_padrao_form = int(pd.to_numeric(registro_selecionado.get("Ano da Ação"), errors='coerce') or anos_aux_disponiveis[0]) if registro_selecionado is not None else anos_aux_disponiveis[0]
-        try: idx_ano_form = anos_aux_disponiveis.index(ano_padrao_form)
-        except ValueError: idx_ano_form = 0
+        # 🚀 Prioriza o ano corrente do sistema como padrão do formulário
+        ano_corrente = date.today().year
+        
+        if registro_selecionado is not None and registro_selecionado.get("Ano da Ação"):
+            ano_padrao_form = int(pd.to_numeric(registro_selecionado.get("Ano da Ação"), errors='coerce') or ano_corrente)
+        elif ano_corrente in anos_aux_disponiveis:
+            ano_padrao_form = ano_corrente
+        else:
+            ano_padrao_form = anos_aux_disponiveis[0]
             
-        ano_vinculo = st.selectbox("Selecione o Ano para filtrar as Ações:", anos_aux_disponiveis, index=idx_ano_form, key="form_pna_vinculo_ano")
+        try: 
+            idx_ano_form = anos_aux_disponiveis.index(ano_padrao_form)
+        except ValueError: 
+            idx_ano_form = 0
+            
+        ano_vinculo = st.selectbox(
+            "Selecione o Ano para filtrar as Ações:", 
+            anos_aux_disponiveis, 
+            index=idx_ano_form, 
+            key="form_pna_vinculo_ano"
+        )
         
         df_pnapas_ano = df_pnapas_op[
             (pd.to_numeric(df_pnapas_op["Ano"], errors='coerce').fillna(0).astype(int) == int(ano_vinculo)) &
