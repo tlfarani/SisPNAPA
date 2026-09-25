@@ -4868,7 +4868,7 @@ elif modo == "📊 Visualizar Base":
                         edicoes_lote = {}
                         l_aba1, l_aba2, l_aba3, l_aba4, l_aba5 = st.tabs([
                             "1. Identificação & Agrupador", 
-                            "2. Recursos Humanos & Liderança", 
+                            "2. Recursos Humanos, Liderança & Local", 
                             "3. Detalhes & Indicadores", 
                             "4. Cronograma & Custos", 
                             "5. Observações"
@@ -4949,9 +4949,44 @@ elif modo == "📊 Visualizar Base":
                                     edicoes_lote["Coordenador_Operacao"] = "Apoio de Campo"
                                     edicoes_lote["Resultado_Indicador"] = 0.0
 
+                            # 🚀 LOTE: LOCAL DE OCORRÊNCIA E MUNICÍPIO POLO
+                            chk_alt_mun_lt = st.checkbox("Alterar Local de Ocorrência (UF e Município)?", key="chk_lt_mun_at")
+                            if chk_alt_mun_lt:
+                                c_lt_m1, c_lt_m2 = st.columns(2)
+                                with c_lt_m1:
+                                    # Identifica a UF da primeira linha selecionada como sugestão inicial
+                                    ufs_sel = df_at_sel["UF Onde Ocorreu/Ocorrerá a Ação"].dropna().unique().tolist()
+                                    uf_ini = ufs_sel[0] if ufs_sel and ufs_sel[0] in LISTA_UFS_COMPLETA else "SP"
+                                    nova_uf_oc_lt = st.selectbox("UF de Ocorrência:", LISTA_UFS_COMPLETA, index=LISTA_UFS_COMPLETA.index(uf_ini), key="sel_lt_uf_oc_at")
+                                
+                                with c_lt_m2:
+                                    # Carrega as cidades da UF selecionada via API do IBGE
+                                    muns_ibge_lote = obter_municipios_ibge(nova_uf_oc_lt) or ["Superintendência Sede"]
+                                    novo_mun_lt = st.selectbox("Novo Município Polo:", muns_ibge_lote, key="sel_lt_mun_at")
+    
+                                # Grava em todas as chaves blindadas
+                                edicoes_lote["UF Onde Ocorreu/Ocorrerá a Ação"] = nova_uf_oc_lt
+                                edicoes_lote["Estado_Local_Acao"] = nova_uf_oc_lt
+                                edicoes_lote["Municipio_Ocorrencia"] = novo_mun_lt
+                                edicoes_lote["Municipio Onde Ocorreu/Ocorrerá a Ação"] = novo_mun_lt
+                                edicoes_lote["Município Onde Ocorreu/Ocorrerá a Ação"] = novo_mun_lt
+
                         with l_aba3:
                             if st.checkbox("Alterar Número SEI do Documento Probatório?", key="chk_doc_lt"):
                                 edicoes_lote["Doc_Probatorio_Exec"] = st.text_input("Novo SEI:", key="in_doc_lt").strip()
+
+                            # 🚀 LOTE: TEMA DA ATIVIDADE
+                            chk_alt_tema_lt = st.checkbox("Alterar Tema / Modal Operacional?", key="chk_lt_tema_at")
+                            if chk_alt_tema_lt:
+                                novo_tema_lt = st.selectbox("Novo Tema / Modal:", LISTA_TEMAS, key="sel_lt_tema_at")
+                                edicoes_lote["Tema da Atividade"] = novo_tema_lt
+    
+                            # 🚀 LOTE: PERICULOSIDADE / INSALUBRIDADE
+                            chk_alt_perigo_lt = st.checkbox("Alterar Periculosidade / Insalubridade?", key="chk_lt_perigo_at")
+                            if chk_alt_perigo_lt:
+                                novo_perigo_lt = st.selectbox("Nova Periculosidade/Insalubridade:", LISTA_PERIGOS, key="sel_lt_perigo_at")
+                                edicoes_lote["Periculosidade/Insalubridade"] = novo_perigo_lt
+                                edicoes_lote["Periculosidade_Insalubridade"] = novo_perigo_lt
 
                         with l_aba4:
                             col_ld1, col_ld2 = st.columns(2)
@@ -4994,6 +5029,11 @@ elif modo == "📊 Visualizar Base":
                                         r_dict = row.to_dict()
                                         r_dict.update(edicoes_lote)
                                         
+                                        # Extração defensiva das chaves atualizadas:
+                                        mun_final = r_dict.get("Municipio_Ocorrencia") or r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")
+                                        perigo_final = r_dict.get("Periculosidade_Insalubridade") or r_dict.get("Periculosidade/Insalubridade", "Não se Aplica")
+                                        tema_final = r_dict.get("Tema da Atividade", "Outros temas")
+                                        
                                         # 2. Se virou Apoio de Campo, o indicador obrigatoriamente vira 0.0
                                         func_final_linha = r_dict.get("Coordenador_Operacao", "Apoio de Campo")
                                         if func_final_linha == "Apoio de Campo":
@@ -5014,16 +5054,16 @@ elif modo == "📊 Visualizar Base":
                                             doc_probatorio=r_dict.get("Doc_Probatorio_Exec"),
                                             uf_acao=r_dict.get("UF_Acao_PNAPA"),
                                             importancia=r_dict.get("Importância da Atividade", "Finalística"),
-                                            tema=r_dict.get("Tema da Atividade", "Outros temas"),
+                                            tema=tema_final,
                                             objetivo=r_dict.get("Objetivo da Atividade", "Prevenção"),
                                             tipo_atividade=r_dict.get("Tipo de Atividade", "Operação"),
-                                            periculosidade=r_dict.get("Periculosidade/Insalubridade", "Não se Aplica"),
+                                            periculosidade=perigo_final,
                                             servidor=r_dict.get("Servidor"),
                                             num_pcdp=r_dict.get("Número da PCDP"),
                                             pais=r_dict.get("País", "Brasil"),
                                             uf_ocorrencia=r_dict.get("UF Onde Ocorreu/Ocorrerá a Ação"),
                                             estado_local=r_dict.get("Estado_Local_Acao"),
-                                            municipio=r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação"),
+                                            municipio=mun_final,
                                             dt_inicio=r_dict.get("Data de Início"),
                                             dt_termino=r_dict.get("Data de Término"),
                                             dias_plan=r_dict.get("Dias_Gastos_Plan", 0.0),
