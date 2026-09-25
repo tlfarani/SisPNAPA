@@ -2571,19 +2571,39 @@ if modo == "📈 Dashboards Executivos":
             
             with c_filt1:
                 with st.popover("📅 Período Considerado", use_container_width=True):
-                    df_p_ano = aplicar_filtros_dash(df_dash_atv, filtros_d, "ano")
-                    anos_disp = ["Todos"] + sorted([str(int(a)) for a in df_p_ano["Ano da Ação"].dropna().unique() if str(a).strip().isdigit()], reverse=True)
+                    # 🚀 1. Extração segura dos anos (varre tanto Atividades quanto Ações Setoriais)
+                    df_p_ano_atv = aplicar_filtros_dash(df_dash_atv, filtros_d, "ano")
+                    df_p_ano_ac = aplicar_filtros_dash(df_dash_acao, filtros_d, "ano")
+                    
+                    anos_encontrados = set()
+                    for df_temp in [df_p_ano_atv, df_p_ano_ac]:
+                        if "Ano da Ação" in df_temp.columns:
+                            for val_a in df_temp["Ano da Ação"].dropna().unique():
+                                s_a = str(val_a).split('.')[0].strip()
+                                if s_a.isdigit() and int(s_a) > 2000:
+                                    anos_encontrados.add(s_a)
+                    
+                    # Garante que 2027 e 2026 estejam sempre disponíveis
+                    if not anos_encontrados:
+                        anos_encontrados = {"2027", "2026"}
+                    else:
+                        anos_encontrados.update(["2027", "2026"])
+                    
+                    anos_disp = ["Todos"] + sorted(list(anos_encontrados), reverse=True)
                     idx_ano = anos_disp.index(filtros_d["ano"][1]) if filtros_d["ano"][1] in anos_disp else 0
+                    
+                    # 🚀 2. O Selectbox volta a listar perfeitamente: ["Todos", "2027", "2026"]
                     f_ano = st.selectbox("Ano da Ação:", anos_disp, index=idx_ano, key="fd_ano")
                     filtros_d["ano"] = ("Ano da Ação", f_ano)
 
+                    # 🚀 3. Sincronização automática do intervalo do Slider
                     if f_ano != "Todos" and str(f_ano).isdigit():
                         ano_int = int(f_ano)
                         min_dt_val = date(ano_int, 1, 1)
                         max_dt_val = date(ano_int, 12, 31)
                     else:
-                        dts_atvs = df_dash_atv["Data_Inicio_DT"].dropna() if "Data_Inicio_DT" in df_dash_atv.columns else pd.Series()
-                        dts_acoes = df_dash_acao["Data_Inicio_DT"].dropna() if "Data_Inicio_DT" in df_dash_acao.columns else pd.Series()
+                        dts_atvs = df_dash_atv["Data_Inicio_DT"].dropna() if "Data_Inicio_DT" in df_dash_atv.columns else pd.Series(dtype='datetime64[ns]')
+                        dts_acoes = df_dash_acao["Data_Inicio_DT"].dropna() if "Data_Inicio_DT" in df_dash_acao.columns else pd.Series(dtype='datetime64[ns]')
                         todas_dts = pd.concat([dts_atvs, dts_acoes]).dropna()
                         
                         if not todas_dts.empty:
@@ -3224,9 +3244,12 @@ if modo == "📈 Dashboards Executivos":
                 df_gantt_base = df_filt_atv_oper.dropna(subset=["Data_Inicio_DT", "Data_Fim_DT"]).copy()
                 
                 if not df_gantt_base.empty:
-                    ano_ref_series = df_gantt_base["Data_Inicio_DT"].dt.year.dropna()
-                    ano_ref = int(ano_ref_series.mode()[0]) if not ano_ref_series.empty else hoje.year
-
+                    # 🚀 Sincroniza o ano do Gantt com o ano filtrado no topo
+                    if f_ano != "Todos" and str(f_ano).isdigit():
+                        ano_ref = int(f_ano)
+                    else:
+                        ano_ref_series = df_gantt_base["Data_Inicio_DT"].dt.year.dropna()
+                        ano_ref = int(ano_ref_series.mode()[0]) if not ano_ref_series.empty else hoje.year
                     col_nav1, col_nav2 = st.columns([1, 1.8])
                     
                     with col_nav1:
