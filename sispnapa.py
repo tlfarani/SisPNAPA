@@ -5954,6 +5954,13 @@ elif modo == "➕ Inserir Nova Linha":
                     bloqueio_lote = False
                     dias_lote_check = dias_plan if espelhar_crono else 0.0
 
+                    # 🚀 Resgate seguro da periculosidade para o lote:
+                        perigo_lote = "Não se Aplica"
+                        if "periculosidade" in locals() and periculosidade:
+                            perigo_lote = str(periculosidade).strip()
+                        elif dados_atv_origem is not None:
+                            perigo_lote = str(extrair_padrao_atv("Periculosidade/Insalubridade", "Não se Aplica")).strip()
+                    
                     for srv_lote_chk in servidores_finais:
                         func_chk = funcao_campo if srv_lote_chk == servidor else "Apoio de Campo"
                         res_chk_lt = calcular_termometro_carga(
@@ -6027,14 +6034,18 @@ elif modo == "➕ Inserir Nova Linha":
                                 "Tema da Atividade": tema, 
                                 "Objetivo da Atividade": objetivo, 
                                 "Tipo de Atividade": tipo_atividade,
-                                "Periculosidade/Insalubridade": periculosidade, 
+                               # 🛡️ Blindagem de Periculosidade para o Power Automate (com e sem barra):
+                                "Periculosidade_Insalubridade": perigo_lote,
+                                "Periculosidade/Insalubridade": perigo_lote,
                                 "Servidor": serv_lote, 
                                 "Número da PCDP": num_pcdp,
                                 "País": p_pais, 
                                 "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
                                 "Estado_Local_Acao": p_est,
-                                "Municipio_Ocorrencia": p_mun,
-                                "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun, 
+                                # 🛡️ Blindagem de Município (sem barra para o Power Automate):
+                                "Municipio_Ocorrencia": str(municipio),
+                                "Municipio Onde Ocorreu/Ocorrerá a Ação": str(municipio),
+                                "Município Onde Ocorreu/Ocorrerá a Ação": str(municipio),
                                 "Data de Início": converter_data_para_serial(p_ini), 
                                 "Data de Término": converter_data_para_serial(p_fim),
                                 "Dias_Gastos_Plan": p_d_pl, 
