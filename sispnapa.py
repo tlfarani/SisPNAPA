@@ -2517,6 +2517,8 @@ if modo == "📈 Dashboards Executivos":
         # =====================================================================
         # 3. BARRA SUPERIOR DE FILTROS FIXA (STICKY TOP BAR)
         # =====================================================================
+        ano_corrente_str = str(date.today().year)
+
         todas_chaves_filtros = [
             "fd_ano", "fd_uf", "fd_lot", "fd_srv", "fd_origem",
             "fd_pna", "fd_tema", "fd_imp", "fd_obj", 
@@ -2540,14 +2542,18 @@ if modo == "📈 Dashboards Executivos":
             return df_res
 
         def limpar_filtros_dashboard():
-            for k in todas_chaves_filtros: st.session_state[k] = "Todos"
+            # 🚀 Ao clicar em Limpar, o ano volta para o ano corrente e os outros voltam para Todos
+            for k in todas_chaves_filtros: 
+                st.session_state[k] = ano_corrente_str if k == "fd_ano" else "Todos"
             if "valor_slider_data" in st.session_state: del st.session_state["valor_slider_data"]
             if "clique_mes" in st.session_state: del st.session_state["clique_mes"]
             if "clique_atv" in st.session_state: del st.session_state["clique_atv"]
             if "ultimo_ano_filtro" in st.session_state: del st.session_state["ultimo_ano_filtro"]
 
+        # 🚀 Inicialização na primeira abertura: define ano corrente para fd_ano e Todos para os demais
         for k in todas_chaves_filtros:
-            if k not in st.session_state: st.session_state[k] = "Todos"
+            if k not in st.session_state: 
+                st.session_state[k] = ano_corrente_str if k == "fd_ano" else "Todos"
 
         filtros_d = {
             "ano": ("Ano da Ação", st.session_state["fd_ano"]),
@@ -3683,13 +3689,26 @@ elif modo == "📊 Visualizar Base":
 
                 df_base_acoes["Status de Execução"] = df_base_acoes.apply(calc_status_acao_t1, axis=1)
 
+                # 🚀 Inicialização com o Ano Corrente como padrão
+                ano_corrente_str = str(date.today().year)
+                
                 for k in ["f_ano_ac", "f_pna_ac", "f_uf_ac", "f_papel_ac", "f_focal_ac", "f_status_ac", "f_and_ac", "f_tema_ac"]:
                     if k not in st.session_state:
-                        st.session_state[k] = "Todas" if k in ["f_pna_ac", "f_uf_ac"] else "Todos"
+                        if k == "f_ano_ac":
+                            st.session_state[k] = ano_corrente_str
+                        elif k in ["f_pna_ac", "f_uf_ac"]:
+                            st.session_state[k] = "Todas"
+                        else:
+                            st.session_state[k] = "Todos"
 
                 def limpar_filtros_acoes_t1():
                     for k in ["f_ano_ac", "f_pna_ac", "f_uf_ac", "f_papel_ac", "f_focal_ac", "f_status_ac", "f_and_ac", "f_tema_ac"]:
-                        st.session_state[k] = "Todas" if k in ["f_pna_ac", "f_uf_ac"] else "Todos"
+                        if k == "f_ano_ac":
+                            st.session_state[k] = ano_corrente_str
+                        elif k in ["f_pna_ac", "f_uf_ac"]:
+                            st.session_state[k] = "Todas"
+                        else:
+                            st.session_state[k] = "Todos"
                     st.session_state.pop("f_slider_dts_ac", None)
                     st.session_state.pop("last_ano_ac_sel", None)
 
@@ -4212,13 +4231,27 @@ elif modo == "📊 Visualizar Base":
 
                 chaves_filtros_atv = ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_status_at", "f_tema_at", "f_fiscal_at", "f_aeac_at", "f_funcao_srv_at"]
                 
+                # 🚀 Inicialização com o Ano Corrente como padrão
+                ano_corrente_str = str(date.today().year)
+                chaves_filtros_atv = ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_status_at", "f_tema_at", "f_fiscal_at", "f_aeac_at", "f_funcao_srv_at"]
+                
                 for k in chaves_filtros_atv:
                     if k not in st.session_state: 
-                        st.session_state[k] = "Todas" if k in ["f_pna_at", "f_uf_at", "f_func_at", "f_funcao_srv_at"] else "Todos"
+                        if k == "f_ano_at":
+                            st.session_state[k] = ano_corrente_str
+                        elif k in ["f_pna_at", "f_uf_at", "f_func_at", "f_funcao_srv_at"]:
+                            st.session_state[k] = "Todas"
+                        else:
+                            st.session_state[k] = "Todos"
 
                 def limpar_filtros_atividades_t1():
                     for k in chaves_filtros_atv:
-                        st.session_state[k] = "Todas" if k in ["f_pna_at", "f_uf_at", "f_func_at", "f_funcao_srv_at"] else "Todos"
+                        if k == "f_ano_at":
+                            st.session_state[k] = ano_corrente_str
+                        elif k in ["f_pna_at", "f_uf_at", "f_func_at", "f_funcao_srv_at"]:
+                            st.session_state[k] = "Todas"
+                        else:
+                            st.session_state[k] = "Todos"
                     st.session_state.pop("f_slider_dts_at", None)
                     st.session_state.pop("last_ano_at_sel", None)
 
