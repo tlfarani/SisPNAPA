@@ -316,6 +316,21 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
     aval_qualidade_final = tratar_num_avaliacao(aval_qualidade)
     aval_feedback_final = tratar_num_avaliacao(aval_feedback)
 
+    # -------------------------------------------------------------
+    # 📍 LOCALIZAÇÃO: Logo antes de 'payload = {'
+    # -------------------------------------------------------------
+    # 🚀 1. Soma automática das parcelas planejadas
+    p_diarias = float(pd.to_numeric(rec_p_diarias, errors='coerce') or 0.0)
+    p_passagens = float(pd.to_numeric(rec_p_passagens, errors='coerce') or 0.0)
+    p_outras = float(pd.to_numeric(rec_p_outras, errors='coerce') or 0.0)
+    total_plan_calculado = p_diarias + p_passagens + p_outras
+
+    # 🚀 2. Soma automática das parcelas executadas
+    e_diarias = float(pd.to_numeric(rec_e_diarias, errors='coerce') or 0.0)
+    e_passagens = float(pd.to_numeric(rec_e_passagens, errors='coerce') or 0.0)
+    e_outras = float(pd.to_numeric(rec_e_outras, errors='coerce') or 0.0)
+    total_exec_calculado = e_diarias + e_passagens + e_outras
+                        
     # Dicionário contendo estritamente as colunas físicas da lista do SharePoint
     payload = {
         "Acao": acao_envio,
@@ -356,15 +371,17 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Data de Término": converter_data_para_serial(dt_termino),
         "Dias_Gastos_Plan": float(dias_plan) if pd.notna(dias_plan) else 0.0,
         "Dias_Gastos_Exec": float(dias_exec) if pd.notna(dias_exec) else 0.0,
+        # 💰 Parcelas individuais:
         "Origem do Recurso": str(origem_recurso),
-        "Rec_Plan_Diarias": float(rec_p_diarias) if pd.notna(rec_p_diarias) else 0.0,
-        "Rec_Plan_Passagens": float(rec_p_passagens) if pd.notna(rec_p_passagens) else 0.0,
-        "Rec_Plan_Outras_Despesas": float(rec_p_outras) if pd.notna(rec_p_outras) else 0.0,
-        "Rec_Plan_Total": float((rec_p_diarias or 0.0) + (rec_p_passagens or 0.0) + (rec_p_outras or 0.0)),
-        "Rec_Exec_Diarias": float(rec_e_diarias) if pd.notna(rec_e_diarias) else 0.0,
-        "Rec_Exec_Passagens": float(rec_e_passagens) if pd.notna(rec_e_passagens) else 0.0,
-        "Rec_Exec_Outras_Despesas": float(rec_e_outras) if pd.notna(rec_e_outras) else 0.0,
-        "Rec_Exec_Total": float((rec_e_diarias or 0.0) + (rec_e_passagens or 0.0) + (rec_e_outras or 0.0)),
+        "Rec_Plan_Diarias": p_diarias,
+        "Rec_Plan_Passagens": p_passagens,
+        "Rec_Plan_Outras_Despesas": p_outras,
+        "Rec_Exec_Diarias": e_diarias,
+        "Rec_Exec_Passagens": e_passagens,
+        "Rec_Exec_Outras_Despesas": e_outras,
+        # 🚀 TOTAIS CONSOLIDADOS (gravados no SharePoint e lidos pelos Dashboards):
+        "Rec_Plan_Total": total_plan_calculado,
+        "Rec_Exec_Total": total_exec_calculado,
         "Observações": str(obs),
         "Justificativa_Acao_PNAPA": str(justificativa),
         "Avaliacao_Qualidade": aval_qualidade_final,
@@ -4989,6 +5006,7 @@ elif modo == "📊 Visualizar Base":
                                 edicoes_lote["Periculosidade_Insalubridade"] = novo_perigo_lt
 
                         with l_aba4:
+                            st.markdown("##### 🗓️ 1. Cronograma & Esforço (Datas e Dias)")
                             col_ld1, col_ld2 = st.columns(2)
                             with col_ld1:
                                 if st.checkbox("Alterar Data de Início?", key="chk_dti_lt"):
@@ -5000,6 +5018,42 @@ elif modo == "📊 Visualizar Base":
                                     edicoes_lote["Dias_Gastos_Plan"] = st.number_input("Novos Dias Planejados:", min_value=0.0, step=0.5, format="%.1f", key="in_dpl_lt")
                                 if st.checkbox("Alterar Dias Executados?", key="chk_dex_lt"):
                                     edicoes_lote["Dias_Gastos_Exec"] = st.number_input("Novos Dias Executados:", min_value=0.0, step=0.5, format="%.1f", key="in_dex_lt")
+
+                            st.markdown("---")
+                            st.markdown("##### 💰 2. Recursos & Custos Financeiros")
+                            
+                            # 2.1 Origem do Recurso
+                            if st.checkbox("Alterar Origem do Recurso?", key="chk_orig_lt"):
+                                lista_origens_disp = ["SP", "DIPRO", "Outros"]
+                                if "LISTA_ORIGENS" in globals():
+                                    lista_origens_disp = globals()["LISTA_ORIGENS"]
+                                edicoes_lote["Origem do Recurso"] = st.selectbox("Nova Origem do Recurso:", lista_origens_disp, key="sel_orig_lt")
+
+                            # 2.2 Custos Planejados (Previsão)
+                            st.markdown("**📋 Custos Planejados (Previsão Orçamentária)**")
+                            cp1, cp2, cp3 = st.columns(3)
+                            with cp1:
+                                if st.checkbox("Alterar Diárias Plan.?", key="chk_rpd_lt"):
+                                    edicoes_lote["Rec_Plan_Diarias"] = st.number_input("Diárias Plan. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_rpd_lt")
+                            with cp2:
+                                if st.checkbox("Alterar Passagens Plan.?", key="chk_rpp_lt"):
+                                    edicoes_lote["Rec_Plan_Passagens"] = st.number_input("Passagens Plan. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_rpp_lt")
+                            with cp3:
+                                if st.checkbox("Alterar Outras Desp. Plan.?", key="chk_rpo_lt"):
+                                    edicoes_lote["Rec_Plan_Outras_Despesas"] = st.number_input("Outras Desp. Plan. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_rpo_lt")
+
+                            # 2.3 Custos Executados (Realizados)
+                            st.markdown("**💳 Custos Executados (Prestação de Contas)**")
+                            ce1, ce2, ce3 = st.columns(3)
+                            with ce1:
+                                if st.checkbox("Alterar Diárias Exec.?", key="chk_red_lt"):
+                                    edicoes_lote["Rec_Exec_Diarias"] = st.number_input("Diárias Exec. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_red_lt")
+                            with ce2:
+                                if st.checkbox("Alterar Passagens Exec.?", key="chk_rep_lt"):
+                                    edicoes_lote["Rec_Exec_Passagens"] = st.number_input("Passagens Exec. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_rep_lt")
+                            with ce3:
+                                if st.checkbox("Alterar Outras Desp. Exec.?", key="chk_reo_lt"):
+                                    edicoes_lote["Rec_Exec_Outras_Despesas"] = st.number_input("Outras Desp. Exec. (R$):", min_value=0.0, step=50.0, format="%.2f", key="in_reo_lt")
 
                         with l_aba5:
                             if st.checkbox("Alterar Observações?", key="chk_obs_lt"):
@@ -5025,23 +5079,29 @@ elif modo == "📊 Visualizar Base":
                                 with st.spinner("⏳ Processando alterações em lote no SharePoint..."):
                                     payloads_lote = []
                                     for _, row in df_at_sel.iterrows():
-                                        # 1. Mescla os dados atuais da linha com as alterações escolhidas no lote
+                                        # 1. Mescla a linha atual com os campos marcados no painel de lote
                                         r_dict = row.to_dict()
                                         r_dict.update(edicoes_lote)
                                         
-                                        # Extração defensiva das chaves atualizadas:
+                                        # 2. Regra de Apoio de Campo
+                                        func_final_linha = r_dict.get("Coordenador_Operacao", "Apoio de Campo")
+                                        res_ind_linha = 0.0 if func_final_linha == "Apoio de Campo" else r_dict.get("Resultado_Indicador", 0.0)
+
+                                        # 3. Chaves sanitizadas de Município, Perigo e Tema
                                         mun_final = r_dict.get("Municipio_Ocorrencia") or r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")
                                         perigo_final = r_dict.get("Periculosidade_Insalubridade") or r_dict.get("Periculosidade/Insalubridade", "Não se Aplica")
                                         tema_final = r_dict.get("Tema da Atividade", "Outros temas")
-                                        
-                                        # 2. Se virou Apoio de Campo, o indicador obrigatoriamente vira 0.0
-                                        func_final_linha = r_dict.get("Coordenador_Operacao", "Apoio de Campo")
-                                        if func_final_linha == "Apoio de Campo":
-                                            res_ind_linha = 0.0
-                                        else:
-                                            res_ind_linha = r_dict.get("Resultado_Indicador", 0.0)
 
-                                        # 🚀 3. Monta o payload blindado via payload_gerador (trata datas seriais, nulls e números)
+                                        # 4. Custos individuais em float
+                                        rec_p_d = float(pd.to_numeric(r_dict.get("Rec_Plan_Diarias", 0.0), errors='coerce') or 0.0)
+                                        rec_p_p = float(pd.to_numeric(r_dict.get("Rec_Plan_Passagens", 0.0), errors='coerce') or 0.0)
+                                        rec_p_o = float(pd.to_numeric(r_dict.get("Rec_Plan_Outras_Despesas", 0.0), errors='coerce') or 0.0)
+                                        
+                                        rec_e_d = float(pd.to_numeric(r_dict.get("Rec_Exec_Diarias", 0.0), errors='coerce') or 0.0)
+                                        rec_e_p = float(pd.to_numeric(r_dict.get("Rec_Exec_Passagens", 0.0), errors='coerce') or 0.0)
+                                        rec_e_o = float(pd.to_numeric(r_dict.get("Rec_Exec_Outras_Despesas", 0.0), errors='coerce') or 0.0)
+
+                                        # 🚀 5. Geração do payload (as somas totais são calculadas internamente)
                                         payload_at = payload_gerador(
                                             val_ano=r_dict.get("Ano da Ação"),
                                             val_num_acao=r_dict.get("Número da Ação PNAPA"),
@@ -5069,15 +5129,15 @@ elif modo == "📊 Visualizar Base":
                                             dias_plan=r_dict.get("Dias_Gastos_Plan", 0.0),
                                             dias_exec=r_dict.get("Dias_Gastos_Exec", 0.0),
                                             origem_recurso=r_dict.get("Origem do Recurso", "SP"),
-                                            rec_p_diarias=r_dict.get("Rec_Plan_Diarias", 0.0),
-                                            rec_p_passagens=r_dict.get("Rec_Plan_Passagens", 0.0),
-                                            rec_p_outras=r_dict.get("Rec_Plan_Outras_Despesas", 0.0),
-                                            rec_e_diarias=r_dict.get("Rec_Exec_Diarias", 0.0),
-                                            rec_e_passagens=r_dict.get("Rec_Exec_Passagens", 0.0),
-                                            rec_e_outras=r_dict.get("Rec_Exec_Outras_Despesas", 0.0),
+                                            rec_p_diarias=rec_p_d,
+                                            rec_p_passagens=rec_p_p,
+                                            rec_p_outras=rec_p_o,
+                                            rec_e_diarias=rec_e_d,
+                                            rec_e_passagens=rec_e_p,
+                                            rec_e_outras=rec_e_o,
                                             obs=r_dict.get("Observações", ""),
                                             justificativa=r_dict.get("Justificativa_Acao_PNAPA", ""),
-                                            id_atual=normalizar_id_t1(row.get("Id")), # 👈 ID limpo, sem .0
+                                            id_atual=normalizar_id_t1(row.get("Id")),
                                             modo="📝 Editar Linha Existente",
                                             df_atual=df_atual,
                                             papel_institucional=r_dict.get("Papel_Institucional", "Coordenação"),
@@ -5092,8 +5152,6 @@ elif modo == "📊 Visualizar Base":
                                         
                                     executar_envio_sharepoint(payloads_lote)
                                     st.session_state["selecoes_atividades"] = {}
-                                    
-                                    # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
                                     st.cache_data.clear()
                                     if "df" in st.session_state: del st.session_state.df
                                     liberar_trava(chave_trava)
