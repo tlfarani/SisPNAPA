@@ -339,13 +339,18 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Tema da Atividade": str(tema),
         "Objetivo da Atividade": str(objetivo),
         "Tipo de Atividade": str(tipo_atividade),
+        # 🛡️ Blindagem de Periculosidade (envia com barra e com underline para o Power Automate)
         "Periculosidade/Insalubridade": str(periculosidade),
+        "Periculosidade_Insalubridade": str(periculosidade),
+        "Periculosidade": str(periculosidade),
         "Servidor": str(servidor),
         "Número da PCDP": str(num_pcdp),
         "País": str(pais),
         "UF Onde Ocorreu/Ocorrerá a Ação": str(uf_ocorrencia),
         "Estado_Local_Acao": str(estado_local),
+        # 🛡️ Blindagem de Município (envia com e sem acento)
         "Municipio Onde Ocorreu/Ocorrerá a Ação": str(municipio),
+        "Município Onde Ocorreu/Ocorrerá a Ação": str(municipio),
         "Data de Início": converter_data_para_serial(dt_inicio),
         "Data de Término": converter_data_para_serial(dt_termino),
         "Dias_Gastos_Plan": float(dias_plan) if pd.notna(dias_plan) else 0.0,
@@ -4734,8 +4739,26 @@ elif modo == "📊 Visualizar Base":
                             ed_doc_at = st.text_input("Número SEI do Documento Probatório de Execução:", value=str(reg_at_alvo.get("Doc_Probatorio_Exec", "")), key=f"t1_at_doc_{id_at_ref}")
                             st.text_input("UF Proponente / Que Cede a Equipe (Definida na Aba 2):", value=str(ed_uf_acao_val), disabled=True)
                             st.text_input("Classificação da Atividade", value=importancia_at, disabled=True)
-                            ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo.get("Tipo de Atividade", "Operação")) if reg_at_alvo.get("Tipo de Atividade", "Operação") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
-                            ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=LISTA_PERIGOS.index(reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica")) if reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica") in LISTA_PERIGOS else 0, key=f"t1_at_perigo_{id_at_ref}")
+                            
+                            # 🎯 TEMA (Editável) e OBJETIVO (Travado)
+                            c_t_obj1, c_t_obj2 = st.columns(2)
+                            with c_t_obj1:
+                                tema_atv_atual = str(reg_at_alvo.get("Tema da Atividade", "Outros temas")).strip()
+                                idx_tema_atv = LISTA_TEMAS.index(tema_atv_atual) if tema_atv_atual in LISTA_TEMAS else 0
+                                ed_tema_at = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, index=idx_tema_atv, key=f"t1_at_tema_{id_at_ref}")
+                            with c_t_obj2:
+                                obj_atv_atual = str(reg_at_alvo.get("Objetivo da Atividade", "Prevenção e Gestão de Riscos")).strip()
+                                st.text_input("Objetivo Estratégico (Herdado da Ação):", value=obj_atv_atual, disabled=True, key=f"t1_at_obj_dis_{id_at_ref}")
+                                ed_obj_at = obj_atv_atual
+
+                            # 🛠️ TIPO E PERICULOSIDADE
+                            c_tip_per1, c_tip_per2 = st.columns(2)
+                            with c_tip_per1:
+                                ed_tipo_at = st.selectbox("Tipo de Atividade:", LISTA_TIPOS_ATIVIDADE, index=LISTA_TIPOS_ATIVIDADE.index(reg_at_alvo.get("Tipo de Atividade", "Operação")) if reg_at_alvo.get("Tipo de Atividade", "Operação") in LISTA_TIPOS_ATIVIDADE else 0, key=f"t1_at_tipo_{id_at_ref}")
+                            with c_tip_per2:
+                                perigo_atual = str(reg_at_alvo.get("Periculosidade/Insalubridade", "Não se Aplica")).strip()
+                                idx_perigo_at = LISTA_PERIGOS.index(perigo_atual) if perigo_atual in LISTA_PERIGOS else 0
+                                ed_perigo_at = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=idx_perigo_at, key=f"t1_at_perigo_{id_at_ref}")
 
                         with aba4_at:
                             val_dti_at = converter_para_data_segura(reg_at_alvo.get("Data de Início"))
@@ -4818,8 +4841,7 @@ elif modo == "📊 Visualizar Base":
                                 payload_at = payload_gerador(
                                     val_ano_at, val_num_acao_at, val_nome_acao_at, val_indicador_at, "Atividade",
                                     ed_nome_atv, ed_andamento_at, ed_res_ind_at, ed_doc_at, ed_uf_acao_val,
-                                    importancia_at, str(reg_at_alvo.get("Tema da Atividade", "Outros temas")), 
-                                    str(reg_at_alvo.get("Objetivo da Atividade", "Prevenção")), ed_tipo_at, ed_perigo_at, ed_servidor_at,
+                                    importancia_at, ed_tema_at, ed_obj_at, ed_tipo_at, ed_perigo_at, ed_servidor_at,
                                     ed_uf_srv_at, ed_lot_at, ed_eq_at, ed_pcdp_at, "Brasil", ed_uf_oc_at,
                                     ed_est_loc_at, ed_mun_at, ed_dt_i_at, ed_dt_f_at, ed_dias_pl_at, ed_dias_ex_at,
                                     ed_orig_at, ed_rp_d_at, ed_rp_p_at, ed_rp_o_at, ed_re_d_at,
@@ -5371,17 +5393,20 @@ elif modo == "➕ Inserir Nova Linha":
                     else:
                         lbl = f"🤝 Apoio à Operação Coordenada por: {uf_c} — Modal: {tema_pl}"
                     opcoes_gov.append(lbl)
-                    mapa_gov[lbl] = (p_inst, uf_c)
+                    # 🚀 Guarda também Tema e Objetivo da linha da Ação Setorial:
+                    mapa_gov[lbl] = (p_inst, uf_c, tema_pl, obj_pl)
             
             opcoes_gov.append("⚙️ Definir Manualmente...")
             sel_gov = st.selectbox("Vincular a qual Planejamento da UF?:", opcoes_gov, key=f"sel_gov_atv_{val_num_acao}")
             
             if sel_gov != "⚙️ Definir Manualmente...":
-                papel_inst, uf_coordenadora_val = mapa_gov[sel_gov]
+                papel_inst, uf_coordenadora_val, tema_sugerido_acao, objetivo_acao_fixo = mapa_gov[sel_gov]
                 c_gv1, c_gv2 = st.columns(2)
                 with c_gv1: st.text_input("Papel Institucional:", value=papel_inst, disabled=True)
                 with c_gv2: st.text_input("UF Coordenadora da Missão:", value=uf_coordenadora_val, disabled=True)
             else:
+                tema_sugerido_acao = tema_herdado
+                objetivo_acao_fixo = objetivo_herdado
                 c_gv1, c_gv2 = st.columns(2)
                 with c_gv1:
                     papel_inst = st.selectbox("Papel na Atividade:", LISTA_PAPEIS_INSTITUCIONAIS, key="man_papel_atv")
@@ -5590,11 +5615,15 @@ elif modo == "➕ Inserir Nova Linha":
             
             c_atv_t1, c_atv_t2 = st.columns(2)
             with c_atv_t1:
-                st.text_input("Tema / Modal Operacional (Herdado):", value=tema_herdado, disabled=True, key=f"atv_txt_tema_dis_{val_num_acao}_{codigo_atividade}")
-                tema = tema_herdado
+                # 🎯 TEMA: Pré-carrega o tema da ação, mas permite escolher outro (Fauna, Porto, etc.)
+                tema_def = str(extrair_padrao_atv("Tema da Atividade", tema_sugerido_acao)).strip()
+                idx_t_atv = LISTA_TEMAS.index(tema_def) if tema_def in LISTA_TEMAS else 0
+                tema = st.selectbox("Tema / Modal Operacional:", LISTA_TEMAS, index=idx_t_atv, key=f"atv_sel_tema_{codigo_atividade}")
+
             with c_atv_t2:
-                st.text_input("Objetivo Estratégico (Herdado):", value=objetivo_herdado, disabled=True, key=f"atv_txt_obj_dis_{val_num_acao}_{codigo_atividade}")
-                objetivo = objetivo_herdado
+                # 🔒 OBJETIVO: Herdado e travado
+                objetivo = str(extrair_padrao_atv("Objetivo da Atividade", objetivo_acao_fixo)).strip()
+                st.text_input("Objetivo Estratégico (Herdado da Ação):", value=objetivo, disabled=True, key=f"atv_txt_obj_dis_{val_num_acao}_{codigo_atividade}")
 
             tipo_atv_def = str(extrair_padrao_atv("Tipo de Atividade", "Operação")).strip()
             idx_tipo_atv = LISTA_TIPOS_ATIVIDADE.index(tipo_atv_def) if tipo_atv_def in LISTA_TIPOS_ATIVIDADE else 0
