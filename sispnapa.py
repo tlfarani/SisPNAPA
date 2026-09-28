@@ -7154,34 +7154,79 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                                 with st.spinner(f"2/2 Sincronizando {qtd_macro_afetadas} registro(s) vinculados na Planilha Principal..."):
                                     payloads_cascata_pna = []
                                     for _, row_orig in linhas_macro_afetadas.iterrows():
-                                        p_item = {col: row_orig[col] for col in df_atual.columns if col in row_orig}
-                                        p_item["Acao"] = "Editar"
-                                        p_item["Id"] = str(row_orig["Id"])
-                                        p_item["Ano da Ação"] = int(e_ano)
-                                        p_item["Número da Ação PNAPA"] = str(nova_chave_acao_ano)
-                                        p_item["Nome da Ação PNAPA"] = str(novo_nome_display)
-                                        p_item["Indicador"] = str(e_ind)
-                                        p_item["Importância da Atividade"] = str(e_imp)
-                                        p_item["Tema da Atividade"] = str(e_tema)
-                                        p_item["Objetivo da Atividade"] = str(e_obj)
+                                        r_dict = row_orig.to_dict()
+                                        
+                                        # Identifica o nível original da linha (Ação Setorial ou Atividade)
+                                        niv_linha = str(r_dict.get("Nível", "Atividade")).strip()
 
-                                        payload_sanit = {
-                                            k: (0.0 if pd.isna(v) and ("Rec_" in k or "Dias_" in k) else ("" if pd.isna(v) else v))
-                                            for k, v in p_item.items()
-                                        }
+                                        # Resgate seguro de Município e Periculosidade blindados
+                                        mun_linha = r_dict.get("Municipio_Ocorrencia") or r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")
+                                        perigo_linha = r_dict.get("Periculosidade_Insalubridade") or r_dict.get("Periculosidade/Insalubridade", "Não se Aplica")
+
+                                        # 🚀 Gera o payload 100% blindado com payload_gerador
+                                        payload_sanit = payload_gerador(
+                                            val_ano=int(e_ano),
+                                            val_num_acao=str(nova_chave_acao_ano),
+                                            val_nome_acao=str(novo_nome_display),
+                                            val_indicador=str(e_ind),
+                                            nivel_selecionado=niv_linha,
+                                            nome_atividade=r_dict.get("Nome da Atividade", ""),
+                                            andamento=r_dict.get("Andamento", "Prevista"),
+                                            resultado_indicador=r_dict.get("Resultado_Indicador", 0.0),
+                                            doc_probatorio=r_dict.get("Doc_Probatorio_Exec", ""),
+                                            uf_acao=r_dict.get("UF_Acao_PNAPA", ""),
+                                            importancia=str(e_imp),
+                                            tema=str(e_tema),
+                                            objetivo=str(e_obj),
+                                            tipo_atividade=r_dict.get("Tipo de Atividade", "Operação"),
+                                            periculosidade=perigo_linha,
+                                            servidor=r_dict.get("Servidor", ""),
+                                            uf_servidor=r_dict.get("UF_Servidor", ""),
+                                            lotacao=r_dict.get("Lotacao", r_dict.get("Lotação", "")),
+                                            equipe_emergencia=r_dict.get("Equipe_Emergencias", "Sim"),
+                                            num_pcdp=r_dict.get("Número da PCDP", ""),
+                                            pais=r_dict.get("País", "Brasil"),
+                                            uf_ocorrencia=r_dict.get("UF Onde Ocorreu/Ocorrerá a Ação", ""),
+                                            estado_local=r_dict.get("Estado_Local_Acao", ""),
+                                            municipio=mun_linha,
+                                            dt_inicio=r_dict.get("Data de Início", ""),
+                                            dt_termino=r_dict.get("Data de Término", ""),
+                                            dias_plan=r_dict.get("Dias_Gastos_Plan", 0.0),
+                                            dias_exec=r_dict.get("Dias_Gastos_Exec", 0.0),
+                                            origem_recurso=r_dict.get("Origem do Recurso", "SP"),
+                                            rec_p_diarias=r_dict.get("Rec_Plan_Diarias", 0.0),
+                                            rec_p_passagens=r_dict.get("Rec_Plan_Passagens", 0.0),
+                                            rec_p_outras=r_dict.get("Rec_Plan_Outras_Despesas", 0.0),
+                                            rec_e_diarias=r_dict.get("Rec_Exec_Diarias", 0.0),
+                                            rec_e_passagens=r_dict.get("Rec_Exec_Passagens", 0.0),
+                                            rec_e_outras=r_dict.get("Rec_Exec_Outras_Despesas", 0.0),
+                                            obs=r_dict.get("Observações", ""),
+                                            justificativa=r_dict.get("Justificativa_Acao_PNAPA", ""),
+                                            id_atual=normalizar_id_t1(r_dict.get("Id")),
+                                            modo="📝 Editar Linha Existente",
+                                            df_atual=df_atual,
+                                            papel_institucional=r_dict.get("Papel_Institucional", "Coordenação"),
+                                            coordenador_operacao=r_dict.get("Coordenador_Operacao", ""),
+                                            meta_indicador=r_dict.get("Meta_Indicador", None),
+                                            codigo_atividade=r_dict.get("Codigo_Atividade", ""),
+                                            aval_qualidade=r_dict.get("Avaliacao_Qualidade", None),
+                                            aval_feedback=r_dict.get("Avaliacao_Feedback", None),
+                                            uf_coordenadora=r_dict.get("UF_Coordenadora", "")
+                                        )
                                         payloads_cascata_pna.append(payload_sanit)
 
                                     def enviar_req_pna_macro(p):
                                         try:
-                                            r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=20)
+                                            r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=25)
                                             return 1 if r.status_code in [200, 202] else 0
-                                        except:
+                                        except Exception:
                                             return 0
 
-                                    with ThreadPoolExecutor(max_workers=10) as executor:
+                                    # 🚀 Concorrência reduzida (max_workers=3) para não tomar HTTP 429 do Power Automate
+                                    with ThreadPoolExecutor(max_workers=3) as executor:
                                         resultados = list(executor.map(enviar_req_pna_macro, payloads_cascata_pna))
                                         sucessos_macro = sum(resultados)
-
+                                        
                             time.sleep(2.0)
                             st.cache_data.clear()
                             if "df" in st.session_state:
