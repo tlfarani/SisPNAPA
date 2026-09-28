@@ -177,6 +177,14 @@ def obter_uf_coordenadora_segura(row):
         return uf_oc
     return uf_acao
 
+def normalizar_id_t1(val):
+    if pd.isna(val) or val is None:
+        return ""
+    s = str(val).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
+
 # =================================================================
 # II. FUNÇÕES DE COMUNICAÇÃO HTTP COM O POWER AUTOMATE (APIs)
 # =================================================================
@@ -3579,12 +3587,7 @@ elif modo == "📊 Visualizar Base":
             num = pd.to_numeric(val, errors='coerce')
             return 0.0 if pd.isna(num) else float(num)
 
-        def normalizar_id_t1(val):
-            if pd.isna(val) or val is None: return ""
-            s = str(val).strip()
-            if s.endswith(".0"): s = s[:-2]
-            return s
-
+        
         if "selecoes_acoes" not in st.session_state: st.session_state["selecoes_acoes"] = {}
         if "selecoes_atividades" not in st.session_state: st.session_state["selecoes_atividades"] = {}
 
