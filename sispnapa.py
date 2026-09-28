@@ -631,13 +631,23 @@ def converter_para_data_segura(valor, data_padrao=None):
     except (ValueError, TypeError):
         pass
         
-    # Conversão de string (ISO '2026-03-01' ou BR '01/03/2026')
-    try:
-        dt = pd.to_datetime(s, dayfirst=True, errors='coerce')
-        if pd.notna(dt):
-            return dt.date()
-    except Exception:
-        pass
+    # 🛡️ 1. Se for formato ISO padrão 'YYYY-MM-DD', lê estritamente sem dayfirst
+        if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+            try:
+                return _dt.date.fromisoformat(s[:10])
+            except Exception:
+                pass
+
+        # 🛡️ 2. Se for formato brasileiro com barras 'DD/MM/AAAA'
+        try:
+            if '/' in s:
+                dt = pd.to_datetime(s, dayfirst=True, errors='coerce')
+            else:
+                dt = pd.to_datetime(s, errors='coerce')
+            if pd.notna(dt):
+                return dt.date()
+        except Exception:
+            pass
         
     return data_padrao
 
@@ -2313,12 +2323,15 @@ if modo == "📈 Dashboards Executivos":
         # =====================================================================
         def converter_dt_seguro(valor):
             if pd.isna(valor) or valor is None: return pd.NaT
-            if isinstance(valor, (datetime, pd.Timestamp)): return pd.to_datetime(valor)
+            if isinstance(valor, (date, datetime, pd.Timestamp)): return pd.to_datetime(valor)
             val_str = str(valor).strip()
             if val_str == "" or val_str.lower() in ["none", "nat", "nan"]: return pd.NaT
             if val_str.replace('.', '', 1).isdigit():
                 try: return pd.to_datetime(int(float(val_str)), unit='D', origin='1899-12-30')
                 except: pass
+            # 🛡️ Se for ISO (YYYY-MM-DD), nunca use dayfirst=True
+            if len(val_str) >= 10 and val_str[4] == '-' and val_str[7] == '-':
+                return pd.to_datetime(val_str[:10], errors='coerce')
             return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
 
         # 🚀 MAPEAMENTO DINÂMICO DA MACROAÇÃO VIA PLANILHA Acoes_PNAPA (df_pnapas)
@@ -3557,6 +3570,9 @@ elif modo == "📊 Visualizar Base":
             if val_str.replace('.', '', 1).isdigit():
                 try: return pd.to_datetime(int(float(val_str)), unit='D', origin='1899-12-30')
                 except: pass
+            # 🛡️ Se for ISO (YYYY-MM-DD), nunca passe dayfirst=True
+            if len(val_str) >= 10 and val_str[4] == '-' and val_str[7] == '-':
+                return pd.to_datetime(val_str[:10], errors='coerce')
             return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
 
         def obter_float_limpo(val):
@@ -5281,10 +5297,8 @@ elif modo == "➕ Inserir Nova Linha":
 
     st.markdown("---")
     
-    dt_inicio_convertida = pd.to_datetime(registro_selecionado["Data de Início"], errors='coerce') if registro_selecionado is not None else pd.NaT
-    val_dt_inicio = dt_inicio_convertida.date() if pd.notna(dt_inicio_convertida) else date.today()
-    dt_termino_convertida = pd.to_datetime(registro_selecionado["Data de Término"], errors='coerce') if registro_selecionado is not None else pd.NaT
-    val_dt_termino = dt_termino_convertida.date() if pd.notna(dt_termino_convertida) else date.today()
+    val_dt_inicio = converter_para_data_segura(registro_selecionado.get("Data de Início")) if registro_selecionado is not None else date.today()
+    val_dt_termino = converter_para_data_segura(registro_selecionado.get("Data de Término")) if registro_selecionado is not None else date.today()
 
     def obter_num_seguro(registro, coluna):
         if registro is not None and coluna in registro:
