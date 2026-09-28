@@ -7114,12 +7114,15 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                         else:
                             nova_chave_acao_ano = f"{e_num}-{e_ano}"
                             novo_nome_display = e_apelido if e_apelido else e_comp[:70]
+                            eh_macroacao = (e_nivel == "Estratégica (Macro)")
+                            ano_ed_int = int(e_ano)
 
+                            # 1. Payload oficial da ação sendo editada no Catálogo
                             payload_edt = {
                                 "Acao": "Editar",
                                 "Id": str(id_pna_edit),
                                 "ID_PNAPA": id_pna_edit,
-                                "Ano": int(e_ano),
+                                "Ano": ano_ed_int,
                                 "Num_Acao_PNAPA": e_num,
                                 "Acao_Ano": nova_chave_acao_ano,
                                 "Nome_Acao_Completo": e_comp,
@@ -7137,107 +7140,171 @@ elif modo == "🗂️ Gerenciar Ações PNAPA":
                                 "UFs_Obrigatorias": str(e_ufs_obrig)
                             }
 
-                            with st.spinner(f"1/2 Atualizando Ação '{nova_chave_acao_ano}' no Catálogo..."):
+                            with st.spinner("1/2 Atualizando iniciativa no Catálogo Oficial..."):
                                 try:
                                     requests.post(URL_FLOW_PNAPAS, json=payload_edt, timeout=25)
                                 except Exception as e:
                                     st.error(f"Erro ao conectar ao catálogo: {e}")
 
-                            cod_antigo_acao_ano = str(dados_alvo_edt.get("Acao_Ano", "")).strip()
-                            cod_antigo_num = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).strip()
+                            cod_antigo_puro = str(dados_alvo_edt.get("Num_Acao_PNAPA", "")).split("-")[0].strip().upper()
+                            cod_antigo_acao_ano = str(dados_alvo_edt.get("Acao_Ano", "")).strip().upper()
 
-                            linhas_macro_afetadas = df_atual[
-                                (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_antigo_acao_ano) |
-                                (df_atual["Número da Ação PNAPA"].astype(str).str.strip() == cod_antigo_num)
-                            ]
-                            qtd_macro_afetadas = len(linhas_macro_afetadas)
-                            sucessos_macro = 0
+                            # =================================================================
+                            # RAMO A: EDITANDO UMA MACROAÇÃO ESTRATÉGICA (NÍVEL 1)
+                            # =================================================================
+                            if eh_macroacao:
+                                # Não propaga Objetivo nem Tema (preserva a autonomia de modais/linhas da CEN11, CEN02, etc.)
+                                cod_mudou = (cod_antigo_puro != e_num)
 
-                            if qtd_macro_afetadas > 0:
-                                with st.spinner(f"2/2 Sincronizando {qtd_macro_afetadas} registro(s) vinculados na Planilha Principal..."):
-                                    payloads_cascata_pna = []
-                                    for _, row_orig in linhas_macro_afetadas.iterrows():
-                                        r_dict = row_orig.to_dict()
-                                        
-                                        # Identifica o nível original da linha (Ação Setorial ou Atividade)
-                                        niv_linha = str(r_dict.get("Nível", "Atividade")).strip()
+                                # Se o código da Macroação foi alterado (ex: CEN01 -> CEN01A),
+                                # atualiza apenas o apontador 'Acao_Mae' nas setoriais filhas no Catálogo
+                                if cod_mudou:
+                                    df_pna_mesmo_ano = df_pnapas[
+                                        pd.to_numeric(df_pnapas["Ano"], errors='coerce').fillna(0).astype(int) == ano_ed_int
+                                    ]
+                                    setoriais_filhas_cat = df_pna_mesmo_ano[
+                                        (df_pna_mesmo_ano["Acao_Mae"].astype(str).str.split("-").str[0].str.strip().str.upper() == cod_antigo_puro)
+                                    ].copy()
 
-                                        # Resgate seguro de Município e Periculosidade blindados
-                                        mun_linha = r_dict.get("Municipio_Ocorrencia") or r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")
-                                        perigo_linha = r_dict.get("Periculosidade_Insalubridade") or r_dict.get("Periculosidade/Insalubridade", "Não se Aplica")
+                                    if not setoriais_filhas_cat.empty:
+                                        with st.spinner(f"2/2 Atualizando vínculo de parentesco em {len(setoriais_filhas_cat)} Ação(ões) Setorial(is)..."):
+                                            col_id_pna = "ID_PNAPA" if "ID_PNAPA" in setoriais_filhas_cat.columns else "Id"
+                                            for _, r_filha in setoriais_filhas_cat.iterrows():
+                                                id_filha = int(float(r_filha[col_id_pna]))
+                                                payload_filha_cat = {
+                                                    "Acao": "Editar",
+                                                    "Id": str(id_filha),
+                                                    "ID_PNAPA": id_filha,
+                                                    "Ano": ano_ed_int,
+                                                    "Num_Acao_PNAPA": str(r_filha.get("Num_Acao_PNAPA")),
+                                                    "Acao_Ano": str(r_filha.get("Acao_Ano")),
+                                                    "Nome_Acao_Completo": str(r_filha.get("Nome_Acao_Completo")),
+                                                    "Nome_Acao_Apelido": str(r_filha.get("Nome_Acao_Apelido")),
+                                                    "Importância": str(r_filha.get("Importância", "Finalística")),
+                                                    "Indicador": str(r_filha.get("Indicador")),
+                                                    "UF_Dono": str(r_filha.get("UF_Dono", "DF")),
+                                                    "Dono_Acao": str(r_filha.get("Dono_Acao", "")),
+                                                    "Meta_Nacional": float(r_filha.get("Meta_Nacional", 0.0)),
+                                                    "Orcamento_Nacional": float(r_filha.get("Orcamento_Nacional", 0.0)),
+                                                    "Acao_Mae": str(e_num),  # Atualiza o código da mãe
+                                                    "Nivel_Catalogo": "Setorial (Tática)",
+                                                    "Tema_Padrao": str(r_filha.get("Tema_Padrao", "Outros temas")), # Preservado
+                                                    "Objetivo_Padrao": str(r_filha.get("Objetivo_Padrao", "")),       # Preservado
+                                                    "UFs_Obrigatorias": str(r_filha.get("UFs_Obrigatorias", ""))
+                                                }
+                                                try:
+                                                    requests.post(URL_FLOW_PNAPAS, json=payload_filha_cat, timeout=20)
+                                                except:
+                                                    pass
 
-                                        # 🚀 Gera o payload 100% blindado com payload_gerador
-                                        payload_sanit = payload_gerador(
-                                            val_ano=int(e_ano),
-                                            val_num_acao=str(nova_chave_acao_ano),
-                                            val_nome_acao=str(novo_nome_display),
-                                            val_indicador=str(e_ind),
-                                            nivel_selecionado=niv_linha,
-                                            nome_atividade=r_dict.get("Nome da Atividade", ""),
-                                            andamento=r_dict.get("Andamento", "Prevista"),
-                                            resultado_indicador=r_dict.get("Resultado_Indicador", 0.0),
-                                            doc_probatorio=r_dict.get("Doc_Probatorio_Exec", ""),
-                                            uf_acao=r_dict.get("UF_Acao_PNAPA", ""),
-                                            importancia=str(e_imp),
-                                            tema=str(e_tema),
-                                            objetivo=str(e_obj),
-                                            tipo_atividade=r_dict.get("Tipo de Atividade", "Operação"),
-                                            periculosidade=perigo_linha,
-                                            servidor=r_dict.get("Servidor", ""),
-                                            uf_servidor=r_dict.get("UF_Servidor", ""),
-                                            lotacao=r_dict.get("Lotacao", r_dict.get("Lotação", "")),
-                                            equipe_emergencia=r_dict.get("Equipe_Emergencias", "Sim"),
-                                            num_pcdp=r_dict.get("Número da PCDP", ""),
-                                            pais=r_dict.get("País", "Brasil"),
-                                            uf_ocorrencia=r_dict.get("UF Onde Ocorreu/Ocorrerá a Ação", ""),
-                                            estado_local=r_dict.get("Estado_Local_Acao", ""),
-                                            municipio=mun_linha,
-                                            dt_inicio=r_dict.get("Data de Início", ""),
-                                            dt_termino=r_dict.get("Data de Término", ""),
-                                            dias_plan=r_dict.get("Dias_Gastos_Plan", 0.0),
-                                            dias_exec=r_dict.get("Dias_Gastos_Exec", 0.0),
-                                            origem_recurso=r_dict.get("Origem do Recurso", "SP"),
-                                            rec_p_diarias=r_dict.get("Rec_Plan_Diarias", 0.0),
-                                            rec_p_passagens=r_dict.get("Rec_Plan_Passagens", 0.0),
-                                            rec_p_outras=r_dict.get("Rec_Plan_Outras_Despesas", 0.0),
-                                            rec_e_diarias=r_dict.get("Rec_Exec_Diarias", 0.0),
-                                            rec_e_passagens=r_dict.get("Rec_Exec_Passagens", 0.0),
-                                            rec_e_outras=r_dict.get("Rec_Exec_Outras_Despesas", 0.0),
-                                            obs=r_dict.get("Observações", ""),
-                                            justificativa=r_dict.get("Justificativa_Acao_PNAPA", ""),
-                                            id_atual=normalizar_id_t1(r_dict.get("Id")),
-                                            modo="📝 Editar Linha Existente",
-                                            df_atual=df_atual,
-                                            papel_institucional=r_dict.get("Papel_Institucional", "Coordenação"),
-                                            coordenador_operacao=r_dict.get("Coordenador_Operacao", ""),
-                                            meta_indicador=r_dict.get("Meta_Indicador", None),
-                                            codigo_atividade=r_dict.get("Codigo_Atividade", ""),
-                                            aval_qualidade=r_dict.get("Avaliacao_Qualidade", None),
-                                            aval_feedback=r_dict.get("Avaliacao_Feedback", None),
-                                            uf_coordenadora=r_dict.get("UF_Coordenadora", "")
-                                        )
-                                        payloads_cascata_pna.append(payload_sanit)
+                                time.sleep(1.5)
+                                st.cache_data.clear()
+                                if "df" in st.session_state: del st.session_state.df
+                                st.success(f"🎉 Ação Estratégica **{nova_chave_acao_ano}** atualizada com sucesso no Catálogo Oficial!")
+                                time.sleep(1)
+                                st.rerun()
 
-                                    def enviar_req_pna_macro(p):
-                                        try:
-                                            r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=25)
-                                            return 1 if r.status_code in [200, 202] else 0
-                                        except Exception:
-                                            return 0
+                            # =================================================================
+                            # RAMO B: EDITANDO UMA AÇÃO SETORIAL (TÁTICA / NÍVEL 2)
+                            # =================================================================
+                            else:
+                                # 1. Localiza na Base Principal (df_atual) as linhas do mesmo ano vinculadas ao código exato
+                                linhas_afetadas = df_atual[
+                                    (df_atual["Ano da Ação"].astype(str).str.split('.').str[0].str.strip() == str(ano_ed_int)) &
+                                    (
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_antigo_acao_ano) |
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_antigo_puro) |
+                                        (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == f"{cod_antigo_puro}-{ano_ed_int}")
+                                    )
+                                ].copy()
 
-                                    # 🚀 Concorrência reduzida (max_workers=3) para não tomar HTTP 429 do Power Automate
-                                    with ThreadPoolExecutor(max_workers=3) as executor:
-                                        resultados = list(executor.map(enviar_req_pna_macro, payloads_cascata_pna))
-                                        sucessos_macro = sum(resultados)
-                                        
-                            time.sleep(2.0)
-                            st.cache_data.clear()
-                            if "df" in st.session_state:
-                                del st.session_state.df
+                                qtd_afetadas = len(linhas_afetadas)
+                                sucessos_macro = 0
 
-                            st.success(f"🎉 Ação **{nova_chave_acao_ano}** e {sucessos_macro}/{qtd_macro_afetadas} atividades sincronizadas com sucesso!")
-                            time.sleep(1.5)
-                            st.rerun()
+                                if qtd_afetadas > 0:
+                                    with st.spinner(f"2/2 Sincronizando {qtd_afetadas} registro(s) da Ação Setorial e Atividades ({ano_ed_int})..."):
+                                        payloads_cascata = []
+                                        for _, row_orig in linhas_afetadas.iterrows():
+                                            r_dict = row_orig.to_dict()
+                                            niv_linha = str(r_dict.get("Nível", "Atividade")).strip()
+
+                                            # Sanitização de chaves blindadas para o SharePoint
+                                            mun_linha = r_dict.get("Municipio_Ocorrencia") or r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")
+                                            perigo_linha = r_dict.get("Periculosidade_Insalubridade") or r_dict.get("Periculosidade/Insalubridade", "Não se Aplica")
+
+                                            # Preserva o ID limpo sem sufixo decimal
+                                            id_limpo = str(r_dict.get("Id", "")).split(".")[0].strip()
+
+                                            payload_sanit = payload_gerador(
+                                                val_ano=ano_ed_int,
+                                                val_num_acao=str(nova_chave_acao_ano),
+                                                val_nome_acao=str(novo_nome_display),
+                                                val_indicador=str(e_ind),
+                                                nivel_selecionado=niv_linha,
+                                                nome_atividade=r_dict.get("Nome da Atividade", ""),
+                                                andamento=r_dict.get("Andamento", "Prevista"),
+                                                resultado_indicador=r_dict.get("Resultado_Indicador", 0.0),
+                                                doc_probatorio=r_dict.get("Doc_Probatorio_Exec", ""),
+                                                uf_acao=r_dict.get("UF_Acao_PNAPA", ""),
+                                                importancia=str(e_imp),
+                                                tema=str(e_tema),
+                                                objetivo=str(e_obj),
+                                                tipo_atividade=r_dict.get("Tipo de Atividade", "Operação"),
+                                                periculosidade=perigo_linha,
+                                                servidor=r_dict.get("Servidor", ""),
+                                                uf_servidor=r_dict.get("UF_Servidor", ""),
+                                                lotacao=r_dict.get("Lotacao", r_dict.get("Lotação", "")),
+                                                equipe_emergencia=r_dict.get("Equipe_Emergencias", "Sim"),
+                                                num_pcdp=r_dict.get("Número da PCDP", ""),
+                                                pais=r_dict.get("País", "Brasil"),
+                                                uf_ocorrencia=r_dict.get("UF Onde Ocorreu/Ocorrerá a Ação", ""),
+                                                estado_local=r_dict.get("Estado_Local_Acao", ""),
+                                                municipio=mun_linha,
+                                                dt_inicio=r_dict.get("Data de Início", ""),
+                                                dt_termino=r_dict.get("Data de Término", ""),
+                                                dias_plan=r_dict.get("Dias_Gastos_Plan", 0.0),
+                                                dias_exec=r_dict.get("Dias_Gastos_Exec", 0.0),
+                                                origem_recurso=r_dict.get("Origem do Recurso", "SP"),
+                                                rec_p_diarias=r_dict.get("Rec_Plan_Diarias", 0.0),
+                                                rec_p_passagens=r_dict.get("Rec_Plan_Passagens", 0.0),
+                                                rec_p_outras=r_dict.get("Rec_Plan_Outras_Despesas", 0.0),
+                                                rec_e_diarias=r_dict.get("Rec_Exec_Diarias", 0.0),
+                                                rec_e_passagens=r_dict.get("Rec_Exec_Passagens", 0.0),
+                                                rec_e_outras=r_dict.get("Rec_Exec_Outras_Despesas", 0.0),
+                                                obs=r_dict.get("Observações", ""),
+                                                justificativa=r_dict.get("Justificativa_Acao_PNAPA", ""),
+                                                id_atual=id_limpo,
+                                                modo="📝 Editar Linha Existente",
+                                                df_atual=df_atual,
+                                                papel_institucional=r_dict.get("Papel_Institucional", "Coordenação"),
+                                                coordenador_operacao=r_dict.get("Coordenador_Operacao", ""),
+                                                meta_indicador=r_dict.get("Meta_Indicador", None),
+                                                codigo_atividade=r_dict.get("Codigo_Atividade", ""),
+                                                aval_qualidade=r_dict.get("Avaliacao_Qualidade", None),
+                                                aval_feedback=r_dict.get("Avaliacao_Feedback", None),
+                                                uf_coordenadora=r_dict.get("UF_Coordenadora", "")
+                                            )
+                                            payloads_cascata.append(payload_sanit)
+
+                                        def enviar_req(p):
+                                            try:
+                                                r = requests.post(URL_FLOW_PRINCIPAL, json=p, timeout=25)
+                                                return 1 if r.status_code in [200, 202] else 0
+                                            except:
+                                                return 0
+
+                                        # Concorrência segura (max_workers=3) para evitar HTTP 429 no SharePoint
+                                        with ThreadPoolExecutor(max_workers=3) as executor:
+                                            resultados = list(executor.map(enviar_req, payloads_cascata))
+                                            sucessos_macro = sum(resultados)
+
+                                time.sleep(2.0)
+                                st.cache_data.clear()
+                                if "df" in st.session_state: del st.session_state.df
+
+                                st.success(f"🎉 Ação Setorial **{nova_chave_acao_ano}** e {sucessos_macro}/{qtd_afetadas} registro(s) sincronizados com sucesso!")
+                                time.sleep(1.5)
+                                st.rerun()
 
         # =================================================================
         # TAB 4: EXCLUIR AÇÃO
