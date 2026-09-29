@@ -2142,6 +2142,22 @@ with st.sidebar.popover("🔑 Trocar Minha Senha", use_container_width=True):
                 st.error("Erro ao localizar seu cadastro no banco.")
 
 
+# 🚪 BOTÃO DE LOGOFF
+if st.sidebar.button("🚪 Encerrar Sessão (Logoff)", use_container_width=True, key="btn_logout"):
+    st.session_state["autenticado"] = False
+    st.session_state["email_logado"] = ""
+    st.session_state["perfil_usuario"] = ""
+    st.session_state["uf_usuario"] = ""
+    st.session_state["nome_usuario"] = ""
+    st.session_state["id_serv_logado"] = 0
+    
+    # Limpa filtros em memória para não vazar estado para a próxima sessão
+    for k in ["selecoes_acoes", "selecoes_atividades"]:
+        if k in st.session_state:
+            st.session_state[k] = {}
+            
+    st.rerun()
+
 # =========================================================================
 # ⚙️ PAINEL DE CALIBRAGEM DA GOVERNANÇA (EXCLUSIVO ADMINISTRADOR)
 # =========================================================================
