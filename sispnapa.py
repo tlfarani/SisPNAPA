@@ -2010,14 +2010,18 @@ if not st.session_state["autenticado"]:
     
     c_login_space1, c_login, c_login_space2 = st.columns([1, 1.5, 1])
     with c_login:
-        with st.container(border=True):
+        # 🚀 TROCA: de st.container(border=True) para st.form(border=True)
+        with st.form("form_login_bitwarden", border=True):
             st.markdown("#### Login do Servidor")
             email_input = st.text_input("E-mail Institucional (@ibama.gov.br):").strip().lower()
             senha_input = st.text_input("Senha / Token:", type="password").strip()
             
             st.info(f"💡 **Primeiro acesso?** Se você já foi cadastrado na equipe pelo seu Coordenador, use a senha padrão: **{SENHA_PADRAO}**")
             
-            if st.button("Entrar no Sistema", type="primary", use_container_width=True):
+            # 🚀 TROCA: st.form_submit_button garante que o Bitwarden sincronize no 1º clique (ou via Enter)
+            btn_login = st.form_submit_button("Entrar no Sistema", type="primary", use_container_width=True)
+            
+            if btn_login:
                 if not email_input or not senha_input:
                     st.warning("⚠️ Preencha e-mail e senha.")
                 else:
@@ -2030,7 +2034,7 @@ if not st.session_state["autenticado"]:
                         dados_usuario = srv_match.iloc[0]
                         token_banco = str(dados_usuario.get("Token", "")).strip()
                         
-                        # 🚀 Validação segura com suporte a hash e texto puro legado
+                        # Validação segura com suporte a hash e texto puro legado
                         if validar_senha(senha_input, token_banco, SENHA_PADRAO):
                             st.session_state["autenticado"] = True
                             st.session_state["email_logado"] = email_input
@@ -2042,8 +2046,7 @@ if not st.session_state["autenticado"]:
                         else:
                             st.error("❌ Senha incorreta.")
     
-    # 🚀 O comando st.stop() é o "Cadeado". Ele impede que o resto do código abaixo seja executado se não estiver logado.
-    st.stop() 
+    st.stop()
 
 # --- RESGATE DAS VARIÁVEIS PARA O APP FUNCIONAR ---
 email_logado = st.session_state["email_logado"]
@@ -2138,6 +2141,22 @@ with st.sidebar.popover("🔑 Trocar Minha Senha", use_container_width=True):
             else:
                 st.error("Erro ao localizar seu cadastro no banco.")
 
+
+# 🚪 BOTÃO DE LOGOFF
+if st.sidebar.button("🚪 Encerrar Sessão (Logoff)", use_container_width=True, key="btn_logout"):
+    st.session_state["autenticado"] = False
+    st.session_state["email_logado"] = ""
+    st.session_state["perfil_usuario"] = ""
+    st.session_state["uf_usuario"] = ""
+    st.session_state["nome_usuario"] = ""
+    st.session_state["id_serv_logado"] = 0
+    
+    # Limpa filtros em memória para não vazar estado para a próxima sessão
+    for k in ["selecoes_acoes", "selecoes_atividades"]:
+        if k in st.session_state:
+            st.session_state[k] = {}
+            
+    st.rerun()
 
 # =========================================================================
 # ⚙️ PAINEL DE CALIBRAGEM DA GOVERNANÇA (EXCLUSIVO ADMINISTRADOR)
