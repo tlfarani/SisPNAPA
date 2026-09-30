@@ -4904,58 +4904,118 @@ elif modo == "📊 Visualizar Base":
                                 tot_ex_calc = ed_re_d_at + ed_re_p_at + ed_re_o_at
                                 st.text_input("Executado — Total Geral (R$):", value=formatar_moeda_br(tot_ex_calc), disabled=True)
 
-                            # 🚀 GESTÃO DE AUTORIZAÇÃO PRÉVIA SCDP
+                            # 🚀 GESTÃO DE AUTORIZAÇÃO PRÉVIA SCDP (COM DIAGNÓSTICO INTEGRADO)
                             st.markdown("---")
                             st.markdown("##### ✈️ Autorização Prévia para Abertura de Viagem (SCDP)")
                             
-                            # 1. Resgate defensivo das variáveis (compatível com Tela 1 e Tela 2)
+                            # 1. Resgate defensivo das variáveis
                             lot_alvo = ed_lot_at if "ed_lot_at" in locals() else lotacao
                             uf_srv_alvo = ed_uf_srv_at if "ed_uf_srv_at" in locals() else uf_servidor
                             cod_atv_alvo = ed_cod_atv if "ed_cod_atv" in locals() else codigo_atividade
                             id_chave = id_at_ref if "id_at_ref" in locals() else cod_atv_alvo
                 
                             dados_chefia = obter_chefia_lotacao(lot_alvo, uf_srv_alvo, df_lotacoes)
-                            emails_chefia = [e for e in [dados_chefia["email_tit"], dados_chefia["email_sub"]] if e and "@" in e]
+                            emails_chefia = [
+                                e.strip().lower() 
+                                for e in [dados_chefia.get("email_tit", ""), dados_chefia.get("email_sub", "")] 
+                                if e and "@" in e
+                            ]
                             
-                            # 2. Resgate do Status Atual e Aprovador (se estiver em edição)
+                            # 2. Resgate do Status Atual e Aprovador
                             status_scdp_atual = "Não Solicitada"
                             aprovador_info = ""
                             if "reg_at_alvo" in locals() and reg_at_alvo is not None:
-                                status_scdp_atual = str(reg_at_alvo.get("Status_Aprovacao_SCDP", "Não Solicitada")).strip()
-                                aprovador_info = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip()
+                                val_status = str(reg_at_alvo.get("Status_Aprovacao_SCDP", "")).strip()
+                                status_scdp_atual = "Não Solicitada" if val_status in ["", "None", "nan"] else val_status
+                                val_aprov = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip()
+                                aprovador_info = "" if val_aprov in ["None", "nan"] else val_aprov
                             
                             # 3. Interface visual adaptativa conforme o status da aprovação
+                            chave_widget_scdp = f"chk_scdp_{id_chave}"
+                            
                             if status_scdp_atual == "Aprovada":
                                 st.success(f"✅ **Viagem Autorizada pela Chefia!** Aprovador: `{aprovador_info}`. Pronta para inclusão da PCDP no SCDP.")
                                 solicitar_scdp = False
                                 
                             elif status_scdp_atual == "Pendente":
                                 st.warning("⏳ **Solicitação já enviada à chefia.** Aguardando manifestação no Teams / Outlook.")
-                                solicitar_scdp = st.checkbox("Reenviar notificação de aprovação à chefia?", key=f"chk_scdp_{id_chave}")
+                                solicitar_scdp = st.checkbox("Reenviar notificação de aprovação à chefia?", key=chave_widget_scdp)
                                 
                             elif status_scdp_atual == "Rejeitada":
                                 st.error(f"❌ **Viagem Rejeitada pela Chefia.** Motivo/Aprovador: `{aprovador_info}`.")
-                                solicitar_scdp = st.checkbox("Submeter nova solicitação de autorização após ajustes?", key=f"chk_scdp_{id_chave}")
+                                solicitar_scdp = st.checkbox("Submeter nova solicitação de autorização após ajustes?", key=chave_widget_scdp)
                                 
                             else:
                                 solicitar_scdp = st.checkbox(
                                     "📨 Solicitar autorização de viagem à chefia imediata via Teams e E-mail?",
                                     help="Marque apenas quando a missão estiver próxima de ir a campo e necessitar da abertura de PCDP no SCDP.",
-                                    key=f"chk_scdp_{id_chave}"
+                                    key=chave_widget_scdp
                                 )
                             
-                            # 4. Painel de prévia dos destinatários
+                            # 4. Painel informativo dos destinatários
                             if solicitar_scdp:
                                 if emails_chefia:
                                     destinatarios_txt = []
                                     if dados_chefia.get("nome_tit") and dados_chefia.get("email_tit"):
-                                        destinatarios_txt.append(f"**Titular:** {dados_chefia['nome_tit']} ({dados_chefia['email_tit']})")
+                                        destinatarios_txt.append(f"**Titular:** {dados_chefia['nome_tit']} (`{dados_chefia['email_tit']}`)")
                                     if dados_chefia.get("nome_sub") and dados_chefia.get("email_sub"):
-                                        destinatarios_txt.append(f"**Substituto:** {dados_chefia['nome_sub']} ({dados_chefia['email_sub']})")
-                                    
+                                        destinatarios_txt.append(f"**Substituto:** {dados_chefia['nome_sub']} (`{dados_chefia['email_sub']}`)")
                                     st.info(f"🔔 A notificação será enviada para a chefia de **{lot_alvo}**:\n- " + "\n- ".join(destinatarios_txt))
                                 else:
                                     st.error(f"⚠️ Não há e-mails de chefia cadastrados para a unidade **{lot_alvo}**. Cadastre em '🏢 Gerenciar Unidades' antes de solicitar.")
+                
+                            # =========================================================
+                            # 🧪 5. PAINEL DE DIAGNÓSTICO EM TEMPO REAL (RAIO-X NA TELA)
+                            # =========================================================
+                            with st.expander("🛠️ Diagnóstico do Disparo SCDP (Técnico)", expanded=True):
+                                col_diag1, col_diag2 = st.columns(2)
+                                with col_diag1:
+                                    st.write("**Identificação da Atividade:**")
+                                    st.code(f"ID Ref: {id_chave}\nCódigo: {cod_atv_alvo}\nLotação: {lot_alvo}\nUF Servidor: {uf_srv_alvo}")
+                                    st.write("**Status do Checkbox:**")
+                                    st.code(f"Chave: {chave_widget_scdp}\nMarcado?: {solicitar_scdp}\nNo Session State: {st.session_state.get(chave_widget_scdp)}")
+                                with col_diag2:
+                                    st.write("**Destinatários Resolvidos:**")
+                                    st.code(f"E-mails: {emails_chefia if emails_chefia else 'NENHUM ENCONTRADO!'}")
+                                    st.write("**URL do Power Automate:**")
+                                    url_status = "✅ Configurada" if URL_FLOW_APROVACAO_SCDP else "❌ VAZIA NO SCRIPT"
+                                    st.code(f"Status URL: {url_status}\nInício: {URL_FLOW_APROVACAO_SCDP[:35]}...")
+                
+                                # 🚀 BOTÃO DE DISPARO DE TESTE IMEDIATO (SEM PRECISAR SALVAR)
+                                if st.button("⚡ Testar Envio Imediato desta Atividade ao Power Automate", key=f"btn_teste_direto_{id_chave}"):
+                                    if not emails_chefia:
+                                        st.error("Não é possível testar: a lista de e-mails da chefia está vazia.")
+                                    elif not URL_FLOW_APROVACAO_SCDP:
+                                        st.error("Não é possível testar: URL_FLOW_APROVACAO_SCDP não está definida.")
+                                    else:
+                                        payload_teste_imediato = {
+                                            "id_sharepoint": str(id_chave),
+                                            "codigo_atividade": str(cod_atv_alvo),
+                                            "nome_atividade": str(ed_nome_atv if 'ed_nome_atv' in locals() else 'Atividade Teste'),
+                                            "servidor": str(ed_servidor_at if 'ed_servidor_at' in locals() else 'Servidor Teste'),
+                                            "email_servidor": email_logado,
+                                            "unidade": str(lot_alvo),
+                                            "emails_chefia": ";".join(emails_chefia),
+                                            "municipio_destino": str(ed_mun_at if 'ed_mun_at' in locals() else 'Destino'),
+                                            "uf_destino": str(ed_uf_oc_at if 'ed_uf_oc_at' in locals() else 'SP'),
+                                            "dt_inicio": str(ed_dt_i_at if 'ed_dt_i_at' in locals() else '2026-10-01'),
+                                            "dt_termino": str(ed_dt_f_at if 'ed_dt_f_at' in locals() else '2026-10-05'),
+                                            "dias_estimados": 5.0,
+                                            "rec_diarias": 1000.0,
+                                            "rec_passagens": 500.0,
+                                            "rec_outras": 0.0,
+                                            "rec_total": 1500.0,
+                                            "justificativa": "Teste imediato disparado pela Aba 4 do SisPNAPA."
+                                        }
+                                        try:
+                                            with st.spinner("Enviando requisição teste..."):
+                                                resp_teste = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_teste_imediato, timeout=8)
+                                                if resp_teste.status_code in [200, 202]:
+                                                    st.success(f"🎉 SUCESSO! Power Automate respondeu com Código {resp_teste.status_code}. O fluxo foi disparado agora!")
+                                                else:
+                                                    st.error(f"❌ O Power Automate recusou (Código {resp_teste.status_code}): {resp_teste.text}")
+                                        except Exception as e_err:
+                                            st.error(f"❌ Falha de rede: {e_err}")
 
                         with aba5_at:
                             ed_obs_at = st.text_area("Observações:", value=str(reg_at_alvo.get("Observações", "")), key=f"t1_at_obs_{id_at_ref}")
