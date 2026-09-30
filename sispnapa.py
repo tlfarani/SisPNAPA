@@ -6255,206 +6255,206 @@ elif modo == "➕ Inserir Nova Linha":
     btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", key="btn_gravar_individual_reativo")
 
     if btn_enviar_individual:
-    chave_trava = f"ins_ind_{val_num_acao}_{servidor}_{dt_inicio}_{dt_termino}"
-    verificar_duplo_clique(chave_trava)
-    bloquear_envio = False
-    
-    if nivel_selecionado in ["Ação", "Ação Setorial"]:
-        coord_op_final = ""
-        cod_atv_final = ""
-        cod_puro = str(val_num_acao).split("-")[0].strip().upper()
-        cod_comp = str(val_num_acao).strip().upper()
-        uf_limpa = str(uf_filtro_pna).strip().upper()
-        ano_alvo_str = str(val_ano).strip()
-        tema_limpo = str(tema).strip()
-        papel_limpo = str(papel_inst).strip()
-        uf_coord_limpa = str(uf_coordenadora_val).strip().upper()
+        chave_trava = f"ins_ind_{val_num_acao}_{servidor}_{dt_inicio}_{dt_termino}"
+        verificar_duplo_clique(chave_trava)
+        bloquear_envio = False
         
-        acao_estadual_ja_existe = df_atual[
-            (df_atual["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
-            (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_limpa) &
-            (df_atual["Ano da Ação"].astype(str).str.split('.').str[0].str.strip() == ano_alvo_str) &
-            (df_atual["Tema da Atividade"].astype(str).str.strip() == tema_limpo) &
-            (df_atual["Papel_Institucional"].astype(str).str.strip() == papel_limpo) &
-            (df_atual.apply(obter_uf_coordenadora_segura, axis=1).str.strip().str.upper() == uf_coord_limpa) &
-            (
-                (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_comp) |
-                (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == f"{cod_puro}-{ano_alvo_str}") |
-                (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_puro)
-            )
-        ]
-        
-        if not acao_estadual_ja_existe.empty:
-            st.error(f"⛔ **Linha Já Cadastrada:** A UF **{uf_limpa}** já possui planejamento registrado para a Ação **{val_num_acao}** como **{papel_limpo}** (UF Coordenadora: {uf_coord_limpa}) no tema **{tema_limpo}**.")
-            bloquear_envio = True
-
-    elif nivel_selecionado == "Atividade":
-        coord_op_final = funcao_campo
-        cod_atv_final = str(codigo_atividade)
-        
-        if funcao_campo == "Coordenador de Campo":
-            coordenadores_existentes = df_atual[
-                (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
-                (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(codigo_atividade).strip().upper()) &
-                (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
+        if nivel_selecionado in ["Ação", "Ação Setorial"]:
+            coord_op_final = ""
+            cod_atv_final = ""
+            cod_puro = str(val_num_acao).split("-")[0].strip().upper()
+            cod_comp = str(val_num_acao).strip().upper()
+            uf_limpa = str(uf_filtro_pna).strip().upper()
+            ano_alvo_str = str(val_ano).strip()
+            tema_limpo = str(tema).strip()
+            papel_limpo = str(papel_inst).strip()
+            uf_coord_limpa = str(uf_coordenadora_val).strip().upper()
+            
+            acao_estadual_ja_existe = df_atual[
+                (df_atual["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
+                (df_atual["UF_Acao_PNAPA"].astype(str).str.strip().str.upper() == uf_limpa) &
+                (df_atual["Ano da Ação"].astype(str).str.split('.').str[0].str.strip() == ano_alvo_str) &
+                (df_atual["Tema da Atividade"].astype(str).str.strip() == tema_limpo) &
+                (df_atual["Papel_Institucional"].astype(str).str.strip() == papel_limpo) &
+                (df_atual.apply(obter_uf_coordenadora_segura, axis=1).str.strip().str.upper() == uf_coord_limpa) &
+                (
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_comp) |
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == f"{cod_puro}-{ano_alvo_str}") |
+                    (df_atual["Número da Ação PNAPA"].astype(str).str.strip().str.upper() == cod_puro)
+                )
             ]
-            if not coordenadores_existentes.empty:
-                nome_outro_coord = coordenadores_existentes["Servidor"].iloc[0]
-                st.error(f"⛔ **Conflito de Liderança:** A atividade `{codigo_atividade}` já possui **{nome_outro_coord}** cadastrado como Coordenador de Campo.")
+            
+            if not acao_estadual_ja_existe.empty:
+                st.error(f"⛔ **Linha Já Cadastrada:** A UF **{uf_limpa}** já possui planejamento registrado para a Ação **{val_num_acao}** como **{papel_limpo}** (UF Coordenadora: {uf_coord_limpa}) no tema **{tema_limpo}**.")
                 bloquear_envio = True
-
-    if not bloquear_envio and servidor:
-        res_validacao_final = calcular_termometro_carga(
-            df=df_atual,
-            df_srv_base=df_servidores,
-            nome_servidor=servidor,
-            ano_alvo=val_ano if val_ano else 2026,
-            dias_novos=float(dias_plan),
-            importancia_nova=importancia,
-            funcao_campo=coord_op_final,
-            nivel_registro=nivel_selecionado,
-            num_acao_alvo=val_num_acao
-        )
-        if res_validacao_final["status_geral"] == "BLOQUEADO":
-            st.error("⛔ **Gravação Impedida pela Governança (2027+):** Limite de capacidade operacional ou de liderança excedido.")
-            bloquear_envio = True
-
-    # 🚀 Se houve qualquer bloqueio, libera a trava para o usuário poder tentar de novo
-    if bloquear_envio:
-        liberar_trava(chave_trava)
-    else:
-        # -------------------------------------------------------------
-        # 🚀 1. GESTÃO DO STATUS DE APROVAÇÃO SCDP
-        # -------------------------------------------------------------
-        chk_solic_scdp_t2 = False
-        emails_chefia_t2 = []
-        
-        if nivel_selecionado == "Atividade":
-            dados_chefia_t2 = obter_chefia_lotacao(lotacao, uf_servidor, df_lotacoes)
-            emails_chefia_t2 = [
-                e.strip().lower() 
-                for e in [dados_chefia_t2.get("email_tit", ""), dados_chefia_t2.get("email_sub", "")] 
-                if e and "@" in e
-            ]
-            chk_solic_scdp_t2 = bool(
-                st.session_state.get(f"chk_scdp_{codigo_atividade}", False) or
-                st.session_state.get(f"chk_scdp_{str(codigo_atividade)}", False)
+    
+        elif nivel_selecionado == "Atividade":
+            coord_op_final = funcao_campo
+            cod_atv_final = str(codigo_atividade)
+            
+            if funcao_campo == "Coordenador de Campo":
+                coordenadores_existentes = df_atual[
+                    (df_atual["Nível"].astype(str).str.strip() == "Atividade") &
+                    (df_atual["Codigo_Atividade"].astype(str).str.strip().str.upper() == str(codigo_atividade).strip().upper()) &
+                    (df_atual["Coordenador_Operacao"].astype(str).str.strip() == "Coordenador de Campo")
+                ]
+                if not coordenadores_existentes.empty:
+                    nome_outro_coord = coordenadores_existentes["Servidor"].iloc[0]
+                    st.error(f"⛔ **Conflito de Liderança:** A atividade `{codigo_atividade}` já possui **{nome_outro_coord}** cadastrado como Coordenador de Campo.")
+                    bloquear_envio = True
+    
+        if not bloquear_envio and servidor:
+            res_validacao_final = calcular_termometro_carga(
+                df=df_atual,
+                df_srv_base=df_servidores,
+                nome_servidor=servidor,
+                ano_alvo=val_ano if val_ano else 2026,
+                dias_novos=float(dias_plan),
+                importancia_nova=importancia,
+                funcao_campo=coord_op_final,
+                nivel_registro=nivel_selecionado,
+                num_acao_alvo=val_num_acao
             )
-            # Se marcou mas não tem e-mail, mantém "Não Solicitada" para não travar status no vácuo
-            if chk_solic_scdp_t2 and not emails_chefia_t2:
-                status_scdp_t2 = "Não Solicitada"
-            else:
-                status_scdp_t2 = "Pendente" if chk_solic_scdp_t2 else "Não Solicitada"
+            if res_validacao_final["status_geral"] == "BLOQUEADO":
+                st.error("⛔ **Gravação Impedida pela Governança (2027+):** Limite de capacidade operacional ou de liderança excedido.")
+                bloquear_envio = True
+    
+        # 🚀 Se houve qualquer bloqueio, libera a trava para o usuário poder tentar de novo
+        if bloquear_envio:
+            liberar_trava(chave_trava)
         else:
-            status_scdp_t2 = "Não Solicitada"
-
-        # -------------------------------------------------------------
-        # 🚀 2. GERAÇÃO DO PAYLOAD E GRAVAÇÃO NO SHAREPOINT
-        # -------------------------------------------------------------
-        payload_unico = payload_gerador(
-            val_ano=val_ano, 
-            val_num_acao=val_num_acao, 
-            val_nome_acao=val_nome_acao, 
-            val_indicador=val_indicador, 
-            nivel_selecionado=nivel_selecionado, 
-            nome_atividade=nome_atividade, 
-            andamento=andamento, 
-            resultado_indicador=resultado_indicador, 
-            doc_probatorio=doc_probatorio, 
-            uf_acao=uf_acao, 
-            importancia=importancia, 
-            tema=tema, 
-            objetivo=objetivo, 
-            tipo_atividade=tipo_atividade, 
-            periculosidade=periculosidade, 
-            servidor=servidor, 
-            uf_servidor=uf_servidor, 
-            lotacao=lotacao, 
-            equipe_emergencia=equipe_emergencia, 
-            num_pcdp=num_pcdp, 
-            pais=pais, 
-            uf_ocorrencia=uf_ocorrencia, 
-            estado_local=estado_local, 
-            municipio=municipio, 
-            dt_inicio=dt_inicio, 
-            dt_termino=dt_termino, 
-            dias_plan=dias_plan, 
-            dias_exec=dias_exec, 
-            origem_recurso=origem_recurso, 
-            rec_p_diarias=rec_p_diarias, 
-            rec_p_passagens=rec_p_passagens, 
-            rec_p_outras=rec_p_outras, 
-            rec_e_diarias=rec_e_diarias, 
-            rec_e_passagens=rec_e_passagens, 
-            rec_e_outras=rec_e_outras, 
-            obs=obs, 
-            justificativa=justificativa, 
-            id_atual=id_atual, 
-            modo=modo, 
-            df_atual=df_atual,
-            papel_institucional=papel_inst, 
-            coordenador_operacao=coord_op_final, 
-            meta_indicador=meta_indicador,
-            codigo_atividade=cod_atv_final,
-            uf_coordenadora=uf_coordenadora_val,
-            status_scdp=status_scdp_t2,
-            aprovador_scdp=""
-        )
-        
-        with st.spinner("⏳ Gravando com segurança no SharePoint..."):
-            executar_envio_sharepoint([payload_unico])
-
-        # -------------------------------------------------------------
-        # 🚀 3. DISPARO DO CARD NO TEAMS / OUTLOOK (SE MARCADO)
-        # -------------------------------------------------------------
-        if nivel_selecionado == "Atividade" and chk_solic_scdp_t2:
-            if not emails_chefia_t2:
-                st.warning(f"⚠️ Atividade salva! Porém a lotação **{lotacao}** não possui chefias com e-mail cadastrado em 'Gerenciar Unidades'. A notificação não pôde ser disparada.")
-            elif not URL_FLOW_APROVACAO_SCDP:
-                st.warning("⚠️ Atividade salva, mas a URL do fluxo de aprovação não está definida.")
+            # -------------------------------------------------------------
+            # 🚀 1. GESTÃO DO STATUS DE APROVAÇÃO SCDP
+            # -------------------------------------------------------------
+            chk_solic_scdp_t2 = False
+            emails_chefia_t2 = []
+            
+            if nivel_selecionado == "Atividade":
+                dados_chefia_t2 = obter_chefia_lotacao(lotacao, uf_servidor, df_lotacoes)
+                emails_chefia_t2 = [
+                    e.strip().lower() 
+                    for e in [dados_chefia_t2.get("email_tit", ""), dados_chefia_t2.get("email_sub", "")] 
+                    if e and "@" in e
+                ]
+                chk_solic_scdp_t2 = bool(
+                    st.session_state.get(f"chk_scdp_{codigo_atividade}", False) or
+                    st.session_state.get(f"chk_scdp_{str(codigo_atividade)}", False)
+                )
+                # Se marcou mas não tem e-mail, mantém "Não Solicitada" para não travar status no vácuo
+                if chk_solic_scdp_t2 and not emails_chefia_t2:
+                    status_scdp_t2 = "Não Solicitada"
+                else:
+                    status_scdp_t2 = "Pendente" if chk_solic_scdp_t2 else "Não Solicitada"
             else:
-                srv_row_t2 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
-                email_solic_t2 = str(srv_row_t2["E_mail"].iloc[0]).strip().lower() if not srv_row_t2.empty and str(srv_row_t2["E_mail"].iloc[0]).strip() else email_logado
-                
-                tot_fin_plan = float(calc_tot_p_atv if 'calc_tot_p_atv' in locals() else (float(rec_p_diarias) + float(rec_p_passagens) + float(rec_p_outras)))
-
-                payload_scdp_ins = {
-                    "id_sharepoint": "",  # Linha nova (Power Automate busca pelo Obter Itens)
-                    "codigo_atividade": str(cod_atv_final),
-                    "nome_atividade": str(nome_atividade),
-                    "servidor": str(servidor),
-                    "email_servidor": email_solic_t2,
-                    "unidade": str(lotacao),
-                    "emails_chefia": ";".join(emails_chefia_t2),
-                    "municipio_destino": str(municipio),
-                    "uf_destino": str(uf_ocorrencia),
-                    "dt_inicio": str(dt_inicio),
-                    "dt_termino": str(dt_termino),
-                    "dias_estimados": float(dias_plan),
-                    "rec_diarias": float(rec_p_diarias),
-                    "rec_passagens": float(rec_p_passagens),
-                    "rec_outras": float(rec_p_outras),
-                    "rec_total": tot_fin_plan,
-                    "justificativa": str(obs).strip() or "Operação de campo programada no âmbito do PNAPA."
-                }
-                try:
-                    resp_novo = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp_ins, timeout=8)
-                    if resp_novo.status_code in [200, 202]:
-                        st.toast("📨 Notificação enviada à chefia no Teams e E-mail!", icon="✈️")
-                    else:
-                        st.toast(f"⚠️ Atividade salva, mas o Teams recusou ({resp_novo.status_code})", icon="⚠️")
-                except Exception:
-                    st.toast("⚠️ Atividade salva, mas houve instabilidade na conexão com o Teams.", icon="⚠️")
-
-        # -------------------------------------------------------------
-        # 🚀 4. LIMPEZA E FINALIZAÇÃO
-        # -------------------------------------------------------------
-        st.cache_data.clear()
-        if "df" in st.session_state: 
-            del st.session_state.df
-        liberar_trava(chave_trava)
-        time.sleep(1.5)
-        st.rerun()
+                status_scdp_t2 = "Não Solicitada"
+    
+            # -------------------------------------------------------------
+            # 🚀 2. GERAÇÃO DO PAYLOAD E GRAVAÇÃO NO SHAREPOINT
+            # -------------------------------------------------------------
+            payload_unico = payload_gerador(
+                val_ano=val_ano, 
+                val_num_acao=val_num_acao, 
+                val_nome_acao=val_nome_acao, 
+                val_indicador=val_indicador, 
+                nivel_selecionado=nivel_selecionado, 
+                nome_atividade=nome_atividade, 
+                andamento=andamento, 
+                resultado_indicador=resultado_indicador, 
+                doc_probatorio=doc_probatorio, 
+                uf_acao=uf_acao, 
+                importancia=importancia, 
+                tema=tema, 
+                objetivo=objetivo, 
+                tipo_atividade=tipo_atividade, 
+                periculosidade=periculosidade, 
+                servidor=servidor, 
+                uf_servidor=uf_servidor, 
+                lotacao=lotacao, 
+                equipe_emergencia=equipe_emergencia, 
+                num_pcdp=num_pcdp, 
+                pais=pais, 
+                uf_ocorrencia=uf_ocorrencia, 
+                estado_local=estado_local, 
+                municipio=municipio, 
+                dt_inicio=dt_inicio, 
+                dt_termino=dt_termino, 
+                dias_plan=dias_plan, 
+                dias_exec=dias_exec, 
+                origem_recurso=origem_recurso, 
+                rec_p_diarias=rec_p_diarias, 
+                rec_p_passagens=rec_p_passagens, 
+                rec_p_outras=rec_p_outras, 
+                rec_e_diarias=rec_e_diarias, 
+                rec_e_passagens=rec_e_passagens, 
+                rec_e_outras=rec_e_outras, 
+                obs=obs, 
+                justificativa=justificativa, 
+                id_atual=id_atual, 
+                modo=modo, 
+                df_atual=df_atual,
+                papel_institucional=papel_inst, 
+                coordenador_operacao=coord_op_final, 
+                meta_indicador=meta_indicador,
+                codigo_atividade=cod_atv_final,
+                uf_coordenadora=uf_coordenadora_val,
+                status_scdp=status_scdp_t2,
+                aprovador_scdp=""
+            )
+            
+            with st.spinner("⏳ Gravando com segurança no SharePoint..."):
+                executar_envio_sharepoint([payload_unico])
+    
+            # -------------------------------------------------------------
+            # 🚀 3. DISPARO DO CARD NO TEAMS / OUTLOOK (SE MARCADO)
+            # -------------------------------------------------------------
+            if nivel_selecionado == "Atividade" and chk_solic_scdp_t2:
+                if not emails_chefia_t2:
+                    st.warning(f"⚠️ Atividade salva! Porém a lotação **{lotacao}** não possui chefias com e-mail cadastrado em 'Gerenciar Unidades'. A notificação não pôde ser disparada.")
+                elif not URL_FLOW_APROVACAO_SCDP:
+                    st.warning("⚠️ Atividade salva, mas a URL do fluxo de aprovação não está definida.")
+                else:
+                    srv_row_t2 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
+                    email_solic_t2 = str(srv_row_t2["E_mail"].iloc[0]).strip().lower() if not srv_row_t2.empty and str(srv_row_t2["E_mail"].iloc[0]).strip() else email_logado
+                    
+                    tot_fin_plan = float(calc_tot_p_atv if 'calc_tot_p_atv' in locals() else (float(rec_p_diarias) + float(rec_p_passagens) + float(rec_p_outras)))
+    
+                    payload_scdp_ins = {
+                        "id_sharepoint": "",  # Linha nova (Power Automate busca pelo Obter Itens)
+                        "codigo_atividade": str(cod_atv_final),
+                        "nome_atividade": str(nome_atividade),
+                        "servidor": str(servidor),
+                        "email_servidor": email_solic_t2,
+                        "unidade": str(lotacao),
+                        "emails_chefia": ";".join(emails_chefia_t2),
+                        "municipio_destino": str(municipio),
+                        "uf_destino": str(uf_ocorrencia),
+                        "dt_inicio": str(dt_inicio),
+                        "dt_termino": str(dt_termino),
+                        "dias_estimados": float(dias_plan),
+                        "rec_diarias": float(rec_p_diarias),
+                        "rec_passagens": float(rec_p_passagens),
+                        "rec_outras": float(rec_p_outras),
+                        "rec_total": tot_fin_plan,
+                        "justificativa": str(obs).strip() or "Operação de campo programada no âmbito do PNAPA."
+                    }
+                    try:
+                        resp_novo = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp_ins, timeout=8)
+                        if resp_novo.status_code in [200, 202]:
+                            st.toast("📨 Notificação enviada à chefia no Teams e E-mail!", icon="✈️")
+                        else:
+                            st.toast(f"⚠️ Atividade salva, mas o Teams recusou ({resp_novo.status_code})", icon="⚠️")
+                    except Exception:
+                        st.toast("⚠️ Atividade salva, mas houve instabilidade na conexão com o Teams.", icon="⚠️")
+    
+            # -------------------------------------------------------------
+            # 🚀 4. LIMPEZA E FINALIZAÇÃO
+            # -------------------------------------------------------------
+            st.cache_data.clear()
+            if "df" in st.session_state: 
+                del st.session_state.df
+            liberar_trava(chave_trava)
+            time.sleep(1.5)
+            st.rerun()
 
     # =================================================================
     # 2. CARGA EM LOTE (ATIVIDADE) MULTI-SELECT
