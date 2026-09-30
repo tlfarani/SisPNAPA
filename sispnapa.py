@@ -4330,6 +4330,25 @@ elif modo == "📊 Visualizar Base":
             df_base_atvs["AEAC"] = df_base_atvs["AEAC"].fillna("Não")
             df_base_atvs["Funcao"] = df_base_atvs["Funcao"].fillna("")
 
+            # 🚀 1. TRATAMENTO SEGURO DAS COLUNAS DE APROVAÇÃO SCDP
+            if "Status_Aprovacao_SCDP" not in df_base_atvs.columns:
+                df_base_atvs["Status_Aprovacao_SCDP"] = "Não Solicitada"
+            else:
+                df_base_atvs["Status_Aprovacao_SCDP"] = (
+                    df_base_atvs["Status_Aprovacao_SCDP"]
+                    .fillna("Não Solicitada")
+                    .replace(["", "None", "nan", "null"], "Não Solicitada")
+                )
+
+            if "Aprovador_SCDP" not in df_base_atvs.columns:
+                df_base_atvs["Aprovador_SCDP"] = ""
+            else:
+                df_base_atvs["Aprovador_SCDP"] = (
+                    df_base_atvs["Aprovador_SCDP"]
+                    .fillna("")
+                    .replace(["None", "nan", "null"], "")
+                )
+
             st.caption(f"📌 Total de Atividades de Campo cadastradas: **{len(df_base_atvs)}** registros.")
 
             if df_base_atvs.empty:
@@ -4350,11 +4369,13 @@ elif modo == "📊 Visualizar Base":
 
                 df_base_atvs["Status de Conclusão"] = df_base_atvs.apply(calc_status_atv_t1, axis=1)
 
-                chaves_filtros_atv = ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_status_at", "f_tema_at", "f_fiscal_at", "f_aeac_at", "f_funcao_srv_at"]
-                
-                # 🚀 Inicialização com o Ano Corrente como padrão
+                # 🚀 2. INCLUI 'f_scdp_at' NA LISTA DE FILTROS DO SESSION_STATE
                 ano_corrente_str = str(date.today().year)
-                chaves_filtros_atv = ["f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", "f_func_at", "f_status_at", "f_tema_at", "f_fiscal_at", "f_aeac_at", "f_funcao_srv_at"]
+                chaves_filtros_atv = [
+                    "f_ano_at", "f_pna_at", "f_cod_at", "f_uf_at", "f_srv_at", 
+                    "f_func_at", "f_status_at", "f_scdp_at", "f_tema_at", 
+                    "f_fiscal_at", "f_aeac_at", "f_funcao_srv_at"
+                ]
                 
                 for k in chaves_filtros_atv:
                     if k not in st.session_state: 
@@ -4376,6 +4397,7 @@ elif modo == "📊 Visualizar Base":
                     st.session_state.pop("f_slider_dts_at", None)
                     st.session_state.pop("last_ano_at_sel", None)
 
+                # 🚀 3. MAPEAMENTO DO FILTRO DE SCDP NO DICIONÁRIO
                 filtros_at = {
                     "ano": ("Ano da Ação", st.session_state["f_ano_at"]),
                     "pna": ("Número da Ação PNAPA", st.session_state["f_pna_at"]),
@@ -4384,6 +4406,7 @@ elif modo == "📊 Visualizar Base":
                     "srv": ("Servidor", st.session_state["f_srv_at"]),
                     "func": ("Coordenador_Operacao", st.session_state["f_func_at"]),
                     "status": ("Status de Conclusão", st.session_state["f_status_at"]),
+                    "scdp": ("Status_Aprovacao_SCDP", st.session_state["f_scdp_at"]),
                     "tema": ("Tema da Atividade", st.session_state["f_tema_at"]),
                     "fiscal": ("Fiscal", st.session_state["f_fiscal_at"]),            
                     "aeac": ("AEAC", st.session_state["f_aeac_at"]),                  
@@ -4480,12 +4503,22 @@ elif modo == "📊 Visualizar Base":
                         filtros_at["funcao_srv"] = ("Funcao", f_funcao_srv_at)
 
                 with c_fat3:
-                    with st.popover("🏷️ Classificação & Atividade", use_container_width=True):
+                    with st.popover("🏷️️ Classificação & Atividade", use_container_width=True):
                         df_p_status_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "status")
                         status_disp_at = ["Todos"] + sorted([s for s in df_p_status_at["Status de Conclusão"].dropna().astype(str).unique() if s != ""])
                         idx_status_at = status_disp_at.index(filtros_at["status"][1]) if filtros_at["status"][1] in status_disp_at else 0
                         f_status_at = st.selectbox("Status de Conclusão:", status_disp_at, index=idx_status_at, key="f_status_at")
                         filtros_at["status"] = ("Status de Conclusão", f_status_at)
+
+                        # 🚀 4. NOVO WIDGET: SELETOR DE STATUS SCDP NO POPOVER
+                        df_p_scdp_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "scdp")
+                        scdp_disp = sorted([str(s).strip() for s in df_p_scdp_at["Status_Aprovacao_SCDP"].dropna().unique() if str(s).strip() != ""])
+                        opcs_scdp_at = ["Todos"] + [s for s in ["Aprovada", "Pendente", "Rejeitada", "Não Solicitada"] if s in scdp_disp]
+                        if not opcs_scdp_at or len(opcs_scdp_at) == 1:
+                            opcs_scdp_at = ["Todos", "Aprovada", "Pendente", "Rejeitada", "Não Solicitada"]
+                        idx_scdp_at = opcs_scdp_at.index(filtros_at["scdp"][1]) if filtros_at["scdp"][1] in opcs_scdp_at else 0
+                        f_scdp_at = st.selectbox("✈️ Status SCDP:", opcs_scdp_at, index=idx_scdp_at, key="f_scdp_at")
+                        filtros_at["scdp"] = ("Status_Aprovacao_SCDP", f_scdp_at)
 
                         df_p_pna_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, "pna")
                         acoes_at = sorted(df_p_pna_at["Número da Ação PNAPA"].dropna().astype(str).unique().tolist())
@@ -4513,9 +4546,12 @@ elif modo == "📊 Visualizar Base":
 
                 df_exib_at = aplicar_filtros_responsivos(df_base_atvs, filtros_at, None)
 
+                # 🚀 5. INCLUSÃO DAS COLUNAS DE SCDP NA TABELA PRINCIPAL
                 COLS_TABELA_ATIVIDADES = [
                     "Id", "Ano da Ação", "Número da Ação PNAPA", "Codigo_Atividade", 
-                    "Nome da Atividade", "Status de Conclusão", "Papel_Institucional", "UF_Coordenadora", "Coordenador_Operacao", 
+                    "Nome da Atividade", "Status de Conclusão", 
+                    "Status_Aprovacao_SCDP", "Aprovador_SCDP",  # 👈 Novas colunas posicionadas
+                    "Papel_Institucional", "UF_Coordenadora", "Coordenador_Operacao", 
                     "Servidor", "UF_Servidor", "Lotação", "UF_Acao_PNAPA", 
                     "Municipio Onde Ocorreu/Ocorrerá a Ação", "Indicador", 
                     "Resultado_Indicador", "Doc_Probatorio_Exec", "Data de Início", 
@@ -4541,6 +4577,17 @@ elif modo == "📊 Visualizar Base":
                 df_tab_at["Rec_Plan_Total"] = df_tab_at["Rec_Plan_Total"].apply(formatar_moeda_br)
                 df_tab_at["Rec_Exec_Total"] = df_tab_at["Rec_Exec_Total"].apply(formatar_moeda_br)
                 
+                # 🚀 Badges visuais amigáveis para a coluna Status_Aprovacao_SCDP
+                mapa_scdp_badges = {
+                    "Aprovada": "✅ Aprovada",
+                    "Pendente": "⏳ Pendente",
+                    "Rejeitada": "❌ Rejeitada",
+                    "Não Solicitada": "⚪ Não Solicitada"
+                }
+                df_tab_at["Status_Aprovacao_SCDP"] = df_tab_at["Status_Aprovacao_SCDP"].map(
+                    lambda v: mapa_scdp_badges.get(str(v).strip(), str(v))
+                )
+
                 df_tab_at = df_tab_at.sort_values(by=["Data de Início", "Id"], ascending=[True, True], na_position='last').reset_index(drop=True)
 
                 if "Avaliacao_Qualidade" not in df_tab_at.columns: df_tab_at["Avaliacao_Qualidade"] = "Não Avaliada"
@@ -4578,6 +4625,11 @@ elif modo == "📊 Visualizar Base":
                 colunas_travadas_at["Id"] = st.column_config.NumberColumn("Id", format="%d", disabled=True)
                 colunas_travadas_at["Id_Str"] = None
                 colunas_travadas_at["Status de Conclusão"] = st.column_config.TextColumn("Status de Conclusão", disabled=True)
+                
+                # 🚀 6. CONFIGURAÇÃO VISUAL DAS NOVAS COLUNAS NO EDITOR
+                colunas_travadas_at["Status_Aprovacao_SCDP"] = st.column_config.TextColumn("Status SCDP", disabled=True)
+                colunas_travadas_at["Aprovador_SCDP"] = st.column_config.TextColumn("Autorizado Por", disabled=True)
+                
                 colunas_travadas_at["Resultado_Indicador"] = st.column_config.TextColumn("Resultado Indicador", disabled=True)
                 colunas_travadas_at["Dias_Gastos_Plan"] = st.column_config.TextColumn("Dias Plan.", disabled=True)
                 colunas_travadas_at["Dias_Gastos_Exec"] = st.column_config.TextColumn("Dias Exec.", disabled=True)
