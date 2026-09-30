@@ -5017,14 +5017,14 @@ elif modo == "📊 Visualizar Base":
                                     if e and "@" in e
                                 ]
                                 
-                                # Resgate defensivo do status atual (trata nulos, vazios e 'nan')
-                                val_status_bruto = str(reg_at_alvo.get("Status_Aprovacao_SCDP", "")).strip()
+                                # Resgate defensivo do status e aprovador atuais
+                                val_status_bruto = str(reg_at_alvo.get("Status_Aprovacao_SCDP", "")).strip() if reg_at_alvo is not None else ""
                                 status_scdp_antigo = "Não Solicitada" if val_status_bruto in ["", "None", "nan"] else val_status_bruto
                                 
-                                val_aprovador_bruto = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip()
+                                val_aprovador_bruto = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip() if reg_at_alvo is not None else ""
                                 aprovador_scdp_antigo = "" if val_aprovador_bruto in ["None", "nan"] else val_aprovador_bruto
                                 
-                                # Captura resiliente: verifica chaves por ID, por código ou qualquer variação no session_state
+                                # Captura resiliente do checkbox: cobre ID numérico, ID em texto, código da atividade ou chave ativa na sessão
                                 chk_solic_scdp = bool(
                                     st.session_state.get(f"chk_scdp_{id_at_ref}", False) or
                                     st.session_state.get(f"chk_scdp_{str(id_at_ref)}", False) or
@@ -5036,7 +5036,7 @@ elif modo == "📊 Visualizar Base":
                                     )
                                 )
                                 
-                                # Define o status final que irá para a coluna do SharePoint
+                                # Define o status para a gravação no SharePoint
                                 status_scdp_final = "Pendente" if chk_solic_scdp else status_scdp_antigo
 
                                 # -------------------------------------------------------------
@@ -5103,6 +5103,8 @@ elif modo == "📊 Visualizar Base":
                                 if chk_solic_scdp:
                                     if not emails_chefia:
                                         st.warning(f"⚠️ A solicitação foi marcada, mas a lotação **{ed_lot_at}** não possui e-mails de chefia cadastrados em 'Gerenciar Unidades'. O card no Teams não pôde ser enviado.")
+                                    elif not URL_FLOW_APROVACAO_SCDP:
+                                        st.error("⚠️ URL do fluxo de aprovação não configurada em secrets/código.")
                                     else:
                                         srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
                                         email_solic = str(srv_row["E_mail"].iloc[0]).strip().lower() if not srv_row.empty and str(srv_row["E_mail"].iloc[0]).strip() else email_logado
@@ -5130,18 +5132,22 @@ elif modo == "📊 Visualizar Base":
                                         }
                                         
                                         try:
-                                            with st.spinner("📨 Enviando card de aprovação para o Teams e E-mail da chefia..."):
-                                                resp_flow = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp, timeout=8)
+                                            with st.spinner("📨 Enviando notificação para o Teams e E-mail da chefia..."):
+                                                resp_flow = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp, timeout=10)
                                                 if resp_flow.status_code in [200, 202]:
-                                                    st.toast("✈️ Notificação enviada à chefia no Teams e Outlook com sucesso!", icon="📨")
+                                                    st.toast("✈️ Solicitação enviada à chefia no Teams e Outlook com sucesso!", icon="📨")
                                                 else:
-                                                    st.error(f"⚠️️ O Power Automate recusou o envio (Código {resp_flow.status_code}): {resp_flow.text}")
+                                                    st.error(f"⚠️ O Power Automate recusou o envio (Código {resp_flow.status_code}): {resp_flow.text}")
                                         except Exception as err:
-                                            st.error(f"⚠️ Erro ao disparar para o Teams: {err}")
+                                            st.error(f"⚠️ Falha de rede ao disparar o webhook do SCDP: {err}")
 
+                                # -------------------------------------------------------------
+                                # 🚀 4. FINALIZAÇÃO E ATUALIZAÇÃO DA SESSÃO
+                                # -------------------------------------------------------------
                                 st.session_state["selecoes_atividades"] = {}
                                 st.cache_data.clear()
-                                if "df" in st.session_state: del st.session_state.df
+                                if "df" in st.session_state: 
+                                    del st.session_state.df
                                 liberar_trava(chave_trava)
                                 time.sleep(1.5)
                                 st.rerun()
