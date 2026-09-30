@@ -4982,24 +4982,36 @@ elif modo == "📊 Visualizar Base":
                                 val_aprov = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip()
                                 aprovador_info = "" if val_aprov in ["None", "nan"] else val_aprov
                             
-                            # 3. Interface visual adaptativa conforme o status da aprovação
+                            # 3. Interface visual adaptativa: status atual + opção SEMPRE aberta para novo pedido
                             chave_widget_scdp = f"chk_scdp_{id_chave}"
-                            
+                
                             if status_scdp_atual == "Aprovada":
-                                st.success(f"✅ **Viagem Autorizada pela Chefia!** Aprovador: `{aprovador_info}`. Pronta para inclusão da PCDP no SCDP.")
-                                solicitar_scdp = False
+                                st.success(f"✅ **Viagem Autorizada pela Chefia!** Aprovador: `{aprovador_info}`.")
+                                solicitar_scdp = st.checkbox(
+                                    "🔄 **Solicitar nova autorização à chefia** (alterou datas, valores, equipe ou destino)?",
+                                    help="Marque caso tenha feito mudanças na atividade que demandem nova concordância da chefia. O status voltará para 'Pendente'.",
+                                    key=chave_widget_scdp
+                                )
                                 
                             elif status_scdp_atual == "Pendente":
                                 st.warning("⏳ **Solicitação já enviada à chefia.** Aguardando manifestação no Teams / Outlook.")
-                                solicitar_scdp = st.checkbox("Reenviar notificação de aprovação à chefia?", key=chave_widget_scdp)
+                                solicitar_scdp = st.checkbox(
+                                    "🔁 **Reenviar notificação de aprovação** (com os dados e valores atualizados)?",
+                                    help="Marque para reenviar um novo card com os parâmetros modificados para a chefia imediata.",
+                                    key=chave_widget_scdp
+                                )
                                 
                             elif status_scdp_atual == "Rejeitada":
                                 st.error(f"❌ **Viagem Rejeitada pela Chefia.** Motivo/Aprovador: `{aprovador_info}`.")
-                                solicitar_scdp = st.checkbox("Submeter nova solicitação de autorização após ajustes?", key=chave_widget_scdp)
+                                solicitar_scdp = st.checkbox(
+                                    "📨 **Submeter nova solicitação de autorização após ajustes?**",
+                                    help="Marque para submeter a atividade ajustada para uma nova avaliação da chefia.",
+                                    key=chave_widget_scdp
+                                )
                                 
                             else:
                                 solicitar_scdp = st.checkbox(
-                                    "📨 Solicitar autorização de viagem à chefia imediata via Teams e E-mail?",
+                                    "📨 **Solicitar autorização de viagem à chefia imediata via Teams e E-mail?**",
                                     help="Marque apenas quando a missão estiver próxima de ir a campo e necessitar da abertura de PCDP no SCDP.",
                                     key=chave_widget_scdp
                                 )
@@ -5077,14 +5089,13 @@ elif modo == "📊 Visualizar Base":
                                     if e and "@" in e
                                 ]
                                 
-                                # Resgate defensivo do status e aprovador atuais
                                 val_status_bruto = str(reg_at_alvo.get("Status_Aprovacao_SCDP", "")).strip() if reg_at_alvo is not None else ""
                                 status_scdp_antigo = "Não Solicitada" if val_status_bruto in ["", "None", "nan"] else val_status_bruto
                                 
                                 val_aprovador_bruto = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip() if reg_at_alvo is not None else ""
                                 aprovador_scdp_antigo = "" if val_aprovador_bruto in ["None", "nan"] else val_aprovador_bruto
                                 
-                                # Captura resiliente do checkbox: cobre ID numérico, ID em texto, código da atividade ou chave ativa na sessão
+                                # Captura do checkbox (independente de estar Nova, Aprovada ou Pendente)
                                 chk_solic_scdp = bool(
                                     st.session_state.get(f"chk_scdp_{id_at_ref}", False) or
                                     st.session_state.get(f"chk_scdp_{str(id_at_ref)}", False) or
@@ -5096,8 +5107,15 @@ elif modo == "📊 Visualizar Base":
                                     )
                                 )
                                 
-                                # Define o status para a gravação no SharePoint
-                                status_scdp_final = "Pendente" if chk_solic_scdp else status_scdp_antigo
+                                # 💡 Se solicitou novo pedido:
+                                # - Status vai para "Pendente"
+                                # - Aprovador é limpo para aguardar nova resposta
+                                if chk_solic_scdp:
+                                    status_scdp_final = "Pendente"
+                                    aprovador_scdp_final = ""
+                                else:
+                                    status_scdp_final = status_scdp_antigo
+                                    aprovador_scdp_final = aprovador_scdp_antigo
 
                                 # -------------------------------------------------------------
                                 # 🚀 2. GERAÇÃO DO PAYLOAD E GRAVAÇÃO NO SHAREPOINT
@@ -5151,7 +5169,7 @@ elif modo == "📊 Visualizar Base":
                                     aval_feedback="",
                                     uf_coordenadora=ed_uf_coord_at,
                                     status_scdp=status_scdp_final,
-                                    aprovador_scdp=aprovador_scdp_antigo
+                                    aprovador_scdp=aprovador_scdp_final
                                 )
                                 
                                 with st.spinner("⏳ Gravando alterações no SharePoint..."):
