@@ -6456,10 +6456,10 @@ elif modo == "➕ Inserir Nova Linha":
                             time.sleep(1)
                             st.rerun()
 
-# --- TELA 3: GERENCIAR UNIDADES (COM PREENCHIMENTO AUTOMÁTICO E CASCATA) ---
+# --- TELA 3: GERENCIAR UNIDADES (COM PREENCHIMENTO AUTOMÁTICO, CHEFIAS E CASCATA) ---
 elif modo == "🏢 Gerenciar Unidades":
     st.markdown("<h3 style='color: #03170a;'>🏢 Gerenciamento de Unidades / Lotações (Tabela Auxiliar)</h3>", unsafe_allow_html=True)
-    st.caption("Catálogo corporativo de setores e unidades de lotação dos servidores.")
+    st.caption("Catálogo corporativo de setores, unidades de lotação e chefias responsáveis pela anuência de viagens (SCDP).")
     
     # 1. VISUALIZAÇÃO CONDICIONAL POR PERFIL
     df_visualizacao_uni = df_lotacoes if perfil_usuario == "Administrador" else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
@@ -6468,10 +6468,31 @@ elif modo == "🏢 Gerenciar Unidades":
     if df_visualizacao_uni.empty:
         st.info(f"Nenhuma unidade cadastrada para a UF {uf_usuario}.")
     else:
-        colunas_validas = [col for col in ["ID_UF", "UF", "Unidade"] if col in df_visualizacao_uni.columns]
-        df_limpo_uni = df_visualizacao_uni[colunas_validas]
-        def estilar_uni(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
-        st.dataframe(df_limpo_uni.reset_index(drop=True).style.apply(estilar_uni, axis=1), use_container_width=True, hide_index=True)
+        # 🚀 Exibição com as colunas de chefia
+        cols_exib_uni = [
+            "ID_UF", "UF", "Unidade", 
+            "Nome_Chefe_Titular", "Email_Chefe_Titular", 
+            "Nome_Chefe_Substituto", "Email_Chefe_Substituto"
+        ]
+        colunas_validas = [col for col in cols_exib_uni if col in df_visualizacao_uni.columns]
+        df_limpo_uni = df_visualizacao_uni[colunas_validas].copy()
+        
+        mapa_cabecalhos_uni = {
+            "ID_UF": "ID",
+            "Nome_Chefe_Titular": "Chefe Titular",
+            "Email_Chefe_Titular": "E-mail Titular",
+            "Nome_Chefe_Substituto": "Chefe Substituto",
+            "Email_Chefe_Substituto": "E-mail Substituto"
+        }
+        
+        def estilar_uni(linha): 
+            return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
+            
+        st.dataframe(
+            df_limpo_uni.rename(columns=mapa_cabecalhos_uni).reset_index(drop=True).style.apply(estilar_uni, axis=1), 
+            use_container_width=True, 
+            hide_index=True
+        )
     
     st.markdown("---")
     t_add, t_edit, t_del = st.tabs(["➕ Adicionar Unidade", "📝 Alterar Unidade", "🗑️ Excluir Unidade"])
@@ -6491,11 +6512,21 @@ elif modo == "🏢 Gerenciar Unidades":
         with c_add2:
             nova_uni = st.text_input("Nome da Nova Unidade (Ex: Nupaem-SP, SUPES-RJ):", key="uni_add_nome").strip()
             
+        # 🚀 Novos Campos de Chefia para Inserção
+        st.markdown("###### 👤 Chefia Imediata (Para autorização prévia de viagens no Teams / SCDP)")
+        c_ch_add1, c_ch_add2 = st.columns(2)
+        with c_ch_add1:
+            nome_tit_add = st.text_input("Nome do Chefe Titular:", key="uni_add_nome_tit").strip()
+            email_tit_add = st.text_input("E-mail do Chefe Titular (@ibama.gov.br):", key="uni_add_email_tit").strip().lower()
+        with c_ch_add2:
+            nome_sub_add = st.text_input("Nome do Chefe Substituto:", key="uni_add_nome_sub").strip()
+            email_sub_add = st.text_input("E-mail do Chefe Substituto (@ibama.gov.br):", key="uni_add_email_sub").strip().lower()
+            
         if st.button("🚀 Gravar Unidade", type="primary", key="btn_salvar_nova_uni"):
             if not nova_uni:
                 st.error("⚠️ O nome da unidade é obrigatório.")
             else:
-                # 🚀 CÁLCULO SEGURO DO PRÓXIMO ID_UF
+                # Cálculo seguro do próximo ID_UF
                 col_id_uf = "ID_UF" if "ID_UF" in df_lotacoes.columns else "Id"
                 if not df_lotacoes.empty and col_id_uf in df_lotacoes.columns:
                     id_novo_uf = int(pd.to_numeric(df_lotacoes[col_id_uf], errors='coerce').fillna(0).max() + 1)
@@ -6504,12 +6535,16 @@ elif modo == "🏢 Gerenciar Unidades":
 
                 payload_uni = {
                     "Acao": "Inserir",
-                    "ID_UF": id_novo_uf,       # 👈 Chave primária enviada
+                    "ID_UF": id_novo_uf,
                     "UF": uf_uni_add,
-                    "Unidade": nova_uni
+                    "Unidade": nova_uni,
+                    "Nome_Chefe_Titular": nome_tit_add,
+                    "Email_Chefe_Titular": email_tit_add,
+                    "Nome_Chefe_Substituto": nome_sub_add,
+                    "Email_Chefe_Substituto": email_sub_add
                 }
 
-                with st.spinner("Sincronizando nova unidade com o SharePoint..."):
+                with st.spinner("Sincronizando nova unidade com a base..."):
                     executar_api_unidades(payload_uni)
                     time.sleep(2)
                     st.cache_data.clear()
@@ -6546,10 +6581,16 @@ elif modo == "🏢 Gerenciar Unidades":
                 val_atual_uf_uni = str(dados_alvo_uni.get("UF", uf_filtrada_edit)).strip()
                 val_atual_nome_uni = str(dados_alvo_uni.get("Unidade", sel_uni)).strip()
 
-                st.markdown(f"#### 🏢 Ficha da Unidade: **{val_atual_nome_uni}** `(ID: {id_uf_edit})`")
-                st.caption("Modificações nesta unidade atualizarão automaticamente a tabela de Equipes e as Atividades vinculadas na base principal.")
+                # 🚀 Resgate dos dados existentes de chefia
+                val_atual_nome_tit = str(dados_alvo_uni.get("Nome_Chefe_Titular", "")).strip()
+                val_atual_email_tit = str(dados_alvo_uni.get("Email_Chefe_Titular", "")).strip()
+                val_atual_nome_sub = str(dados_alvo_uni.get("Nome_Chefe_Substituto", "")).strip()
+                val_atual_email_sub = str(dados_alvo_uni.get("Email_Chefe_Substituto", "")).strip()
 
-                # Campos com chaves dinâmicas para recarregamento instantâneo
+                st.markdown(f"#### 🏢 Ficha da Unidade: **{val_atual_nome_uni}** `(ID: {id_uf_edit})`")
+                st.caption("Modificações nesta unidade atualizarão os contatos das chefias e, caso o nome mude, a tabela de Equipes.")
+
+                # Campos de identificação da unidade
                 col_ed_u1, col_ed_u2 = st.columns(2)
                 with col_ed_u1:
                     if perfil_usuario == "Administrador":
@@ -6579,32 +6620,44 @@ elif modo == "🏢 Gerenciar Unidades":
                         key=f"ed_nome_uni_txt_{id_uf_edit}"
                     ).strip()
 
+                # 🚀 Novos Campos de Chefia na Edição
+                st.markdown("###### 👤 Chefia Imediata (Para autorização prévia de viagens no Teams / SCDP)")
+                col_ch1, col_ch2 = st.columns(2)
+                with col_ch1:
+                    novo_nome_tit = st.text_input("Nome do Chefe Titular:", value=val_atual_nome_tit, key=f"ed_nome_tit_{id_uf_edit}").strip()
+                    novo_email_tit = st.text_input("E-mail do Chefe Titular (@ibama.gov.br):", value=val_atual_email_tit, key=f"ed_email_tit_{id_uf_edit}").strip().lower()
+                with col_ch2:
+                    novo_nome_sub = st.text_input("Nome do Chefe Substituto:", value=val_atual_nome_sub, key=f"ed_nome_sub_{id_uf_edit}").strip()
+                    novo_email_sub = st.text_input("E-mail do Chefe Substituto (@ibama.gov.br):", value=val_atual_email_sub, key=f"ed_email_sub_{id_uf_edit}").strip().lower()
+
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- DISPARO DA ATUALIZAÇÃO EM CASCATA ---
-                from concurrent.futures import ThreadPoolExecutor
-
+                # --- DISPARO DA ATUALIZAÇÃO ---
                 if st.button("💾 Salvar Alterações e Sincronizar Equipes", type="primary", key=f"btn_salvar_uni_{id_uf_edit}"):
                     if not novo_nome_uni:
                         st.error("⚠️ O Nome da Unidade não pode ficar em branco.")
                     else:
-                        # 1. Atualiza a Tabela Auxiliar de Unidades
-                        with st.spinner(f"1/2 Atualizando Unidade '{novo_nome_uni}'..."):
+                        # 1. Atualiza a Tabela Auxiliar de Unidades (incluindo chefias)
+                        with st.spinner(f"1/2 Atualizando Unidade '{novo_nome_uni}' e chefias..."):
                             executar_api_unidades({
                                 "Acao": "Editar", 
                                 "ID_UF": id_uf_edit, 
                                 "UF": nova_uf_uni, 
-                                "Unidade": novo_nome_uni
+                                "Unidade": novo_nome_uni,
+                                "Nome_Chefe_Titular": novo_nome_tit,
+                                "Email_Chefe_Titular": novo_email_tit,
+                                "Nome_Chefe_Substituto": novo_nome_sub,
+                                "Email_Chefe_Substituto": novo_email_sub
                             })
 
-                        # 2. Atualiza em Cascata apenas os Servidores afetados (servidores.xlsx)
+                        # 2. Atualiza em Cascata apenas os Servidores afetados (servidores.xlsx) se o nome ou UF da unidade mudou
                         servidores_afetados = df_servidores[
                             (df_servidores["Lotacao"].astype(str).str.strip() == str(sel_uni).strip()) &
                             (df_servidores["UF_Servidor"].astype(str).str.strip() == str(val_atual_uf_uni).strip())
                         ]
                         qtd_srv_afetados = len(servidores_afetados)
 
-                        if qtd_srv_afetados > 0:
+                        if qtd_srv_afetados > 0 and (novo_nome_uni != val_atual_nome_uni or nova_uf_uni != val_atual_uf_uni):
                             with st.spinner(f"2/2 Sincronizando lotação de {qtd_srv_afetados} servidor(es)..."):
                                 for _, srv_row in servidores_afetados.iterrows():
                                     payload_srv_cascata = {
@@ -6629,9 +6682,9 @@ elif modo == "🏢 Gerenciar Unidades":
                         if "df" in st.session_state:
                             del st.session_state.df
 
-                        msg_sucesso = f"🎉 Unidade **{novo_nome_uni}** atualizada com sucesso!"
-                        if qtd_srv_afetados > 0:
-                            msg_sucesso += f" ({qtd_srv_afetados} servidores atualizados. As atividades herdam a nova lotação automaticamente)."
+                        msg_sucesso = f"🎉 Unidade **{novo_nome_uni}** e contatos de chefia atualizados com sucesso!"
+                        if qtd_srv_afetados > 0 and novo_nome_uni != val_atual_nome_uni:
+                            msg_sucesso += f" ({qtd_srv_afetados} servidores tiveram a lotação atualizada)."
                         st.success(msg_sucesso)
                         
                         time.sleep(1)
