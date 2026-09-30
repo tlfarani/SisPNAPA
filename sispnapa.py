@@ -5011,19 +5011,34 @@ elif modo == "📊 Visualizar Base":
                                 # 🚀 1. GESTÃO DO STATUS DE APROVAÇÃO SCDP
                                 # -------------------------------------------------------------
                                 dados_chefia = obter_chefia_lotacao(ed_lot_at, ed_uf_srv_at, df_lotacoes)
-                                emails_chefia = [e for e in [dados_chefia["email_tit"], dados_chefia["email_sub"]] if e and "@" in e]
+                                emails_chefia = [
+                                    e.strip().lower() 
+                                    for e in [dados_chefia.get("email_tit", ""), dados_chefia.get("email_sub", "")] 
+                                    if e and "@" in e
+                                ]
                                 
-                                status_scdp_antigo = str(reg_at_alvo.get("Status_Aprovacao_SCDP", "Não Solicitada")).strip()
-                                aprovador_scdp_antigo = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip()
+                                # Resgate defensivo do status atual (trata nulos, vazios e 'nan')
+                                val_status_bruto = str(reg_at_alvo.get("Status_Aprovacao_SCDP", "")).strip()
+                                status_scdp_antigo = "Não Solicitada" if val_status_bruto in ["", "None", "nan"] else val_status_bruto
                                 
-                                # Verifica se a caixinha foi marcada na Aba 4
+                                val_aprovador_bruto = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip()
+                                aprovador_scdp_antigo = "" if val_aprovador_bruto in ["None", "nan"] else val_aprovador_bruto
+                                
+                                # Captura resiliente: verifica chaves por ID, por código ou qualquer variação no session_state
                                 chk_solic_scdp = bool(
-                                    st.session_state.get(f"chk_scdp_{id_at_ref}", False) or 
-                                    st.session_state.get(f"chk_reenviar_scdp_{id_at_ref}", False)
+                                    st.session_state.get(f"chk_scdp_{id_at_ref}", False) or
+                                    st.session_state.get(f"chk_scdp_{str(id_at_ref)}", False) or
+                                    st.session_state.get(f"chk_scdp_{str(ed_cod_atv)}", False) or
+                                    st.session_state.get(f"chk_reenviar_scdp_{id_at_ref}", False) or
+                                    any(
+                                        v is True for k, v in st.session_state.items() 
+                                        if "chk_scdp" in k and (str(id_at_ref) in k or str(ed_cod_atv) in k)
+                                    )
                                 )
                                 
-                                status_scdp_final = "Pendente" if chk_solic_scdp else (status_scdp_antigo or "Não Solicitada")
-                                
+                                # Define o status final que irá para a coluna do SharePoint
+                                status_scdp_final = "Pendente" if chk_solic_scdp else status_scdp_antigo
+
                                 # -------------------------------------------------------------
                                 # 🚀 2. GERAÇÃO DO PAYLOAD E GRAVAÇÃO NO SHAREPOINT
                                 # -------------------------------------------------------------
@@ -5085,40 +5100,50 @@ elif modo == "📊 Visualizar Base":
                                 # -------------------------------------------------------------
                                 # 🚀 3. DISPARO DO CARD NO TEAMS / OUTLOOK (SE MARCADO)
                                 # -------------------------------------------------------------
-                                if chk_solic_scdp and emails_chefia:
-                                    srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
-                                    email_solic = str(srv_row["E_mail"].iloc[0]).strip().lower() if not srv_row.empty and str(srv_row["E_mail"].iloc[0]).strip() else email_logado
-                                    
-                                    payload_scdp = {
-                                        "id_sharepoint": str(id_at_ref),
-                                        "codigo_atividade": str(ed_cod_atv),
-                                        "nome_atividade": str(ed_nome_atv),
-                                        "servidor": str(ed_servidor_at),
-                                        "email_servidor": email_solic,
-                                        "unidade": str(ed_lot_at),
-                                        "emails_chefia": ";".join(emails_chefia),
-                                        "municipio_destino": str(ed_mun_at),
-                                        "uf_destino": str(ed_uf_oc_at),
-                                        "dt_inicio": str(ed_dt_i_at),
-                                        "dt_termino": str(ed_dt_f_at),
-                                        "dias_estimados": float(ed_dias_pl_at),
-                                        "rec_diarias": float(ed_rp_d_at),
-                                        "rec_passagens": float(ed_rp_p_at),
-                                        "rec_outras": float(ed_rp_o_at),
-                                        "rec_total": float(tot_pl_calc if 'tot_pl_calc' in locals() else (ed_rp_d_at + ed_rp_p_at + ed_rp_o_at)),
-                                        "justificativa": str(ed_obs_at).strip() or "Operação de campo programada no âmbito do PNAPA."
-                                    }
-                                    try:
-                                        requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp, timeout=6)
-                                        st.toast("📨 Notificação de aprovação enviada à chefia no Teams e E-mail!", icon="✈️")
-                                    except Exception:
-                                        st.toast("⚠️ Atividade salva, mas houve instabilidade na conexão com o Teams.", icon="⚠️")
+                                if chk_solic_scdp:
+                                    if not emails_chefia:
+                                        st.warning(f"⚠️ A solicitação foi marcada, mas a lotação **{ed_lot_at}** não possui e-mails de chefia cadastrados em 'Gerenciar Unidades'. O card no Teams não pôde ser enviado.")
+                                    else:
+                                        srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
+                                        email_solic = str(srv_row["E_mail"].iloc[0]).strip().lower() if not srv_row.empty and str(srv_row["E_mail"].iloc[0]).strip() else email_logado
+                                        
+                                        tot_financeiro = float(tot_pl_calc if 'tot_pl_calc' in locals() else (float(ed_rp_d_at) + float(ed_rp_p_at) + float(ed_rp_o_at)))
+                                        
+                                        payload_scdp = {
+                                            "id_sharepoint": str(id_at_ref),
+                                            "codigo_atividade": str(ed_cod_atv),
+                                            "nome_atividade": str(ed_nome_atv),
+                                            "servidor": str(ed_servidor_at),
+                                            "email_servidor": email_solic,
+                                            "unidade": str(ed_lot_at),
+                                            "emails_chefia": ";".join(emails_chefia),
+                                            "municipio_destino": str(ed_mun_at),
+                                            "uf_destino": str(ed_uf_oc_at),
+                                            "dt_inicio": str(ed_dt_i_at),
+                                            "dt_termino": str(ed_dt_f_at),
+                                            "dias_estimados": float(ed_dias_pl_at),
+                                            "rec_diarias": float(ed_rp_d_at),
+                                            "rec_passagens": float(ed_rp_p_at),
+                                            "rec_outras": float(ed_rp_o_at),
+                                            "rec_total": tot_financeiro,
+                                            "justificativa": str(ed_obs_at).strip() or "Operação de campo programada no âmbito do PNAPA."
+                                        }
+                                        
+                                        try:
+                                            with st.spinner("📨 Enviando card de aprovação para o Teams e E-mail da chefia..."):
+                                                resp_flow = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp, timeout=8)
+                                                if resp_flow.status_code in [200, 202]:
+                                                    st.toast("✈️ Notificação enviada à chefia no Teams e Outlook com sucesso!", icon="📨")
+                                                else:
+                                                    st.error(f"⚠️️ O Power Automate recusou o envio (Código {resp_flow.status_code}): {resp_flow.text}")
+                                        except Exception as err:
+                                            st.error(f"⚠️ Erro ao disparar para o Teams: {err}")
 
                                 st.session_state["selecoes_atividades"] = {}
                                 st.cache_data.clear()
                                 if "df" in st.session_state: del st.session_state.df
                                 liberar_trava(chave_trava)
-                                time.sleep(1)
+                                time.sleep(1.5)
                                 st.rerun()
 
                     # 🛡️ BOTÃO 6: EDIÇÃO EM LOTE DE ATIVIDADES COM DEBOUNCE
