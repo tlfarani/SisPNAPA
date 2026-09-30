@@ -4961,7 +4961,7 @@ elif modo == "📊 Visualizar Base":
                                 st.text_input("Executado — Total Geral (R$):", value=formatar_moeda_br(tot_ex_calc), disabled=True)
 
                         # =============================================================
-                        # 📑 ABA 5: AUTORIZAÇÃO PRÉVIA SCDP (ISOLADA)
+                        # 📑 ABA 5: AUTORIZAÇÃO PRÉVIA SCDP (ISOLADA & SEGURA)
                         # =============================================================
                         with aba5_at:
                             st.markdown("##### ✈️ Autorização Prévia para Abertura de Viagem (SCDP)")
@@ -5028,37 +5028,56 @@ elif modo == "📊 Visualizar Base":
                                 else:
                                     st.error(f"⚠️ Não há e-mails de chefia cadastrados para a unidade **{lot_alvo}**. Cadastre em '🏢 Gerenciar Unidades' antes de solicitar.")
 
-                            # ⚡ BOTÃO DE DISPARO DE TESTE IMEDIATO (DENTRO DA ABA 5)
+                            st.markdown("---")
+                            # ⚡ BOTÃO DE DISPARO DE TESTE IMEDIATO (AUTÔNOMO E SEM DEPENDÊNCIA DA ABA 6)
                             if st.button("⚡ Testar Envio desta Atividade ao Teams Agora", key=f"btn_teste_aba5_{id_chave}"):
                                 if not emails_chefia:
                                     st.error("Lista de e-mails da chefia está vazia para esta unidade.")
                                 elif not URL_FLOW_APROVACAO_SCDP:
                                     st.error("URL_FLOW_APROVACAO_SCDP não está configurada.")
                                 else:
-                                    srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
+                                    # Resgate ultra-defensivo de todas as variáveis
+                                    serv_teste = ed_servidor_at if "ed_servidor_at" in locals() and ed_servidor_at else str(reg_at_alvo.get("Servidor", "")).strip()
+                                    nome_atv_teste = ed_nome_atv if "ed_nome_atv" in locals() and ed_nome_atv else str(reg_at_alvo.get("Nome da Atividade", "")).strip()
+                                    mun_teste = ed_mun_at if "ed_mun_at" in locals() and ed_mun_at else str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                    uf_oc_teste = ed_uf_oc_at if "ed_uf_oc_at" in locals() and ed_uf_oc_at else str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                    dti_teste = str(ed_dt_i_at if "ed_dt_i_at" in locals() else reg_at_alvo.get("Data de Início", ""))
+                                    dtf_teste = str(ed_dt_f_at if "ed_dt_f_at" in locals() else reg_at_alvo.get("Data de Término", ""))
+                                    dias_teste = float(ed_dias_pl_at if "ed_dias_pl_at" in locals() else obter_float_limpo(reg_at_alvo.get("Dias_Gastos_Plan", 1.0)))
+                                    
+                                    val_d = float(ed_rp_d_at if "ed_rp_d_at" in locals() else obter_float_limpo(reg_at_alvo.get("Rec_Plan_Diarias", 0.0)))
+                                    val_p = float(ed_rp_p_at if "ed_rp_p_at" in locals() else obter_float_limpo(reg_at_alvo.get("Rec_Plan_Passagens", 0.0)))
+                                    val_o = float(ed_rp_o_at if "ed_rp_o_at" in locals() else obter_float_limpo(reg_at_alvo.get("Rec_Plan_Outras_Despesas", 0.0)))
+                                    tot_fin_teste = val_d + val_p + val_o
+
+                                    # Busca observação do session_state ou do banco sem depender da variável da Aba 6
+                                    obs_teste = str(st.session_state.get(f"t1_at_obs_{id_at_ref}", reg_at_alvo.get("Observações", ""))).strip() or "Teste direto de disparo na Aba 5."
+
+                                    srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(serv_teste).strip()]
                                     email_solic = str(srv_row["E_mail"].iloc[0]).strip().lower() if not srv_row.empty and str(srv_row["E_mail"].iloc[0]).strip() else email_logado
-                                    tot_fin = float(ed_rp_d_at) + float(ed_rp_p_at) + float(ed_rp_o_at)
+
                                     payload_teste = {
                                         "id_sharepoint": str(id_chave),
                                         "codigo_atividade": str(cod_atv_alvo),
-                                        "nome_atividade": str(ed_nome_atv),
-                                        "servidor": str(ed_servidor_at),
+                                        "nome_atividade": str(nome_atv_teste),
+                                        "servidor": str(serv_teste),
                                         "email_servidor": email_solic,
                                         "unidade": str(lot_alvo),
                                         "emails_chefia": ";".join(emails_chefia),
-                                        "municipio_destino": str(ed_mun_at),
-                                        "uf_destino": str(ed_uf_oc_at),
-                                        "dt_inicio": str(ed_dt_i_at),
-                                        "dt_termino": str(ed_dt_f_at),
-                                        "dias_estimados": float(ed_dias_pl_at),
-                                        "rec_diarias": float(ed_rp_d_at),
-                                        "rec_passagens": float(ed_rp_p_at),
-                                        "rec_outras": float(ed_rp_o_at),
-                                        "rec_total": tot_fin,
-                                        "justificativa": str(ed_obs_at).strip() or "Teste direto de disparo na Aba 5."
+                                        "municipio_destino": str(mun_teste),
+                                        "uf_destino": str(uf_oc_teste),
+                                        "dt_inicio": str(dti_teste),
+                                        "dt_termino": str(dtf_teste),
+                                        "dias_estimados": dias_teste,
+                                        "rec_diarias": val_d,
+                                        "rec_passagens": val_p,
+                                        "rec_outras": val_o,
+                                        "rec_total": tot_fin_teste,
+                                        "justificativa": obs_teste
                                     }
+                                    
                                     try:
-                                        with st.spinner("Disparando webhook teste..."):
+                                        with st.spinner("Disparando webhook teste ao Power Automate..."):
                                             r_teste = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_teste, timeout=10)
                                             if r_teste.status_code in [200, 202]:
                                                 st.success(f"🎉 Resposta da Microsoft: Código {r_teste.status_code}. Notificação enviada ao Teams com sucesso!")
