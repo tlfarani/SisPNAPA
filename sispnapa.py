@@ -29,7 +29,7 @@ URL_FLOW_EMAIL_360 = "https://default6ae3f5e7541942a780758c1490c72b.25.environme
 
 # URL da Planilha Macro Principal (Movidas para o topo para evitar NameError)
 URL_FLOW_PRINCIPAL = st.secrets["power_automate"]["URL_PRINCIPAL"]
-URL_FLOW_APROVACAO_SCDP = st.secrets["power_automate"].["URL_APROVACAO_SCDP"]
+URL_FLOW_APROVACAO_SCDP = st.secrets["power_automate"]["URL_APROVACAO_SCDP"]
 
 # =================================================================
 # PARÂMETROS DINÂMICOS DE GOVERNANÇA (PRÉ vs PÓS PNAPA E EQUIPARAÇÃO SEDE)
