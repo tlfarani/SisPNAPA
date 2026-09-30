@@ -4961,7 +4961,7 @@ elif modo == "📊 Visualizar Base":
                                 st.text_input("Executado — Total Geral (R$):", value=formatar_moeda_br(tot_ex_calc), disabled=True)
 
                         # =============================================================
-                        # 📑 ABA 5: AUTORIZAÇÃO PRÉVIA SCDP
+                        # 📑 ABA 5: AUTORIZAÇÃO PRÉVIA SCDP (ISOLADA)
                         # =============================================================
                         with aba5_at:
                             st.markdown("##### ✈️ Autorização Prévia para Abertura de Viagem (SCDP)")
@@ -5027,6 +5027,45 @@ elif modo == "📊 Visualizar Base":
                                     st.info(f"🔔 A notificação será enviada para a chefia de **{lot_alvo}**:\n- " + "\n- ".join(destinatarios_txt))
                                 else:
                                     st.error(f"⚠️ Não há e-mails de chefia cadastrados para a unidade **{lot_alvo}**. Cadastre em '🏢 Gerenciar Unidades' antes de solicitar.")
+
+                            # ⚡ BOTÃO DE DISPARO DE TESTE IMEDIATO (DENTRO DA ABA 5)
+                            if st.button("⚡ Testar Envio desta Atividade ao Teams Agora", key=f"btn_teste_aba5_{id_chave}"):
+                                if not emails_chefia:
+                                    st.error("Lista de e-mails da chefia está vazia para esta unidade.")
+                                elif not URL_FLOW_APROVACAO_SCDP:
+                                    st.error("URL_FLOW_APROVACAO_SCDP não está configurada.")
+                                else:
+                                    srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(ed_servidor_at).strip()]
+                                    email_solic = str(srv_row["E_mail"].iloc[0]).strip().lower() if not srv_row.empty and str(srv_row["E_mail"].iloc[0]).strip() else email_logado
+                                    tot_fin = float(ed_rp_d_at) + float(ed_rp_p_at) + float(ed_rp_o_at)
+                                    payload_teste = {
+                                        "id_sharepoint": str(id_chave),
+                                        "codigo_atividade": str(cod_atv_alvo),
+                                        "nome_atividade": str(ed_nome_atv),
+                                        "servidor": str(ed_servidor_at),
+                                        "email_servidor": email_solic,
+                                        "unidade": str(lot_alvo),
+                                        "emails_chefia": ";".join(emails_chefia),
+                                        "municipio_destino": str(ed_mun_at),
+                                        "uf_destino": str(ed_uf_oc_at),
+                                        "dt_inicio": str(ed_dt_i_at),
+                                        "dt_termino": str(ed_dt_f_at),
+                                        "dias_estimados": float(ed_dias_pl_at),
+                                        "rec_diarias": float(ed_rp_d_at),
+                                        "rec_passagens": float(ed_rp_p_at),
+                                        "rec_outras": float(ed_rp_o_at),
+                                        "rec_total": tot_fin,
+                                        "justificativa": str(ed_obs_at).strip() or "Teste direto de disparo na Aba 5."
+                                    }
+                                    try:
+                                        with st.spinner("Disparando webhook teste..."):
+                                            r_teste = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_teste, timeout=10)
+                                            if r_teste.status_code in [200, 202]:
+                                                st.success(f"🎉 Resposta da Microsoft: Código {r_teste.status_code}. Notificação enviada ao Teams com sucesso!")
+                                            else:
+                                                st.error(f"❌ Power Automate recusou com Código {r_teste.status_code}: {r_teste.text}")
+                                    except Exception as e_err:
+                                        st.error(f"❌ Falha de rede: {e_err}")
 
                         # =============================================================
                         # 📑 ABA 6: OBSERVAÇÕES & GRAVAÇÃO DA ATIVIDADE
@@ -5184,7 +5223,7 @@ elif modo == "📊 Visualizar Base":
                                     falha_envio_teams = False
                                     if chk_solic_scdp:
                                         if not emails_chefia:
-                                            st.error(f"⚠️ A solicitação foi marcada, mas a unidade **{lot_salvar}** não possui e-mails de chefia cadastrados. Notificação cancelada.")
+                                            st.error(f"⚠️ A solicitação foi marcada, mas a unidade **{lot_salvar}** não possui e-mails de chefia cadastrados em 'Gerenciar Unidades'. O card não pôde ser enviado.")
                                             falha_envio_teams = True
                                         elif not URL_FLOW_APROVACAO_SCDP:
                                             st.error("⚠️ URL do fluxo de aprovação não configurada em secrets/código.")
@@ -5231,6 +5270,7 @@ elif modo == "📊 Visualizar Base":
                                     # -------------------------------------------------------------
                                     liberar_trava(chave_trava)
                                     if falha_envio_teams:
+                                        # 🛑 CONGELA A TELA SE DER ERRO NO TEAMS PARA VOCÊ PODER LER
                                         st.stop()
                                     else:
                                         st.session_state["selecoes_atividades"] = {}
