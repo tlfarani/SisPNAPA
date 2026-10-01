@@ -4789,12 +4789,12 @@ elif modo == "📊 Visualizar Base":
                         uf_acao_at = str(reg_at_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
 
                         aba1_at, aba2_at, aba3_at, aba4_at, aba5_at, aba6_at = st.tabs([
-                            "📋 Identificação",
-                            "👥 Equipe & Liderança",
-                            "📍 Localização & Execução",
-                            "💰 Orçamento & Dedicação",
-                            "📝 Observações & Gravação",
-                            "✈️ Autorização SCDP"                            
+                            "📋 1. Identificação",
+                            "👥 2. Equipe & Liderança",
+                            "📍 3. Localização & Execução",
+                            "💰 4. Orçamento & Dedicação",
+                            "📝 5. Observações & Gravação",
+                            "✈️ 6. Autorização SCDP"                            
                         ])
                         
                         with aba1_at:
@@ -5864,15 +5864,15 @@ elif modo == "➕ Inserir Nova Linha":
         coordenador_operacao, num_pcdp, codigo_atividade = "", "", ""
 
     # =================================================================
-    # CONDICIONAL: SE FOR ATIVIDADE (6 ABAS SEPARADAS)
+    # CONDICIONAL: SE FOR ATIVIDADE (ESTRUTURA HARMONIZADA COM A TELA 1)
     # =================================================================
     elif nivel_selecionado == "Atividade":
         aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
-            "📋 1. Identificação",
-            "👥 2. Equipe & Liderança",
-            "📍 3. Localização & Execução",
-            "💰 4. Orçamento & Dedicação",
-            "📝 5. Observações & Gravação",
+            "📋 1. Identificação", 
+            "👥 2. Equipe & Liderança", 
+            "📍 3. Localização & Execução", 
+            "💰 4. Orçamento & Dedicação", 
+            "📝 5. Observações & Justificativas",
             "✈️ 6. Autorização SCDP"
         ])
         
@@ -5930,7 +5930,7 @@ elif modo == "➕ Inserir Nova Linha":
                         lista_outras = [u for u in LISTA_UFS_COMPLETA if u != uf_filtro_pna]
                         uf_coordenadora_val = st.selectbox("UF Coordenadora da Missão:", lista_outras, key="man_ufc_atv")
 
-            st.markdown("##### 🏷️ Código e Agrupador da Atividade")
+            st.markdown("##### 🏷️️ Código e Agrupador da Atividade")
             if "Codigo_Atividade" not in df_atual.columns:
                 df_atual["Codigo_Atividade"] = ""
             
@@ -6163,9 +6163,6 @@ elif modo == "➕ Inserir Nova Linha":
             idx_perigo = LISTA_PERIGOS.index(perigo_def) if perigo_def in LISTA_PERIGOS else 0
             periculosidade = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=idx_perigo, key=f"atv_sel_perigo_{codigo_atividade}")
 
-        # -------------------------------------------------------------
-        # 📑 ABA 4: CRONOGRAMA & CUSTOS (PURAMENTE ORÇAMENTÁRIA)
-        # -------------------------------------------------------------
         with aba4:
             dti_def = converter_para_data_segura(extrair_padrao_atv("Data de Início", val_dt_inicio))
             dtf_def = converter_para_data_segura(extrair_padrao_atv("Data de Término", val_dt_termino))
@@ -6211,22 +6208,12 @@ elif modo == "➕ Inserir Nova Linha":
                 calc_tot_e_atv = float(rec_e_diarias + rec_e_passagens + rec_e_outras)
                 st.text_input("Executado — Total Geral (R$):", value=formatar_moeda_br(calc_tot_e_atv), disabled=True)
 
-        # =============================================================
-        # 📑 ABA 5: OBSERVAÇÕES & JUSTIFICATIVAS (VEM PRIMEIRO)
-        # =============================================================
         with aba5:
             st.markdown("##### 📝 Observações Gerais & Pendências")
             obs_def = str(extrair_padrao_atv("Observações", "")).strip()
             if obs_def in ["None", "nan"]: obs_def = ""
+            obs = st.text_area("Observações da Atividade:", value=obs_def, key=f"atv_obs_{codigo_atividade}")
             
-            obs = st.text_area(
-                "Observações da Atividade:", 
-                value=obs_def, 
-                help="Estas observações serão incluídas como justificativa no card enviado à chefia caso solicite autorização SCDP.",
-                key=f"atv_obs_{codigo_atividade}"
-            )
-            
-            # Verificação de pendência em novas inclusões
             is_pendente_ins = bool(andamento == "Concluída" and not doc_probatorio.strip()) or bool(andamento == "Prevista" and dt_termino < date.today())
             if is_pendente_ins:
                 st.warning("⚠️ Esta atividade possui pendências de prazo ou comprovação. Justifique:")
@@ -6237,70 +6224,80 @@ elif modo == "➕ Inserir Nova Linha":
                 justificativa = ""
 
         # =============================================================
-        # 📑 ABA 6: AUTORIZAÇÃO PRÉVIA SCDP (DESTINATÁRIOS & RESUMO)
+        # 📑 ABA 6: AUTORIZAÇÃO PRÉVIA SCDP (REPLICADA DA TELA 1)
         # =============================================================
         with aba6:
             st.markdown("##### ✈️ Autorização Prévia para Abertura de Viagem (SCDP)")
-            st.caption("Ao marcar a opção abaixo, a atividade será cadastrada e o card de deliberação será enviado no Teams e Outlook da chefia.")
-            
-            dados_chefia = obter_chefia_lotacao(lotacao, uf_servidor, df_lotacoes)
-            emails_chefia = [
-                e.strip().lower() 
-                for e in [dados_chefia.get("email_tit", ""), dados_chefia.get("email_sub", "")] 
-                if e and "@" in e
-            ]
-            
-            chave_widget_scdp = f"chk_scdp_{codigo_atividade}"
-            solicitar_scdp = st.checkbox(
-                "📨 **Solicitar autorização de viagem à chefia imediata ao cadastrar?**",
-                help="Marque caso a missão esteja programada e demande abertura de diárias/passagens no SCDP.",
-                key=chave_widget_scdp
+            st.caption("Defina para qual autoridade e nível hierárquico o card de deliberação será encaminhado.")
+
+            srv_row_ins = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
+            email_solic_ins = str(srv_row_ins["E_mail"].iloc[0]).strip().lower() if not srv_row_ins.empty and str(srv_row_ins["E_mail"].iloc[0]).strip() else email_logado
+
+            dados_chefia_ins = obter_chefia_lotacao(
+                lotacao, 
+                uf_servidor, 
+                df_lotacoes, 
+                nome_servidor=servidor, 
+                email_servidor=email_solic_ins
             )
             
-            # Painel com os dados dos destinatários e resumo orçamentário
-            if emails_chefia:
-                destinatarios_txt = []
-                if dados_chefia.get("nome_tit") and dados_chefia.get("email_tit"):
-                    destinatarios_txt.append(f"**Titular:** {dados_chefia['nome_tit']} (`{dados_chefia['email_tit']}`)")
-                if dados_chefia.get("nome_sub") and dados_chefia.get("email_sub"):
-                    destinatarios_txt.append(f"**Substituto:** {dados_chefia['nome_sub']} (`{dados_chefia['email_sub']}`)")
-                
-                st.markdown(f"📋 **Chefia Imediata da Unidade ({lotacao}):**")
-                for d in destinatarios_txt:
-                    st.markdown(f"- {d}")
-            else:
-                st.error(f"⚠️ Não há e-mails de chefia cadastrados para a lotação **{lotacao}**. Cadastre em '🏢 Gerenciar Unidades' antes de solicitar.")
+            instancias_disponiveis_ins = list(dados_chefia_ins.get("instancias", {}).keys())
+            emails_chefia_ins = []
 
-            if solicitar_scdp:
-                tot_previsto = float(rec_p_diarias) + float(rec_p_passagens) + float(rec_p_outras)
-                with st.container(border=True):
-                    st.markdown("🔍 **Resumo dos Parâmetros que irão no Card:**")
-                    col_sc1, col_sc2 = st.columns(2)
-                    with col_sc1:
-                        st.markdown(f"- **Servidor:** {servidor}")
-                        st.markdown(f"- **Destino:** {municipio} / {uf_ocorrencia}")
-                        st.markdown(f"- **Período:** {dt_inicio.strftime('%d/%m/%Y')} a {dt_termino.strftime('%d/%m/%Y')} ({dias_plan:.1f} dias)")
-                    with col_sc2:
-                        st.markdown(f"- **Diárias:** {formatar_moeda_br(rec_p_diarias)}")
-                        st.markdown(f"- **Passagens:** {formatar_moeda_br(rec_p_passagens)}")
-                        st.markdown(f"- **Total Previsto:** `{formatar_moeda_br(tot_previsto)}`")
-                    if obs.strip():
-                        st.markdown(f"- **Justificativa:** *{obs.strip()}*")
+            if not instancias_disponiveis_ins:
+                st.error(f"⚠️ Não foram encontradas chefias cadastradas para **{lotacao}** ou sua Unidade Superior em 'Gerenciar Unidades'.")
+            else:
+                if dados_chefia_ins["eh_titular"]:
+                    st.info(f"👑 **Titular de Unidade:** O servidor é o titular de **{lotacao}**. O envio é direcionado à Instância Superior ({dados_chefia_ins['unidade_sup']}).")
+                
+                c_inst_ins, c_dest_ins = st.columns([1, 1.2])
+                with c_inst_ins:
+                    sel_instancia_ins = st.radio(
+                        "1. Instância Deliberadora:",
+                        instancias_disponiveis_ins,
+                        key=f"rad_inst_ins_{codigo_atividade}"
+                    )
+                with c_dest_ins:
+                    opcoes_destinatarios_ins = dados_chefia_ins["instancias"][sel_instancia_ins]
+                    sel_destinatario_ins = st.radio(
+                        "2. Quem deve deliberar?:",
+                        list(opcoes_destinatarios_ins.keys()),
+                        key=f"rad_dest_ins_{codigo_atividade}"
+                    )
+                    emails_chefia_ins = opcoes_destinatarios_ins[sel_destinatario_ins]
+
+                st.caption(f"🔔 **E-mails notificados:** `{'; '.join(emails_chefia_ins)}`")
+
+            st.markdown("---")
+            st.info("⚪ Esta atividade ainda não possui solicitação de autorização no SCDP.")
+
+            btn_disparo_scdp_ins = st.button(
+                "📨 Enviar Solicitação aos Destinatários Selecionados (Teams / E-mail)",
+                type="secondary",
+                use_container_width=True,
+                key=f"btn_scdp_ins_oficial_{codigo_atividade}"
+            )
 
         meta_indicador = ""
 
     # =================================================================
-    # 💾 BOTÃO PRINCIPAL DE CADASTRO: FIXO NO RODAPÉ (FORA DAS ABAS)
+    # 💾 BOTÃO PRINCIPAL DE GRAVAÇÃO: FIXO NO RODAPÉ (TELA 1 & TELA 2)
     # =================================================================
     st.markdown("<br>", unsafe_allow_html=True)
-    btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", use_container_width=True, key="btn_gravar_individual_reativo")
+    btn_enviar_individual = st.button(
+        "💾 Gravar Atividade", 
+        type="primary", 
+        use_container_width=True, 
+        key="btn_gravar_individual_reativo"
+    )
 
-    if btn_enviar_individual:
+    # Executa se clicar no botão principal OU no botão dedicado da Aba 6
+    if btn_enviar_individual or ('btn_disparo_scdp_ins' in locals() and btn_disparo_scdp_ins):
         chave_trava = f"ins_ind_{val_num_acao}_{servidor}_{dt_inicio}_{dt_termino}"
         verificar_duplo_clique(chave_trava)
         bloquear_envio = False
+        disparar_scdp_nesta_exec = bool('btn_disparo_scdp_ins' in locals() and btn_disparo_scdp_ins)
         
-        # 1. Validações de Governança para Ações Estaduais
         if nivel_selecionado in ["Ação", "Ação Setorial"]:
             coord_op_final = ""
             cod_atv_final = ""
@@ -6329,7 +6326,6 @@ elif modo == "➕ Inserir Nova Linha":
                 st.error(f"⛔ **Linha Já Cadastrada:** A UF **{uf_limpa}** já possui planejamento registrado para a Ação **{val_num_acao}** como **{papel_limpo}** no tema **{tema_limpo}**.")
                 bloquear_envio = True
 
-        # 2. Validações de Atividade de Campo
         elif nivel_selecionado == "Atividade":
             coord_op_final = funcao_campo
             cod_atv_final = str(codigo_atividade)
@@ -6345,7 +6341,6 @@ elif modo == "➕ Inserir Nova Linha":
                     st.error(f"⛔ **Conflito de Liderança:** A atividade `{codigo_atividade}` já possui **{nome_outro_coord}** cadastrado como Coordenador de Campo.")
                     bloquear_envio = True
 
-        # 3. Termômetro de Capacidade Operacional
         if not bloquear_envio and servidor:
             res_validacao_final = calcular_termometro_carga(
                 df=df_atual,
@@ -6368,23 +6363,7 @@ elif modo == "➕ Inserir Nova Linha":
             # -------------------------------------------------------------
             # 🚀 1. GESTÃO DO STATUS SCDP
             # -------------------------------------------------------------
-            chk_solic_scdp_t2 = False
-            emails_chefia_t2 = []
-            
-            if nivel_selecionado == "Atividade":
-                dados_chefia_t2 = obter_chefia_lotacao(lotacao, uf_servidor, df_lotacoes)
-                emails_chefia_t2 = [
-                    e.strip().lower() 
-                    for e in [dados_chefia_t2.get("email_tit", ""), dados_chefia_t2.get("email_sub", "")] 
-                    if e and "@" in e
-                ]
-                chk_solic_scdp_t2 = bool(
-                    st.session_state.get(f"chk_scdp_{codigo_atividade}", False) or
-                    st.session_state.get(f"chk_scdp_{str(codigo_atividade)}", False)
-                )
-                status_scdp_t2 = "Pendente" if (chk_solic_scdp_t2 and emails_chefia_t2) else "Não Solicitada"
-            else:
-                status_scdp_t2 = "Não Solicitada"
+            status_scdp_t2 = "Pendente" if (disparar_scdp_nesta_exec and emails_chefia_ins) else "Não Solicitada"
 
             # -------------------------------------------------------------
             # 🚀 2. GRAVAÇÃO NO SHAREPOINT
@@ -6414,16 +6393,14 @@ elif modo == "➕ Inserir Nova Linha":
                 executar_envio_sharepoint([payload_unico])
 
             # -------------------------------------------------------------
-            # 🚀 3. DISPARO DO CARD AO POWER AUTOMATE (SE MARCADO)
+            # 🚀 3. DISPARO DO CARD AO POWER AUTOMATE (SE FOI PELO BOTÃO DA ABA 6)
             # -------------------------------------------------------------
-            if nivel_selecionado == "Atividade" and chk_solic_scdp_t2:
-                if not emails_chefia_t2:
-                    st.warning(f"⚠️ Atividade cadastrada! Porém a unidade **{lotacao}** não possui chefia com e-mail cadastrado. A notificação não foi enviada.")
+            if nivel_selecionado == "Atividade" and disparar_scdp_nesta_exec:
+                if not emails_chefia_ins:
+                    st.warning("⚠️ Atividade cadastrada! Porém nenhum e-mail válido foi selecionado para receber o card.")
                 elif not URL_FLOW_APROVACAO_SCDP:
-                    st.warning("⚠️ Atividade cadastrada, mas a URL de aprovação não está definida.")
+                    st.warning("⚠️ Atividade cadastrada, mas a URL do fluxo de aprovação não está definida.")
                 else:
-                    srv_row_t2 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
-                    email_solic_t2 = str(srv_row_t2["E_mail"].iloc[0]).strip().lower() if not srv_row_t2.empty and str(srv_row_t2["E_mail"].iloc[0]).strip() else email_logado
                     tot_fin_plan = float(rec_p_diarias) + float(rec_p_passagens) + float(rec_p_outras)
 
                     payload_scdp_ins = {
@@ -6431,9 +6408,9 @@ elif modo == "➕ Inserir Nova Linha":
                         "codigo_atividade": str(cod_atv_final),
                         "nome_atividade": str(nome_atividade),
                         "servidor": str(servidor),
-                        "email_servidor": email_solic_t2,
+                        "email_servidor": email_solic_ins,
                         "unidade": str(lotacao),
-                        "emails_chefia": ";".join(emails_chefia_t2),
+                        "emails_chefia": ";".join(emails_chefia_ins),
                         "municipio_destino": str(municipio),
                         "uf_destino": str(uf_ocorrencia),
                         "dt_inicio": str(dt_inicio),
