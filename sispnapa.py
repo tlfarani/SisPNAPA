@@ -371,11 +371,13 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Servidor": str(servidor),
         "Número da PCDP": str(num_pcdp),
         "País": str(pais),
+        # 🛡️ Blindagem de UF de Ocorrência (com e sem barra para o Power Automate):
         "UF Onde Ocorreu/Ocorrerá a Ação": str(uf_ocorrencia),
+        "UF_Ocorrencia": str(uf_ocorrencia),
+        "UF_Onde_Ocorreu": str(uf_ocorrencia),
         "Estado_Local_Acao": str(estado_local),
-       # 🛡️ Município: Chave blindada sem barra para o Power Automate
+        # 🛡️ Município: Chave blindada sem barra para o Power Automate
         "Municipio_Ocorrencia": str(municipio),
-        # Mantém as originais por compatibilidade com a base
         "Municipio Onde Ocorreu/Ocorrerá a Ação": str(municipio),
         "Município Onde Ocorreu/Ocorrerá a Ação": str(municipio),
         "Data de Início": converter_data_para_serial(dt_inicio),
@@ -5167,6 +5169,7 @@ elif modo == "📊 Visualizar Base":
                                 else:
                                     nome_atv_env = ed_nome_atv if "ed_nome_atv" in locals() and ed_nome_atv else str(reg_at_alvo.get("Nome da Atividade", "")).strip()
                                     mun_env = ed_mun_at if "ed_mun_at" in locals() and ed_mun_at else str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                    
                                     uf_oc_env = ed_uf_oc_at if "ed_uf_oc_at" in locals() and ed_uf_oc_at else str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "")).strip()
                                     dti_env = str(ed_dt_i_at if "ed_dt_i_at" in locals() else reg_at_alvo.get("Data de Início", ""))
                                     dtf_env = str(ed_dt_f_at if "ed_dt_f_at" in locals() else reg_at_alvo.get("Data de Término", ""))
@@ -5196,7 +5199,7 @@ elif modo == "📊 Visualizar Base":
                                         "rec_passagens": val_p,
                                         "rec_outras": val_o,
                                         "rec_total": tot_fin_env,
-                                        "justificativa": obs_env or "Operação de campo programada no âmbito do PNAPA."
+                                        "observacoes": obs_env or "Operação de campo programada no âmbito do PNAPA."
                                     }
 
                                     # Atualiza o SharePoint como 'Pendente' e limpa o aprovador
@@ -5415,7 +5418,9 @@ elif modo == "📊 Visualizar Base":
     
                                 # Grava em todas as chaves blindadas
                                 edicoes_lote["UF Onde Ocorreu/Ocorrerá a Ação"] = nova_uf_oc_lt
-                                edicoes_lote["Estado_Local_Acao"] = nova_uf_oc_lt
+                                edicoes_lote["UF_Ocorrencia"] = nova_uf_oc_lt
+                                edicoes_lote["UF_Onde_Ocorreu"] = nova_uf_oc_lt
+                                edicoes_lote["Estado_Local_Acao"] = MAPEAMENTO_ESTADOS_COMPLETO.get(nova_uf_oc_lt, nova_uf_oc_lt)
                                 edicoes_lote["Municipio_Ocorrencia"] = novo_mun_lt
                                 edicoes_lote["Municipio Onde Ocorreu/Ocorrerá a Ação"] = novo_mun_lt
                                 edicoes_lote["Município Onde Ocorreu/Ocorrerá a Ação"] = novo_mun_lt
@@ -6657,7 +6662,7 @@ elif modo == "➕ Inserir Nova Linha":
                         "rec_passagens": float(rec_p_passagens),
                         "rec_outras": float(rec_p_outras),
                         "rec_total": tot_fin_plan,
-                        "justificativa": str(obs).strip() or "Operação de campo programada no âmbito do PNAPA."
+                        "observacoes": str(obs).strip() or "Operação de campo programada no âmbito do PNAPA."
                     }
                     try:
                         resp_novo = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp_ins, timeout=8)
@@ -6901,6 +6906,8 @@ elif modo == "➕ Inserir Nova Linha":
                                 "Número da PCDP": num_pcdp,
                                 "País": p_pais, 
                                 "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
+                                "UF_Ocorrencia": p_uf_oc,
+                                "UF_Onde_Ocorreu": p_uf_oc,
                                 "Estado_Local_Acao": p_est,
                                 "Municipio_Ocorrencia": p_mun,
                                 "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun,
