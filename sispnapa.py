@@ -4807,12 +4807,12 @@ elif modo == "📊 Visualizar Base":
                         uf_acao_at = str(reg_at_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
 
                         aba1_at, aba2_at, aba3_at, aba4_at, aba5_at, aba6_at = st.tabs([
-                            "📋 1. Identificação",
-                            "👥 2. Equipe & Liderança",
-                            "📍 3. Localização & Execução",
-                            "💰 4. Orçamento & Dedicação",
-                            "📝 5. Observações & Gravação",
-                            "✈️ 6. Autorização SCDP"                            
+                            "📋 Identificação da Atividade",
+                            "👥 Recursos Humanos, Liderança & Local",
+                            "🎯 Detalhes & Indicadores",
+                            "💰 Cronograma & Custos",
+                            "📝 Observações & Justificativas",
+                            "✈️ Autorização SCDP"                            
                         ])
                         
                         with aba1_at:
@@ -5315,12 +5315,12 @@ elif modo == "📊 Visualizar Base":
                         st.info(f"👥 **Edição em Lote:** {qtd_at_sel} atividades selecionadas. Marque os campos para edição em massa.")
                         edicoes_lote = {}
                         l_aba1, l_aba2, l_aba3, l_aba4, l_aba5, l_aba6 = st.tabs([
-                            "1. 📋 Identificação & Agrupador", 
-                            "2. 👥 Recursos Humanos, Liderança & Local", 
-                            "3. Detalhes & Indicadores", 
-                            "4. 💰 Cronograma & Custos", 
-                            "5. 📝 Observações",
-                            "6. ✈️ Autorização SCDP em Lote"
+                            "📋 Identificação", 
+                            "👥 Recursos Humanos, Liderança & Local", 
+                            "🎯 Detalhes & Indicadores", 
+                            "💰 Cronograma & Custos", 
+                            "📝 Observações e Justificativas",
+                            "✈️ Autorização SCDP em Lote"
                         ])
 
                         with l_aba1:
@@ -6105,12 +6105,12 @@ elif modo == "➕ Inserir Nova Linha":
     # =================================================================
     elif nivel_selecionado == "Atividade":
         aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
-            "📋 1. Identificação", 
-            "👥 2. Equipe & Liderança", 
-            "📍 3. Localização & Execução", 
-            "💰 4. Orçamento & Dedicação", 
-            "📝 5. Observações & Justificativas",
-            "✈️ 6. Autorização SCDP"
+            "📋 Identificação da Atividade", 
+            "👥 Recursos Humanos, Liderança & Local", 
+            "🎯 Detalhes & Indicadores", 
+            "💰 Cronograma & Custos", 
+            "📝 Observações & Justificativas",
+            "✈️ Autorização SCDP"
         ])
         
         with aba1:
