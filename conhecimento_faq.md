@@ -134,21 +134,36 @@ A coluna **`Status_Aprovacao_SCDP`** governa o estado regulamentar da viagem:
 * **❌ Rejeitada:** Chefia recusou a autorização justificando o motivo no card. A atividade pode ser ajustada e reenviada.
 
 ### 5.2 Roteamento Hierárquico Inteligente & `Unidade_Superior`
-Para refletir o organograma do Ibama e impedir conflitos de interesse, a função unificada `obter_chefia_lotacao` avalia o perfil do servidor que vai viajar:
+Para refletir o organograma do Ibama e impedir conflitos de interesse, a função unificada `obter_chefia_lotacao` avalia o perfil do servidor solicitante e monta as alçadas disponíveis:
 
+```text
 [ Servidor Solicitante ]
-│
-├── É o Chefe Titular da Unidade?
-│        └── ⛔ Bloqueia própria unidade (anti-autoaprovação).
-│        └── 🏛️ Roteia OBRIGATORIAMENTE para a 'Unidade_Superior' (ex: SUPES ou Presidência/DF).
-│
-├── É o Chefe Substituto da Unidade?
-│        └── 🏢 Opção 1: Enviar ao Chefe Titular da Própria Unidade.
-│        └── 🏛️ Opção 2: Enviar à Unidade Superior (caso o titular esteja ausente/férias).
-│
-└── É Servidor Geral / Analista de Campo?
-└── 🏢 Opção Padrão: Própria Unidade (Apenas Titular, Titular + Substituto ou Apenas Substituto).
-└── 🏛️ Opção de Exceção: Unidade Superior (caso a chefia local esteja impedida).
+       │
+       ├── 👤 É o Chefe Titular da Unidade?
+       │        ├── ⛔ Bloqueia a própria unidade (impede autoaprovação).
+       │        └── 🏛️ Roteia compulsoriamente para a 'Unidade_Superior':
+       │                 ├── Apenas Titular Superior
+       │                 ├── Titular e Substituto Superior
+       │                 └── Apenas Substituto Superior
+       │
+       ├── 👥 É o Chefe Substituto da Unidade?
+       │        ├── 🏢 Opção 1: Própria Unidade
+       │        │        └── Apenas Chefe Titular (não envia para si mesmo)
+       │        └── 🏛️ Opção 2: Instância Superior (caso o titular local esteja ausente)
+       │                 ├── Apenas Titular Superior
+       │                 ├── Titular e Substituto Superior
+       │                 └── Apenas Substituto Superior
+       │
+       └── 🚶 É Servidor Geral / Membro da Equipe?
+                ├── 🏢 Opção Padrão: Própria Unidade
+                │        ├── 👤 Apenas Titular [Padrão - evita acionar o substituto]
+                │        ├── 👥 Titular e Substituto
+                │        └── 👤 Apenas Substituto [Uso quando o titular estiver ausente]
+                └── 🏛️ Opção Excepcional: Instância Superior
+                         ├── Apenas Titular Superior
+                         ├── Titular e Substituto Superior
+                         └── Apenas Substituto Superior
+
 
 ### 5.3 O que compõe o Card Interativo enviado à Chefia?
 Ao clicar no botão de solicitação, o Power Automate gera um *Adaptive Card* no Microsoft Teams e uma mensagem acionável no Outlook contendo:
