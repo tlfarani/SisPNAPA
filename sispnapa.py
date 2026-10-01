@@ -1591,31 +1591,115 @@ def montar_tabelas_minuta_portaria(df_acoes_cadastradas, df_macros, df_setoriais
 
 
 # =================================================================
-# FUNÇÃO AUXILIAR PARA RESGATAR A CHEFIA IMEDIATA
+# FUNÇÃO UNIFICADA DE CHEFIAS E ALÇADAS SCDP
 # =================================================================
-def obter_chefia_lotacao(nome_lotacao, uf_alvo, df_lot):
-    """Localiza e-mails e nomes do chefe titular e substituto da unidade do servidor."""
-    if df_lot is None or df_lot.empty or not nome_lotacao:
-        return {"nome_tit": "", "email_tit": "", "nome_sub": "", "email_sub": ""}
+def obter_chefia_lotacao(nome_lotacao, uf_alvo, df_lot, nome_servidor=None, email_servidor=None):
+    """
+    Localiza os dados da chefia imediata e superior.
+    Retorna tanto as chaves legadas (nome_tit, email_tit, etc.)
+    quanto a árvore dinâmica de instâncias para o SCDP.
+    """
+    retorno_padrao = {
+        "nome_tit": "", "email_tit": "",
+        "nome_sub": "", "email_sub": "",
+        "unidade_sup": "", "eh_titular": False, "eh_substituto": False,
+        "instancias": {}
+    }
     
-    match = df_lot[
+    if df_lot is None or df_lot.empty or not nome_lotacao:
+        return retorno_padrao
+
+    # 1. Localiza a unidade do servidor
+    match_loc = df_lot[
         (df_lot["Unidade"].astype(str).str.strip().str.lower() == str(nome_lotacao).strip().lower()) &
         (df_lot["UF"].astype(str).str.strip().str.upper() == str(uf_alvo).strip().upper())
     ]
-    
-    if match.empty:
-        # Fallback apenas pelo nome da unidade se a UF for genérica
-        match = df_lot[df_lot["Unidade"].astype(str).str.strip().str.lower() == str(nome_lotacao).strip().lower()]
-        
-    if not match.empty:
-        row = match.iloc[0]
-        return {
-            "nome_tit": str(row.get("Nome_Chefe_Titular", "")).strip(),
-            "email_tit": str(row.get("Email_Chefe_Titular", "")).strip().lower(),
-            "nome_sub": str(row.get("Nome_Chefe_Substituto", "")).strip(),
-            "email_sub": str(row.get("Email_Chefe_Substituto", "")).strip().lower()
-        }
-    return {"nome_tit": "", "email_tit": "", "nome_sub": "", "email_sub": ""}
+    if match_loc.empty:
+        match_loc = df_lot[df_lot["Unidade"].astype(str).str.strip().str.lower() == str(nome_lotacao).strip().lower()]
+
+    if match_loc.empty:
+        return retorno_padrao
+
+    row_loc = match_loc.iloc[0]
+    nome_tit_loc = str(row_loc.get("Nome_Chefe_Titular", "")).strip()
+    em_tit_loc = str(row_loc.get("Email_Chefe_Titular", "")).strip().lower()
+    nome_sub_loc = str(row_loc.get("Nome_Chefe_Substituto", "")).strip()
+    em_sub_loc = str(row_loc.get("Email_Chefe_Substituto", "")).strip().lower()
+    und_sup = str(row_loc.get("Unidade_Superior", "")).strip()
+    if und_sup.lower() in ["none", "nan", "null"]: und_sup = ""
+
+    # Limpeza defensiva de nulos
+    nome_tit_loc = "" if nome_tit_loc.lower() in ["none", "nan"] else nome_tit_loc
+    em_tit_loc = "" if em_tit_loc.lower() in ["none", "nan"] else em_tit_loc
+    nome_sub_loc = "" if nome_sub_loc.lower() in ["none", "nan"] else nome_sub_loc
+    em_sub_loc = "" if em_sub_loc.lower() in ["none", "nan"] else em_sub_loc
+
+    # 2. Localiza a unidade superior (se houver)
+    nome_tit_sup, em_tit_sup, nome_sub_sup, em_sub_sup = "", "", "", ""
+    if und_sup:
+        match_sup = df_lot[df_lot["Unidade"].astype(str).str.strip().str.lower() == und_sup.lower()]
+        if not match_sup.empty:
+            row_s = match_sup.iloc[0]
+            nome_tit_sup = str(row_s.get("Nome_Chefe_Titular", "")).strip()
+            em_tit_sup = str(row_s.get("Email_Chefe_Titular", "")).strip().lower()
+            nome_sub_sup = str(row_s.get("Nome_Chefe_Substituto", "")).strip()
+            em_sub_sup = str(row_s.get("Email_Chefe_Substituto", "")).strip().lower()
+            
+            nome_tit_sup = "" if nome_tit_sup.lower() in ["none", "nan"] else nome_tit_sup
+            em_tit_sup = "" if em_tit_sup.lower() in ["none", "nan"] else em_tit_sup
+            nome_sub_sup = "" if nome_sub_sup.lower() in ["none", "nan"] else nome_sub_sup
+            em_sub_sup = "" if em_sub_sup.lower() in ["none", "nan"] else em_sub_sup
+
+    # 3. Identifica se o solicitante é a chefia local
+    srv_n = str(nome_servidor).strip().lower() if nome_servidor else ""
+    srv_e = str(email_servidor).strip().lower() if email_servidor else ""
+
+    eh_titular = bool((nome_tit_loc and srv_n == nome_tit_loc.lower()) or (em_tit_loc and srv_e == em_tit_loc))
+    eh_substituto = bool((nome_sub_loc and srv_n == nome_sub_loc.lower()) or (em_sub_loc and srv_e == em_sub_loc))
+
+    # 4. Constrói as opções de deliberação para a interface
+    instancias = {}
+
+    # Opções na própria unidade (vedado ao titular para evitar auto-aprovação)
+    opcoes_local = {}
+    if not eh_titular:
+        if eh_substituto:
+            if em_tit_loc and "@" in em_tit_loc:
+                opcoes_local[f"👤 Apenas Chefe Titular ({nome_tit_loc})"] = [em_tit_loc]
+        else:
+            if em_tit_loc and "@" in em_tit_loc:
+                opcoes_local[f"👤 Apenas Titular ({nome_tit_loc}) [Padrão]"] = [em_tit_loc]
+            if em_tit_loc and em_sub_loc and "@" in em_tit_loc and "@" in em_sub_loc:
+                opcoes_local[f"👥 Titular e Substituto ({nome_tit_loc} e {nome_sub_loc})"] = [em_tit_loc, em_sub_loc]
+            if em_sub_loc and "@" in em_sub_loc:
+                opcoes_local[f"👤 Apenas Substituto ({nome_sub_loc}) [Titular ausente]"] = [em_sub_loc]
+
+    if opcoes_local:
+        instancias[f"🏢 Própria Unidade ({nome_lotacao})"] = opcoes_local
+
+    # Opções na instância superior
+    opcoes_sup = {}
+    if und_sup:
+        if em_tit_sup and "@" in em_tit_sup:
+            opcoes_sup[f"👤 Apenas Titular Superior ({nome_tit_sup})"] = [em_tit_sup]
+        if em_tit_sup and em_sub_sup and "@" in em_tit_sup and "@" in em_sub_sup:
+            opcoes_sup[f"👥 Titular e Substituto Superior ({nome_tit_sup} e {nome_sub_sup})"] = [em_tit_sup, em_sub_sup]
+        if em_sub_sup and "@" in em_sub_sup:
+            opcoes_sup[f"👤 Apenas Substituto Superior ({nome_sub_sup})"] = [em_sub_sup]
+
+    if opcoes_sup:
+        instancias[f"🏛️ Instância Superior ({und_sup})"] = opcoes_sup
+
+    return {
+        "nome_tit": nome_tit_loc,
+        "email_tit": em_tit_loc,
+        "nome_sub": nome_sub_loc,
+        "email_sub": em_sub_loc,
+        "unidade_sup": und_sup,
+        "eh_titular": eh_titular,
+        "eh_substituto": eh_substituto,
+        "instancias": instancias
+    }
 
 # =================================================================
 # FUNÇÕES UTILITÁRIAS DE FORMATAÇÃO NO PADRÃO BRASILEIRO (BRL)
@@ -4984,65 +5068,85 @@ elif modo == "📊 Visualizar Base":
                                 ed_just_at = ""
 
                         # =============================================================
-                        # 📑 ABA 6: AUTORIZAÇÃO PRÉVIA SCDP (CARD E DISPARO DEDICADO)
+                        # 📑 ABA 6 (TELA 1): AUTORIZAÇÃO PRÉVIA SCDP
                         # =============================================================
                         with aba6_at:
                             st.markdown("##### ✈️ Autorização Prévia para Abertura de Viagem (SCDP)")
-                            st.caption("Solicitação de autorização direta à chefia imediata via Teams e E-mail.")
+                            st.caption("Defina para qual autoridade e nível hierárquico o card de deliberação será encaminhado.")
+
+                            serv_env = ed_servidor_at if "ed_servidor_at" in locals() and ed_servidor_at else str(reg_at_alvo.get("Servidor", "")).strip()
+                            srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(serv_env).strip()]
+                            email_solic = str(srv_row["E_mail"].iloc[0]).strip().lower() if not srv_row.empty and str(srv_row["E_mail"].iloc[0]).strip() else email_logado
                             
                             lot_alvo = ed_lot_at if "ed_lot_at" in locals() and ed_lot_at else str(reg_at_alvo.get("Lotação", "")).strip()
                             uf_srv_alvo = ed_uf_srv_at if "ed_uf_srv_at" in locals() and ed_uf_srv_at else str(reg_at_alvo.get("UF_Servidor", "")).strip()
                             cod_atv_alvo = ed_cod_atv if "ed_cod_atv" in locals() and ed_cod_atv else str(reg_at_alvo.get("Codigo_Atividade", "")).strip()
                             id_chave = id_at_ref if "id_at_ref" in locals() else cod_atv_alvo
 
-                            dados_chefia = obter_chefia_lotacao(lot_alvo, uf_srv_alvo, df_lotacoes)
-                            emails_chefia = [
-                                e.strip().lower() 
-                                for e in [dados_chefia.get("email_tit", ""), dados_chefia.get("email_sub", "")] 
-                                if e and "@" in e
-                            ]
+                            # 1. Consulta alçadas inteligentes via função unificada
+                            dados_chefia = obter_chefia_lotacao(
+                                lot_alvo, 
+                                uf_srv_alvo, 
+                                df_lotacoes, 
+                                nome_servidor=serv_env, 
+                                email_servidor=email_solic
+                            )
                             
+                            instancias_disponiveis = list(dados_chefia.get("instancias", {}).keys())
+                            emails_chefia = []
+
+                            if not instancias_disponiveis:
+                                st.error(f"⚠️ Não foram encontradas chefias cadastradas para **{lot_alvo}** ou sua Unidade Superior em 'Gerenciar Unidades'.")
+                            else:
+                                if dados_chefia["eh_titular"]:
+                                    st.info(f"👑 **Titular de Unidade:** O servidor é o titular de **{lot_alvo}**. O envio é direcionado à Instância Superior ({dados_chefia['unidade_sup']}).")
+                                
+                                c_inst, c_dest = st.columns([1, 1.2])
+                                with c_inst:
+                                    sel_instancia = st.radio(
+                                        "1. Instância Deliberadora:",
+                                        instancias_disponiveis,
+                                        key=f"rad_inst_ed_{id_chave}"
+                                    )
+                                with c_dest:
+                                    opcoes_destinatarios = dados_chefia["instancias"][sel_instancia]
+                                    sel_destinatario = st.radio(
+                                        "2. Quem deve deliberar?:",
+                                        list(opcoes_destinatarios.keys()),
+                                        key=f"rad_dest_ed_{id_chave}"
+                                    )
+                                    emails_chefia = opcoes_destinatarios[sel_destinatario]
+
+                                st.caption(f"🔔 **E-mails notificados:** `{'; '.join(emails_chefia)}`")
+
+                            st.markdown("---")
+                            
+                            # 2. Status atual da autorização
                             val_status = str(reg_at_alvo.get("Status_Aprovacao_SCDP", "")).strip() if reg_at_alvo is not None else ""
                             status_scdp_atual = "Não Solicitada" if val_status in ["", "None", "nan"] else val_status
-                            
                             val_aprov = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip() if reg_at_alvo is not None else ""
                             aprovador_info = "" if val_aprov in ["None", "nan"] else val_aprov
 
                             if status_scdp_atual == "Aprovada":
                                 st.success(f"✅ **Viagem Autorizada pela Chefia!** Aprovador: `{aprovador_info}`.")
-                                txt_botao_scdp = "🔁 Reenviar Pedido de Autorização à Chefia (com Dados Modificados)"
+                                txt_botao_scdp = "🔁 Reenviar Pedido de Autorização aos Destinatários Selecionados"
                             elif status_scdp_atual == "Pendente":
-                                st.warning("⏳ **Solicitação já enviada.** Aguardando manifestação da chefia no Teams / Outlook.")
-                                txt_botao_scdp = "🔁 Reenviar Notificação de Aprovação à Chefia"
+                                st.warning("⏳ **Solicitação já enviada.** Aguardando manifestação da chefia.")
+                                txt_botao_scdp = "🔁 Reenviar Notificação de Aprovação"
                             elif status_scdp_atual == "Rejeitada":
                                 st.error(f"❌ **Viagem Rejeitada pela Chefia.** Motivo/Aprovador: `{aprovador_info}`.")
-                                txt_botao_scdp = "📨 Submeter Novo Pedido de Autorização após Ajustes"
+                                txt_botao_scdp = "📨 Submeter Novo Pedido após Ajustes"
                             else:
                                 st.info("⚪ Esta atividade ainda não possui solicitação de autorização no SCDP.")
-                                txt_botao_scdp = "📨 Enviar Solicitação de Autorização à Chefia (Teams / E-mail)"
+                                txt_botao_scdp = "📨 Enviar Solicitação aos Destinatários Selecionados (Teams / E-mail)"
 
-                            if emails_chefia:
-                                destinatarios_txt = []
-                                if dados_chefia.get("nome_tit") and dados_chefia.get("email_tit"):
-                                    destinatarios_txt.append(f"**Titular:** {dados_chefia['nome_tit']} (`{dados_chefia['email_tit']}`)")
-                                if dados_chefia.get("nome_sub") and dados_chefia.get("email_sub"):
-                                    destinatarios_txt.append(f"**Substituto:** {dados_chefia['nome_sub']} (`{dados_chefia['email_sub']}`)")
-                                st.markdown("📋 **Destinatários Notificados:**")
-                                for d in destinatarios_txt:
-                                    st.markdown(f"- {d}")
-                            else:
-                                st.error(f"⚠️ Não há e-mails de chefia cadastrados para **{lot_alvo}**. Cadastre em '🏢 Gerenciar Unidades' antes de solicitar.")
-
-                            st.markdown("---")
-                            
-                            # 🚀 BOTÃO DEDICADO DE DISPARO DA AUTORIZAÇÃO SCDP
+                            # 3. Disparo Oficial no Teams/Outlook
                             if st.button(txt_botao_scdp, type="secondary", use_container_width=True, key=f"btn_disparo_scdp_oficial_{id_chave}"):
                                 if not emails_chefia:
-                                    st.error("A lista de e-mails da chefia está vazia. Cadastre os chefes em 'Gerenciar Unidades'.")
+                                    st.error("Nenhum destinatário válido selecionado.")
                                 elif not URL_FLOW_APROVACAO_SCDP:
                                     st.error("URL do fluxo de aprovação não configurada.")
                                 else:
-                                    serv_env = ed_servidor_at if "ed_servidor_at" in locals() and ed_servidor_at else str(reg_at_alvo.get("Servidor", "")).strip()
                                     nome_atv_env = ed_nome_atv if "ed_nome_atv" in locals() and ed_nome_atv else str(reg_at_alvo.get("Nome da Atividade", "")).strip()
                                     mun_env = ed_mun_at if "ed_mun_at" in locals() and ed_mun_at else str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
                                     uf_oc_env = ed_uf_oc_at if "ed_uf_oc_at" in locals() and ed_uf_oc_at else str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "")).strip()
@@ -5055,8 +5159,7 @@ elif modo == "📊 Visualizar Base":
                                     val_o = float(ed_rp_o_at if "ed_rp_o_at" in locals() else obter_float_limpo(reg_at_alvo.get("Rec_Plan_Outras_Despesas", 0.0)))
                                     tot_fin_env = val_d + val_p + val_o
 
-                                    srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(serv_env).strip()]
-                                    email_solic = str(srv_row["E_mail"].iloc[0]).strip().lower() if not srv_row.empty and str(srv_row["E_mail"].iloc[0]).strip() else email_logado
+                                    obs_env = str(ed_obs_at).strip() if "ed_obs_at" in locals() and ed_obs_at else str(reg_at_alvo.get("Observações", "")).strip()
 
                                     payload_scdp = {
                                         "id_sharepoint": str(id_chave),
@@ -5075,10 +5178,10 @@ elif modo == "📊 Visualizar Base":
                                         "rec_passagens": val_p,
                                         "rec_outras": val_o,
                                         "rec_total": tot_fin_env,
-                                        "justificativa": str(ed_obs_at).strip() or "Operação de campo programada no âmbito do PNAPA."
+                                        "justificativa": obs_env or "Operação de campo programada no âmbito do PNAPA."
                                     }
 
-                                    # Atualiza o SharePoint marcando o status como 'Pendente' e limpando o aprovador anterior
+                                    # Atualiza o SharePoint como 'Pendente' e limpa o aprovador
                                     payload_at_scdp = payload_gerador(
                                         val_ano=val_ano_at, val_num_acao=val_num_acao_at, val_nome_acao=val_nome_acao_at,
                                         val_indicador=val_indicador_at, nivel_selecionado="Atividade", nome_atividade=nome_atv_env,
@@ -5090,19 +5193,19 @@ elif modo == "📊 Visualizar Base":
                                         dt_inicio=dti_env, dt_termino=dtf_env, dias_plan=dias_env, dias_exec=ed_dias_ex_at,
                                         origem_recurso=ed_orig_at, rec_p_diarias=val_d, rec_p_passagens=val_p, rec_p_outras=val_o,
                                         rec_e_diarias=ed_re_d_at, rec_e_passagens=ed_re_p_at, rec_e_outras=ed_re_o_at,
-                                        obs=ed_obs_at, justificativa=ed_just_at, id_atual=id_at_ref, modo="📝 Editar Linha Existente",
+                                        obs=obs_env, justificativa=ed_just_at, id_atual=id_at_ref, modo="📝 Editar Linha Existente",
                                         df_atual=df_atual, papel_institucional=ed_papel_at, coordenador_operacao=ed_funcao_campo,
                                         meta_indicador="", codigo_atividade=cod_atv_alvo, aval_qualidade="", aval_feedback="",
                                         uf_coordenadora=ed_uf_coord_at, status_scdp="Pendente", aprovador_scdp=""
                                     )
 
                                     try:
-                                        with st.spinner("📨 Enviando notificação ao Teams e atualizando status..."):
+                                        with st.spinner("📨 Enviando notificação à alçada selecionada..."):
                                             r_teams = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp, timeout=10)
                                             if r_teams.status_code in [200, 202]:
                                                 executar_envio_sharepoint([payload_at_scdp])
                                                 st.toast("Card de aprovação enviado à chefia!", icon="✈️")
-                                                st.success("✅ Solicitação enviada com sucesso à chefia no Teams e Outlook!")
+                                                st.success("✅ Solicitação enviada com sucesso aos destinatários selecionados!")
                                                 time.sleep(1.5)
                                                 st.cache_data.clear()
                                                 if "df" in st.session_state: del st.session_state.df
