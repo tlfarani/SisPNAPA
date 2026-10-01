@@ -5314,12 +5314,13 @@ elif modo == "📊 Visualizar Base":
                     else:
                         st.info(f"👥 **Edição em Lote:** {qtd_at_sel} atividades selecionadas. Marque os campos para edição em massa.")
                         edicoes_lote = {}
-                        l_aba1, l_aba2, l_aba3, l_aba4, l_aba5 = st.tabs([
-                            "1. Identificação & Agrupador", 
-                            "2. Recursos Humanos, Liderança & Local", 
+                        l_aba1, l_aba2, l_aba3, l_aba4, l_aba5, l_aba6 = st.tabs([
+                            "1. 📋 Identificação & Agrupador", 
+                            "2. 👥 Recursos Humanos, Liderança & Local", 
                             "3. Detalhes & Indicadores", 
-                            "4. Cronograma & Custos", 
-                            "5. Observações"
+                            "4. 💰 Cronograma & Custos", 
+                            "5. 📝 Observações",
+                            "6. ✈️ Autorização SCDP em Lote"
                         ])
 
                         with l_aba1:
@@ -5490,6 +5491,222 @@ elif modo == "📊 Visualizar Base":
                             if st.checkbox("Alterar Observações?", key="chk_obs_lt"):
                                 edicoes_lote["Observações"] = st.text_area("Novas Observações:", key="in_obs_lt").strip()
 
+                        # =============================================================
+                        # 📑 ABA 6: AUTORIZAÇÃO SCDP EM LOTE (AGRUPADA POR UNIDADE)
+                        # =============================================================
+                        with l_aba6:
+                            st.markdown("##### ✈️ Autorização Prévia SCDP em Lote (Agrupada por Unidade)")
+                            st.caption("As atividades selecionadas foram agrupadas pela Unidade de Lotação do servidor. Defina para cada unidade quem deliberará os pedidos.")
+
+                            df_at_sel_scdp = df_at_sel.copy()
+                            df_at_sel_scdp["Lot_Ref"] = df_at_sel_scdp["Lotação"].fillna("Sede Superintendência").astype(str).str.strip()
+                            df_at_sel_scdp["UF_Ref"] = df_at_sel_scdp["UF_Servidor"].fillna(df_at_sel_scdp["UF_Acao_PNAPA"]).astype(str).str.strip()
+
+                            grupos_lotacao = df_at_sel_scdp.groupby(["Lot_Ref", "UF_Ref"])
+                            
+                            mapa_destinatarios_lote = {}
+                            unidades_sem_chefia = []
+
+                            for (lot_nome, uf_nome), df_sub in grupos_lotacao:
+                                with st.container(border=True):
+                                    servidores_grupo = sorted(df_sub["Servidor"].dropna().unique().tolist())
+                                    
+                                    tot_d = sum([obter_float_limpo(r.get("Rec_Plan_Diarias")) for _, r in df_sub.iterrows()])
+                                    tot_p = sum([obter_float_limpo(r.get("Rec_Plan_Passagens")) for _, r in df_sub.iterrows()])
+                                    tot_o = sum([obter_float_limpo(r.get("Rec_Plan_Outras_Despesas")) for _, r in df_sub.iterrows()])
+                                    tot_fin_grp = tot_d + tot_p + tot_o
+
+                                    st.markdown(f"###### 🏢 Unidade: **{lot_nome}** (`{uf_nome}`) — {len(df_sub)} atividade(s)")
+                                    st.caption(f"👥 **Integrantes:** {', '.join(servidores_grupo)} | 💰 **Total Estimado:** `{formatar_moeda_br(tot_fin_grp)}`")
+
+                                    # Consulta a árvore hierárquica desta lotação
+                                    dados_chefia_grp = obter_chefia_lotacao(lot_nome, uf_nome, df_lotacoes)
+                                    instancias_grp = list(dados_chefia_grp.get("instancias", {}).keys())
+
+                                    if not instancias_grp:
+                                        st.error(f"⚠️ A unidade **{lot_nome}** não possui chefias válidas cadastradas em 'Gerenciar Unidades'.")
+                                        unidades_sem_chefia.append(lot_nome)
+                                    else:
+                                        chave_grp = f"scdp_lt_{lot_nome}_{uf_nome}"
+                                        c_inst_lt, c_dest_lt = st.columns([1, 1.2])
+                                        
+                                        with c_inst_lt:
+                                            sel_inst_grp = st.radio(
+                                                "Instância Deliberadora:",
+                                                instancias_grp,
+                                                key=f"rad_inst_{chave_grp}"
+                                            )
+                                        with c_dest_lt:
+                                            opcs_dest_grp = dados_chefia_grp["instancias"][sel_inst_grp]
+                                            sel_dest_grp = st.radio(
+                                                "Quem deve deliberar?:",
+                                                list(opcs_dest_grp.keys()),
+                                                key=f"rad_dest_{chave_grp}"
+                                            )
+                                            emails_escolhidos_grp = opcs_dest_grp[sel_dest_grp]
+                                        
+                                        st.caption(f"🔔 **Notificar:** `{'; '.join(emails_escolhidos_grp)}`")
+                                        mapa_destinatarios_lote[(lot_nome, uf_nome)] = emails_escolhidos_grp
+
+                            st.markdown("---")
+
+                            # Validação antes de habilitar o disparo
+                            pode_disparar_lote = bool(mapa_destinatarios_lote) and len(unidades_sem_chefia) == 0
+                            if unidades_sem_chefia:
+                                st.warning(f"⚠️ Regularize o cadastro de chefia das seguintes unidades antes de disparar: **{', '.join(unidades_sem_chefia)}**.")
+
+                            btn_enviar_scdp_lote = st.button(
+                                f"📨 Disparar Notificações SCDP em Lote ({len(df_at_sel)} atividades)",
+                                type="primary",
+                                use_container_width=True,
+                                disabled=not pode_disparar_lote,
+                                key="btn_enviar_scdp_lote_t1"
+                            )
+
+                            if btn_enviar_scdp_lote:
+                                if not URL_FLOW_APROVACAO_SCDP:
+                                    st.error("URL do fluxo de aprovação não configurada.")
+                                else:
+                                    chave_trava_scdp = f"scdp_lote_{len(df_at_sel)}"
+                                    verificar_duplo_clique(chave_trava_scdp)
+
+                                    from concurrent.futures import ThreadPoolExecutor
+
+                                    with st.spinner(f"⏳ Processando e disparando {len(df_at_sel)} solicitações ao Teams..."):
+                                        payloads_teams_lote = []
+                                        payloads_sp_lote = []
+
+                                        for _, r_atv in df_at_sel.iterrows():
+                                            r_dict = r_atv.to_dict()
+                                            id_item = normalizar_id_t1(r_dict.get("Id"))
+                                            lot_item = str(r_dict.get("Lotação", "")).strip() or "Sede Superintendência"
+                                            uf_srv_item = str(r_dict.get("UF_Servidor", "")).strip() or str(r_dict.get("UF_Acao_PNAPA", "")).strip()
+                                            serv_item = str(r_dict.get("Servidor", "")).strip()
+                                            cod_atv_item = str(r_dict.get("Codigo_Atividade", "")).strip()
+                                            nome_atv_item = str(r_dict.get("Nome da Atividade", "")).strip()
+                                            mun_item = str(r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                            uf_oc_item = str(r_dict.get("UF Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                            dti_item = str(r_dict.get("Data de Início", ""))
+                                            dtf_item = str(r_dict.get("Data de Término", ""))
+                                            dias_item = float(obter_float_limpo(r_dict.get("Dias_Gastos_Plan", 1.0)))
+                                            
+                                            v_d = float(obter_float_limpo(r_dict.get("Rec_Plan_Diarias", 0.0)))
+                                            v_p = float(obter_float_limpo(r_dict.get("Rec_Plan_Passagens", 0.0)))
+                                            v_o = float(obter_float_limpo(r_dict.get("Rec_Plan_Outras_Despesas", 0.0)))
+                                            tot_fin_item = v_d + v_p + v_o
+                                            
+                                            obs_item = str(r_dict.get("Observações", "")).strip() or "Operação de campo programada no âmbito do PNAPA."
+
+                                            srv_match_lt = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == serv_item]
+                                            email_solic_item = str(srv_match_lt["E_mail"].iloc[0]).strip().lower() if not srv_match_lt.empty and str(srv_match_lt["E_mail"].iloc[0]).strip() else email_logado
+
+                                            # Recupera os e-mails definidos para a unidade correspondente
+                                            emails_destino_grp = mapa_destinatarios_lote.get((lot_item, uf_srv_item), [])
+                                            if not emails_destino_grp:
+                                                for (l_k, _), ems in mapa_destinatarios_lote.items():
+                                                    if l_k.lower() == lot_item.lower():
+                                                        emails_destino_grp = ems
+                                                        break
+
+                                            payload_teams = {
+                                                "id_sharepoint": str(id_item),
+                                                "codigo_atividade": cod_atv_item,
+                                                "nome_atividade": nome_atv_item,
+                                                "servidor": serv_item,
+                                                "email_servidor": email_solic_item,
+                                                "unidade": lot_item,
+                                                "emails_chefia": ";".join(emails_destino_grp),
+                                                "municipio_destino": mun_item,
+                                                "uf_destino": uf_oc_item,
+                                                "dt_inicio": dti_item,
+                                                "dt_termino": dtf_item,
+                                                "dias_estimados": dias_item,
+                                                "rec_diarias": v_d,
+                                                "rec_passagens": v_p,
+                                                "rec_outras": v_o,
+                                                "rec_total": tot_fin_item,
+                                                "justificativa": obs_item
+                                            }
+                                            payloads_teams_lote.append(payload_teams)
+
+                                            # Prepara a atualização no SharePoint marcando como Pendente
+                                            payload_sp = payload_gerador(
+                                                val_ano=r_dict.get("Ano da Ação"),
+                                                val_num_acao=r_dict.get("Número da Ação PNAPA"),
+                                                val_nome_acao=r_dict.get("Nome da Ação PNAPA"),
+                                                val_indicador=r_dict.get("Indicador"),
+                                                nivel_selecionado="Atividade",
+                                                nome_atividade=nome_atv_item,
+                                                andamento=r_dict.get("Andamento"),
+                                                resultado_indicador=r_dict.get("Resultado_Indicador", 0.0),
+                                                doc_probatorio=r_dict.get("Doc_Probatorio_Exec", ""),
+                                                uf_acao=r_dict.get("UF_Acao_PNAPA"),
+                                                importancia=r_dict.get("Importância da Atividade", "Finalística"),
+                                                tema=r_dict.get("Tema da Atividade", "Outros temas"),
+                                                objetivo=r_dict.get("Objetivo da Atividade", "Prevenção"),
+                                                tipo_atividade=r_dict.get("Tipo de Atividade", "Operação"),
+                                                periculosidade=r_dict.get("Periculosidade/Insalubridade", "Não se Aplica"),
+                                                servidor=serv_item,
+                                                uf_servidor=uf_srv_item,
+                                                lotacao=lot_item,
+                                                equipe_emergencia=r_dict.get("Equipe_Emergencias", "Não"),
+                                                num_pcdp=r_dict.get("Número da PCDP", ""),
+                                                pais="Brasil",
+                                                uf_ocorrencia=uf_oc_item,
+                                                estado_local=r_dict.get("Estado_Local_Acao", ""),
+                                                municipio=mun_item,
+                                                dt_inicio=dti_item,
+                                                dt_termino=dtf_item,
+                                                dias_plan=dias_item,
+                                                dias_exec=r_dict.get("Dias_Gastos_Exec", 0.0),
+                                                origem_recurso=r_dict.get("Origem do Recurso", "SP"),
+                                                rec_p_diarias=v_d,
+                                                rec_p_passagens=v_p,
+                                                rec_p_outras=v_o,
+                                                rec_e_diarias=r_dict.get("Rec_Exec_Diarias", 0.0),
+                                                rec_e_passagens=r_dict.get("Rec_Exec_Passagens", 0.0),
+                                                rec_e_outras=r_dict.get("Rec_Exec_Outras_Despesas", 0.0),
+                                                obs=obs_item,
+                                                justificativa=r_dict.get("Justificativa_Acao_PNAPA", ""),
+                                                id_atual=id_item,
+                                                modo="📝 Editar Linha Existente",
+                                                df_atual=df_atual,
+                                                papel_institucional=r_dict.get("Papel_Institucional", "Coordenação"),
+                                                coordenador_operacao=r_dict.get("Coordenador_Operacao", "Apoio de Campo"),
+                                                meta_indicador=None,
+                                                codigo_atividade=cod_atv_item,
+                                                aval_qualidade=None,
+                                                aval_feedback=None,
+                                                uf_coordenadora=r_dict.get("UF_Coordenadora", ""),
+                                                status_scdp="Pendente",
+                                                aprovador_scdp=""
+                                            )
+                                            payloads_sp_lote.append(payload_sp)
+
+                                        # Disparo concorrente para o Power Automate (Teams/Outlook)
+                                        def enviar_teams_single(p):
+                                            try:
+                                                return requests.post(URL_FLOW_APROVACAO_SCDP, json=p, timeout=10)
+                                            except Exception:
+                                                return None
+
+                                        with ThreadPoolExecutor(max_workers=5) as executor:
+                                            resps = list(executor.map(enviar_teams_single, payloads_teams_lote))
+
+                                        # Gravação em lote no SharePoint
+                                        executar_envio_sharepoint(payloads_sp_lote)
+
+                                        sucessos = sum([1 for r in resps if r is not None and r.status_code in [200, 202]])
+                                        st.toast(f"✈️ {sucessos} de {len(payloads_teams_lote)} cards enviados ao Teams!", icon="📨")
+                                        st.success(f"✅ Processamento concluído: {sucessos} solicitações enviadas e registradas como 'Pendente' no SharePoint.")
+
+                                        st.session_state["selecoes_atividades"] = {}
+                                        st.cache_data.clear()
+                                        if "df" in st.session_state: del st.session_state.df
+                                        liberar_trava(chave_trava_scdp)
+                                        time.sleep(1.5)
+                                        st.rerun()
+                        
                         if edicoes_lote:
                             st.json(edicoes_lote)
                             
@@ -5588,6 +5805,8 @@ elif modo == "📊 Visualizar Base":
                                     liberar_trava(chave_trava)
                                     time.sleep(1)
                                     st.rerun()
+
+                        
 
 # --- TELA 2: FORMULÁRIO DA PLANILHA MACRO (INSERIR NOVA LINHA) ---
 elif modo == "➕ Inserir Nova Linha":
