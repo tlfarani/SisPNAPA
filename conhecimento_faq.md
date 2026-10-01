@@ -100,10 +100,11 @@ Toda operação de campo envolvendo um ou mais agentes obedece a uma regra estri
 
 Para garantir padronização e evitar erros de carregamento assíncrono, **100% dos formulários de atividades** (Tela 1 — Edição e Tela 2 — Inserção) compartilham a mesma arquitetura em **6 abas funcionais**, finalizadas por um **botão primário de gravação fixo no rodapé**:
 
+```
 [📋 Identificação da Atividade] ➔ [👥 Recursos Humanos, Liderança & Local] ➔ [🎯 Detalhes & Indicadores] ➔ [💰 Cronograma & Custos] ➔ [📝 Observações & Justificativas] ➔ [✈️ Autorização SCDP]
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 [ 💾 Gravar Atividade / Alterações (Fixo no Rodapé) ]
-
+```
 
 | Aba | Nome da Aba | O que é informado | Comportamento e Regras de Negócio |
 | :---: | :--- | :--- | :--- |
@@ -164,6 +165,7 @@ Para refletir o organograma do Ibama e impedir conflitos de interesse, a funçã
                          ├── Titular e Substituto Superior
                          └── Apenas Substituto Superior
 
+```
 
 ### 5.3 O que compõe o Card Interativo enviado à Chefia?
 Ao clicar no botão de solicitação, o Power Automate gera um *Adaptive Card* no Microsoft Teams e uma mensagem acionável no Outlook contendo:
