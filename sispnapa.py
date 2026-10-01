@@ -6689,9 +6689,9 @@ elif modo == "➕ Inserir Nova Linha":
             lista_todos_srvs_global = sorted(df_servidores["Servidor"].dropna().unique().tolist())
             servidores_finais = st.multiselect(
                 "Selecione os Servidores da Equipe:", 
-                options=lista_todos_srvs_global,
+                options=lista_todos_srvs_global, 
                 default=[servidor] if servidor in lista_todos_srvs_global else [],
-                help="Selecione apenas servidores cadastrados. Cada servidor gerará uma atividade idêntica no SharePoint."
+                help="Selecione os servidores cadastrados. Cada servidor gerará uma atividade idêntica no SharePoint."
             )
             
             st.info(f"📋 Serão gerados **{len(servidores_finais)}** registros simultâneos para o código `{codigo_atividade}` (UF Coordenadora: `{uf_coordenadora_val}`).")
@@ -6710,8 +6710,84 @@ elif modo == "➕ Inserir Nova Linha":
             espelhar_crono = st.checkbox("Espelhar Cronograma (Datas e Dias Gastos)", value=status_padrao, key="lote_chk_crono")
             espelhar_custos = st.checkbox("Espelhar Custos (Valores Planejados e Executados)", value=status_padrao, key="lote_chk_custos")
             espelhar_just = st.checkbox("Espelhar Justificativas e Observações", value=status_padrao, key="lote_chk_just")
+
+            # =============================================================
+            # ✈️ SEÇÃO DE AUTORIZAÇÃO SCDP EM LOTE (AGRUPADA POR UNIDADE)
+            # =============================================================
+            st.markdown("---")
+            st.markdown("### ✈️ Autorização Prévia SCDP em Lote")
+            solicitar_scdp_lote = st.checkbox(
+                "📨 **Solicitar autorização de viagem à chefia imediata ao cadastrar a equipe em lote?**",
+                value=False,
+                key="chk_solic_scdp_lote_ins",
+                help="Gera cards de autorização no Teams/Outlook para as chefias das unidades envolvidas."
+            )
+
+            mapa_srv_info = {}
+            grupos_unidades_ins = {}
+            mapa_destinatarios_lote_ins = {}
+            unidades_sem_chefia_ins = []
+
+            if servidores_finais:
+                for s_nome in servidores_finais:
+                    s_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(s_nome).strip()]
+                    if not s_row.empty:
+                        lot_s = str(s_row["Lotacao"].iloc[0]).strip() or "Sede Superintendência"
+                        uf_s = str(s_row["UF_Servidor"].iloc[0]).strip() or uf_filtro_pna
+                        em_s = str(s_row["E_mail"].iloc[0]).strip().lower()
+                        eq_s = str(s_row.get("Equipe_Emergencias", "Não")).strip().capitalize()
+                    else:
+                        lot_s = "Sede Superintendência"
+                        uf_s = uf_filtro_pna
+                        em_s = email_logado
+                        eq_s = "Não"
+                    
+                    mapa_srv_info[s_nome] = {
+                        "lotacao": lot_s, "uf": uf_s, "email": em_s, "equipe_emergencia": eq_s
+                    }
+                    grupos_unidades_ins.setdefault((lot_s, uf_s), []).append(s_nome)
+
+            if solicitar_scdp_lote:
+                if not servidores_finais:
+                    st.info("Selecione os servidores acima para configurar as instâncias deliberadoras.")
+                else:
+                    st.caption("As chefias foram identificadas pela Unidade de Lotação de cada servidor selecionado:")
+                    for (lot_nome, uf_nome), srvs_grp in grupos_unidades_ins.items():
+                        with st.container(border=True):
+                            st.markdown(f"###### 🏢 Unidade: **{lot_nome}** (`{uf_nome}`) — {len(srvs_grp)} servidor(es)")
+                            st.caption(f"👥 **Integrantes:** {', '.join(srvs_grp)}")
+                            
+                            # Consulta inteligente de alçadas da unidade
+                            dados_ch_ins = obter_chefia_lotacao(lot_nome, uf_nome, df_lotacoes)
+                            instancias_grp = list(dados_ch_ins.get("instancias", {}).keys())
+
+                            if not instancias_grp:
+                                st.error(f"⚠️ A unidade **{lot_nome}** não possui chefias válidas cadastradas em 'Gerenciar Unidades'.")
+                                unidades_sem_chefia_ins.append(lot_nome)
+                            else:
+                                chave_grp = f"scdp_ins_lt_{lot_nome}_{uf_nome}"
+                                c_inst_lt, c_dest_lt = st.columns([1, 1.2])
+                                with c_inst_lt:
+                                    sel_inst_grp = st.radio(
+                                        "Instância Deliberadora:",
+                                        instancias_grp,
+                                        key=f"rad_inst_{chave_grp}"
+                                    )
+                                with c_dest_lt:
+                                    opcs_dest_grp = dados_ch_ins["instancias"][sel_inst_grp]
+                                    sel_dest_grp = st.radio(
+                                        "Quem deve deliberar?:",
+                                        list(opcs_dest_grp.keys()),
+                                        key=f"rad_dest_{chave_grp}"
+                                    )
+                                    emails_escolhidos_grp = opcs_dest_grp[sel_dest_grp]
+                                
+                                st.caption(f"🔔 **Notificar:** `{'; '.join(emails_escolhidos_grp)}`")
+                                mapa_destinatarios_lote_ins[(lot_nome, uf_nome)] = emails_escolhidos_grp
+
+            st.markdown("<br>", unsafe_allow_html=True)
             
-            # 🛡️ BOTÃO 8: CARGA EM LOTE DE ATIVIDADES COM DEBOUNCE
+            # 🛡️ BOTÃO DE DISPARO DA CARGA EM LOTE
             btn_disparar_lote = st.button("🔥 Disparar Carga em Lote para o SharePoint", type="primary", use_container_width=True, key="btn_disparar_lote_final")
 
             if btn_disparar_lote:
@@ -6720,12 +6796,14 @@ elif modo == "➕ Inserir Nova Linha":
                 
                 if not servidores_finais:
                     st.error("⚠️ Selecione pelo menos um servidor na lista acima.")
-                    liberar_trava(chave_trava)  # 👈 Libera caso não tenha selecionado ninguém
+                    liberar_trava(chave_trava)
+                elif solicitar_scdp_lote and unidades_sem_chefia_ins:
+                    st.error(f"⛔ Cadastro de chefia ausente para: **{', '.join(unidades_sem_chefia_ins)}**. Cadastre as chefias em 'Gerenciar Unidades' antes de solicitar SCDP.")
+                    liberar_trava(chave_trava)
                 else:
                     bloqueio_lote = False
                     dias_lote_check = dias_plan if espelhar_crono else 0.0
             
-                    # 🚀 Resgate seguro da periculosidade para o lote (alinhado corretamente):
                     perigo_lote = "Não se Aplica"
                     if f"atv_sel_perigo_{codigo_atividade}" in st.session_state:
                         perigo_lote = str(st.session_state[f"atv_sel_perigo_{codigo_atividade}"]).strip()
@@ -6734,6 +6812,7 @@ elif modo == "➕ Inserir Nova Linha":
                     elif dados_atv_origem is not None:
                         perigo_lote = str(extrair_padrao_atv("Periculosidade/Insalubridade", "Não se Aplica")).strip()
                     
+                    # 1. Validação de capacidade individual no lote
                     for srv_lote_chk in servidores_finais:
                         func_chk = funcao_campo if srv_lote_chk == servidor else "Apoio de Campo"
                         res_chk_lt = calcular_termometro_carga(
@@ -6751,16 +6830,22 @@ elif modo == "➕ Inserir Nova Linha":
                             bloqueio_lote = True
             
                     if bloqueio_lote:
-                        liberar_trava(chave_trava)  # 👈 Libera se o termômetro barrar o envio
+                        liberar_trava(chave_trava)
                     else:
                         payloads_lote = []
+                        payloads_teams_lote = []
+
+                        status_scdp_final_lote = "Pendente" if solicitar_scdp_lote else "Não Solicitada"
+
                         for idx, serv_lote in enumerate(servidores_finais):
                             funcao_lote = funcao_campo if serv_lote == servidor else "Apoio de Campo"
+                            srv_info = mapa_srv_info.get(serv_lote, {
+                                "lotacao": lotacao, "uf": uf_servidor, "email": email_logado, "equipe_emergencia": "Não"
+                            })
                             
                             p_nome_atv = nome_atividade if espelhar_detalhes else ""
                             p_andamento = andamento if espelhar_detalhes else "Não Iniciada"
                             
-                            # 🛡️ Resultado do Indicador: sempre float para o SharePoint
                             if espelhar_detalhes and funcao_lote == "Coordenador de Campo" and papel_inst == "Coordenação":
                                 try: p_res_ind = float(str(resultado_indicador).strip().replace(",", ".")) if str(resultado_indicador).strip() else 0.0
                                 except: p_res_ind = 0.0
@@ -6799,23 +6884,24 @@ elif modo == "➕ Inserir Nova Linha":
                                 "Nome da Atividade": p_nome_atv, 
                                 "Andamento": p_andamento,
                                 "Indicador": str(val_indicador), 
-                                "Meta_Indicador": None,                # 👈 Blindado: None vira null no JSON
-                                "Resultado_Indicador": p_res_ind,      # 👈 Blindado: float
+                                "Meta_Indicador": None,
+                                "Resultado_Indicador": p_res_ind, 
                                 "Doc_Probatorio_Exec": p_doc, 
                                 "UF_Acao_PNAPA": uf_acao, 
                                 "Importância da Atividade": importancia,
                                 "Tema da Atividade": tema, 
                                 "Objetivo da Atividade": objetivo, 
                                 "Tipo de Atividade": tipo_atividade,
-                                # 🛡️ Blindagem de Periculosidade para o Power Automate (com e sem barra):
                                 "Periculosidade_Insalubridade": perigo_lote,
                                 "Periculosidade/Insalubridade": perigo_lote,
                                 "Servidor": serv_lote, 
+                                "UF_Servidor": srv_info["uf"],
+                                "Lotacao": srv_info["lotacao"],
+                                "Equipe_Emergencias": srv_info["equipe_emergencia"],
                                 "Número da PCDP": num_pcdp,
                                 "País": p_pais, 
                                 "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
                                 "Estado_Local_Acao": p_est,
-                                # 🛡️ Blindagem de Município (sem barra para o Power Automate):
                                 "Municipio_Ocorrencia": p_mun,
                                 "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun,
                                 "Município Onde Ocorreu/Ocorrerá a Ação": p_mun,
@@ -6834,20 +6920,68 @@ elif modo == "➕ Inserir Nova Linha":
                                 "Rec_Exec_Total": (p_re_d + p_re_p + p_re_o),
                                 "Observações": p_obs, 
                                 "Justificativa_Acao_PNAPA": "",
-                                "Avaliacao_Qualidade": None,          # 👈 Blindado: None vira null
-                                "Avaliacao_Feedback": None            # 👈 Blindado: None vira null
+                                "Status_Aprovacao_SCDP": status_scdp_final_lote,
+                                "Aprovador_SCDP": "",
+                                "Avaliacao_Qualidade": None,
+                                "Avaliacao_Feedback": None
                             }
                             payloads_lote.append(payload_linha)
+
+                            # 2. Prepara webhook de deliberação para o Teams se marcado
+                            if solicitar_scdp_lote:
+                                emails_destino_grp = mapa_destinatarios_lote_ins.get((srv_info["lotacao"], srv_info["uf"]), [])
+                                if not emails_destino_grp:
+                                    for (l_k, _), ems in mapa_destinatarios_lote_ins.items():
+                                        if l_k.lower() == srv_info["lotacao"].lower():
+                                            emails_destino_grp = ems
+                                            break
+
+                                tot_fin_srv = float(p_rp_d + p_rp_p + p_rp_o)
+                                payload_t = {
+                                    "id_sharepoint": "",
+                                    "codigo_atividade": str(codigo_atividade),
+                                    "nome_atividade": p_nome_atv,
+                                    "servidor": serv_lote,
+                                    "email_servidor": srv_info["email"],
+                                    "unidade": srv_info["lotacao"],
+                                    "emails_chefia": ";".join(emails_destino_grp),
+                                    "municipio_destino": p_mun,
+                                    "uf_destino": p_uf_oc,
+                                    "dt_inicio": str(p_ini),
+                                    "dt_termino": str(p_fim),
+                                    "dias_estimados": float(p_d_pl),
+                                    "rec_diarias": float(p_rp_d),
+                                    "rec_passagens": float(p_rp_p),
+                                    "rec_outras": float(p_rp_o),
+                                    "rec_total": tot_fin_srv,
+                                    "justificativa": str(p_obs).strip() or "Operação de campo programada no âmbito do PNAPA."
+                                }
+                                payloads_teams_lote.append(payload_t)
                         
-                        with st.spinner("⏳ Processando carga em lote no SharePoint..."):
+                        # 3. Execução concorrente do webhook e gravação no SharePoint
+                        from concurrent.futures import ThreadPoolExecutor
+
+                        with st.spinner(f"⏳ Processando carga de {len(payloads_lote)} registros no SharePoint..."):
                             executar_envio_sharepoint(payloads_lote)
+
+                        if solicitar_scdp_lote and payloads_teams_lote and URL_FLOW_APROVACAO_SCDP:
+                            def disparar_teams_single_ins(p):
+                                try: return requests.post(URL_FLOW_APROVACAO_SCDP, json=p, timeout=10)
+                                except Exception: return None
+
+                            with st.spinner("📨 Enviando notificações concorrentes ao Teams / Outlook..."):
+                                with ThreadPoolExecutor(max_workers=5) as executor:
+                                    resps_ins = list(executor.map(disparar_teams_single_ins, payloads_teams_lote))
                             
-                            # 🚀 LIMPEZA E LIBERAÇÃO IMEDIATA:
-                            st.cache_data.clear()
-                            if "df" in st.session_state: del st.session_state.df
-                            liberar_trava(chave_trava)
-                            time.sleep(1)
-                            st.rerun()
+                            sucessos_ins = sum([1 for r in resps_ins if r is not None and r.status_code in [200, 202]])
+                            st.toast(f"✈️ {sucessos_ins} de {len(payloads_teams_lote)} cards enviados à chefia!", icon="📨")
+
+                        st.cache_data.clear()
+                        if "df" in st.session_state: del st.session_state.df
+                        liberar_trava(chave_trava)
+                        st.success(f"🎉 Carga em lote finalizada com sucesso ({len(payloads_lote)} atividades cadastradas)!")
+                        time.sleep(1.5)
+                        st.rerun()
 
 # --- TELA 3: GERENCIAR UNIDADES (COM PREENCHIMENTO AUTOMÁTICO, CHEFIAS E CASCATA) ---
 elif modo == "🏢 Gerenciar Unidades":
