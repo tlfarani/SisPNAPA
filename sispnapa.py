@@ -6617,6 +6617,28 @@ elif modo == "🏢 Gerenciar Unidades":
     st.markdown("<h3 style='color: #03170a;'>🏢 Gerenciamento de Unidades / Lotações (Tabela Auxiliar)</h3>", unsafe_allow_html=True)
     st.caption("Catálogo corporativo de setores, unidades de lotação e chefias responsáveis pela anuência de viagens (SCDP).")
     
+    # 0. TRATAMENTO DEFENSIVO DA COLUNA UNIDADE_SUPERIOR
+    if "Unidade_Superior" not in df_lotacoes.columns:
+        df_lotacoes["Unidade_Superior"] = ""
+    else:
+        df_lotacoes["Unidade_Superior"] = df_lotacoes["Unidade_Superior"].fillna("").astype(str).str.strip()
+
+    # Mapeamento auxiliar de todas as unidades para exibição amigável: "Nome (UF)"
+    mapa_unidades_uf = {}
+    for _, r_l in df_lotacoes.iterrows():
+        u_nome = str(r_l.get("Unidade", "")).strip()
+        u_uf = str(r_l.get("UF", "")).strip()
+        if u_nome and u_nome not in ["None", "nan"]:
+            mapa_unidades_uf[u_nome] = u_uf
+
+    todas_unidades_cadastradas = sorted(list(mapa_unidades_uf.keys()))
+
+    def formatar_opcao_sup(u):
+        if not u or u.startswith("Nenhuma"):
+            return "Nenhuma (Instância Máxima / Raiz)"
+        uf_ref = mapa_unidades_uf.get(u, "")
+        return f"{u} ({uf_ref})" if uf_ref else u
+
     # 1. VISUALIZAÇÃO CONDICIONAL POR PERFIL
     df_visualizacao_uni = df_lotacoes if perfil_usuario == "Administrador" else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
     
@@ -6624,9 +6646,9 @@ elif modo == "🏢 Gerenciar Unidades":
     if df_visualizacao_uni.empty:
         st.info(f"Nenhuma unidade cadastrada para a UF {uf_usuario}.")
     else:
-        # 🚀 Exibição com as colunas de chefia
+        # 🚀 Exibição com a coluna de Unidade Superior e chefias
         cols_exib_uni = [
-            "ID_UF", "UF", "Unidade", 
+            "ID_UF", "UF", "Unidade", "Unidade_Superior",
             "Nome_Chefe_Titular", "Email_Chefe_Titular", 
             "Nome_Chefe_Substituto", "Email_Chefe_Substituto"
         ]
@@ -6635,6 +6657,7 @@ elif modo == "🏢 Gerenciar Unidades":
         
         mapa_cabecalhos_uni = {
             "ID_UF": "ID",
+            "Unidade_Superior": "Unidade Superior",
             "Nome_Chefe_Titular": "Chefe Titular",
             "Email_Chefe_Titular": "E-mail Titular",
             "Nome_Chefe_Substituto": "Chefe Substituto",
@@ -6666,9 +6689,19 @@ elif modo == "🏢 Gerenciar Unidades":
                 st.text_input("UF da Lotação (Travada):", value=uf_usuario, disabled=True, key="uni_add_uf_rep")
                 uf_uni_add = uf_usuario
         with c_add2:
-            nova_uni = st.text_input("Nome da Nova Unidade (Ex: Nupaem-SP, SUPES-RJ):", key="uni_add_nome").strip()
+            nova_uni = st.text_input("Nome da Nova Unidade (Ex: Nupaem-SP, SUPES-RJ, UED-Santos):", key="uni_add_nome").strip()
             
-        # 🚀 Novos Campos de Chefia para Inserção
+        # 🚀 Seletor de Unidade Superior (Todas as unidades nacionais disponíveis)
+        opcoes_sup_add = ["Nenhuma (Instância Máxima / Raiz)"] + todas_unidades_cadastradas
+        und_sup_add_sel = st.selectbox(
+            "🏛️ Unidade Hierarquicamente Superior:",
+            opcoes_sup_add,
+            format_func=formatar_opcao_sup,
+            help="Selecione a unidade responsável por deliberar sobre as viagens dos chefes desta nova unidade (ex: SUPES-SP para núcleos de SP, ou Presidência/DILIC no DF).",
+            key="uni_add_und_sup"
+        )
+        und_sup_final_add = "" if und_sup_add_sel.startswith("Nenhuma") else und_sup_add_sel
+
         st.markdown("###### 👤 Chefia Imediata (Para autorização prévia de viagens no Teams / SCDP)")
         c_ch_add1, c_ch_add2 = st.columns(2)
         with c_ch_add1:
@@ -6682,7 +6715,6 @@ elif modo == "🏢 Gerenciar Unidades":
             if not nova_uni:
                 st.error("⚠️ O nome da unidade é obrigatório.")
             else:
-                # Cálculo seguro do próximo ID_UF
                 col_id_uf = "ID_UF" if "ID_UF" in df_lotacoes.columns else "Id"
                 if not df_lotacoes.empty and col_id_uf in df_lotacoes.columns:
                     id_novo_uf = int(pd.to_numeric(df_lotacoes[col_id_uf], errors='coerce').fillna(0).max() + 1)
@@ -6694,6 +6726,7 @@ elif modo == "🏢 Gerenciar Unidades":
                     "ID_UF": id_novo_uf,
                     "UF": uf_uni_add,
                     "Unidade": nova_uni,
+                    "Unidade_Superior": und_sup_final_add,
                     "Nome_Chefe_Titular": nome_tit_add,
                     "Email_Chefe_Titular": email_tit_add,
                     "Nome_Chefe_Substituto": nome_sub_add,
@@ -6713,7 +6746,6 @@ elif modo == "🏢 Gerenciar Unidades":
     with t_edit:
         st.markdown("##### 📝 Alteração de Dados da Unidade")
         
-        # 1. Filtro de UF para o Administrador localizar a unidade
         if perfil_usuario == "Administrador":
             lista_ufs_uni = sorted(df_lotacoes["UF"].dropna().unique().tolist())
             uf_filtrada_edit = st.selectbox("1. Filtrar Unidades por UF/Órgão:", lista_ufs_uni, key="uf_filt_edit")
@@ -6725,7 +6757,6 @@ elif modo == "🏢 Gerenciar Unidades":
         if df_unidades_filtradas.empty:
             st.warning(f"⚠️ Nenhuma unidade encontrada para a UF: {uf_filtrada_edit}")
         else:
-            # 2. Dropdown de Seleção da Unidade
             lista_nomes_unidades = sorted(df_unidades_filtradas["Unidade"].dropna().unique().tolist())
             sel_uni = st.selectbox("2. Selecione a Unidade para visualizar/alterar:", lista_nomes_unidades, key="uni_sel_edit")
             
@@ -6736,17 +6767,17 @@ elif modo == "🏢 Gerenciar Unidades":
                 id_uf_edit = int(float(dados_alvo_uni["ID_UF"]))
                 val_atual_uf_uni = str(dados_alvo_uni.get("UF", uf_filtrada_edit)).strip()
                 val_atual_nome_uni = str(dados_alvo_uni.get("Unidade", sel_uni)).strip()
+                val_atual_und_sup = str(dados_alvo_uni.get("Unidade_Superior", "")).strip()
+                if val_atual_und_sup in ["None", "nan"]: val_atual_und_sup = ""
 
-                # 🚀 Resgate dos dados existentes de chefia
                 val_atual_nome_tit = str(dados_alvo_uni.get("Nome_Chefe_Titular", "")).strip()
                 val_atual_email_tit = str(dados_alvo_uni.get("Email_Chefe_Titular", "")).strip()
                 val_atual_nome_sub = str(dados_alvo_uni.get("Nome_Chefe_Substituto", "")).strip()
                 val_atual_email_sub = str(dados_alvo_uni.get("Email_Chefe_Substituto", "")).strip()
 
                 st.markdown(f"#### 🏢 Ficha da Unidade: **{val_atual_nome_uni}** `(ID: {id_uf_edit})`")
-                st.caption("Modificações nesta unidade atualizarão os contatos das chefias e, caso o nome mude, a tabela de Equipes.")
+                st.caption("Modificações nesta unidade atualizarão os contatos das chefias, a subordinação hierárquica e, caso o nome mude, a tabela de Equipes.")
 
-                # Campos de identificação da unidade
                 col_ed_u1, col_ed_u2 = st.columns(2)
                 with col_ed_u1:
                     if perfil_usuario == "Administrador":
@@ -6776,7 +6807,26 @@ elif modo == "🏢 Gerenciar Unidades":
                         key=f"ed_nome_uni_txt_{id_uf_edit}"
                     ).strip()
 
-                # 🚀 Novos Campos de Chefia na Edição
+                # 🔒 Anti-ciclo: Remove a própria unidade da lista de opções de superior
+                opcoes_sup_edit = ["Nenhuma (Instância Máxima / Raiz)"] + [
+                    u for u in todas_unidades_cadastradas if u.lower() != val_atual_nome_uni.lower()
+                ]
+
+                if val_atual_und_sup and val_atual_und_sup in opcoes_sup_edit:
+                    idx_sup_edit = opcoes_sup_edit.index(val_atual_und_sup)
+                else:
+                    idx_sup_edit = 0
+
+                nova_und_sup_sel = st.selectbox(
+                    "🏛️ Unidade Hierarquicamente Superior:",
+                    opcoes_sup_edit,
+                    index=idx_sup_edit,
+                    format_func=formatar_opcao_sup,
+                    help="Selecione para qual unidade os pedidos de viagem do titular desta lotação serão direcionados.",
+                    key=f"ed_und_sup_sel_{id_uf_edit}"
+                )
+                nova_und_sup = "" if nova_und_sup_sel.startswith("Nenhuma") else nova_und_sup_sel
+
                 st.markdown("###### 👤 Chefia Imediata (Para autorização prévia de viagens no Teams / SCDP)")
                 col_ch1, col_ch2 = st.columns(2)
                 with col_ch1:
@@ -6788,25 +6838,24 @@ elif modo == "🏢 Gerenciar Unidades":
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- DISPARO DA ATUALIZAÇÃO ---
                 if st.button("💾 Salvar Alterações e Sincronizar Equipes", type="primary", key=f"btn_salvar_uni_{id_uf_edit}"):
                     if not novo_nome_uni:
-                        st.error("⚠️ O Nome da Unidade não pode ficar em branco.")
+                        st.error("⚠️️ O Nome da Unidade não pode ficar em branco.")
                     else:
-                        # 1. Atualiza a Tabela Auxiliar de Unidades (incluindo chefias)
-                        with st.spinner(f"1/2 Atualizando Unidade '{novo_nome_uni}' e chefias..."):
+                        with st.spinner(f"1/2 Atualizando Unidade '{novo_nome_uni}', hierarquia e chefias..."):
                             executar_api_unidades({
                                 "Acao": "Editar", 
                                 "ID_UF": id_uf_edit, 
                                 "UF": nova_uf_uni, 
                                 "Unidade": novo_nome_uni,
+                                "Unidade_Superior": nova_und_sup,
                                 "Nome_Chefe_Titular": novo_nome_tit,
                                 "Email_Chefe_Titular": novo_email_tit,
                                 "Nome_Chefe_Substituto": novo_nome_sub,
                                 "Email_Chefe_Substituto": novo_email_sub
                             })
 
-                        # 2. Atualiza em Cascata apenas os Servidores afetados (servidores.xlsx) se o nome ou UF da unidade mudou
+                        # Sincronização em cascata se nome ou UF mudaram
                         servidores_afetados = df_servidores[
                             (df_servidores["Lotacao"].astype(str).str.strip() == str(sel_uni).strip()) &
                             (df_servidores["UF_Servidor"].astype(str).str.strip() == str(val_atual_uf_uni).strip())
@@ -6832,7 +6881,6 @@ elif modo == "🏢 Gerenciar Unidades":
                                     }
                                     executar_api_equipes(payload_srv_cascata)
 
-                        # 3. Limpeza de cache e reload da interface
                         time.sleep(1.5)
                         st.cache_data.clear()
                         if "df" in st.session_state:
@@ -6865,15 +6913,21 @@ elif modo == "🏢 Gerenciar Unidades":
             if not linha_filtrada_del.empty:
                 id_uf_del = int(float(linha_filtrada_del["ID_UF"].iloc[0]))
                 
-                # Alerta de dependências (se houver servidores ativos nela)
+                # 1. Alerta de servidores ativos vinculados
                 servidores_nesta_unidade = df_servidores[
                     (df_servidores["Lotacao"].astype(str).str.strip() == str(del_uni).strip()) &
                     (df_servidores["UF_Servidor"].astype(str).str.strip() == str(uf_filtrada_del).strip())
                 ]
-                
                 if not servidores_nesta_unidade.empty:
                     st.warning(f"⚠️ **Atenção:** Existem **{len(servidores_nesta_unidade)} servidor(es)** cadastrados nesta unidade. Recomenda-se remanejá-los antes de excluir.")
                 
+                # 2. Alerta se for Unidade Superior de outros setores
+                setores_subordinados = df_lotacoes[
+                    df_lotacoes["Unidade_Superior"].astype(str).str.strip().str.lower() == str(del_uni).strip().lower()
+                ]["Unidade"].tolist()
+                if setores_subordinados:
+                    st.error(f"⛔ **Dependência Hierárquica:** A unidade '{del_uni}' está cadastrada como Unidade Superior de: **{', '.join(setores_subordinados)}**. Altere a chefia superior dessas unidades antes da exclusão.")
+
                 if st.button("❌ Confirmar Exclusão Permanente", disabled=not st.checkbox(f"Confirmo que desejo excluir a unidade {del_uni} ({uf_filtrada_del})", key=f"chk_del_uni_{id_uf_del}")):
                     with st.spinner("Removendo registro do SharePoint..."):
                         executar_api_unidades({"Acao": "Excluir", "ID_UF": id_uf_del})
