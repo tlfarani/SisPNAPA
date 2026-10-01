@@ -768,7 +768,8 @@ def calcular_termometro_carga(
 ):
     """
     Calcula capacidade operacional e limites de liderança:
-    - Sede Ceneac (Ceneac, Seplog, CPrev, Seprev, Coate, Secoate): Equiparado a Titular (90d / 135d).
+    - Lê preferencialmente 'Dedicacao_Maxima' cadastrada no servidor.
+    - Fallback: Sede Ceneac/Titulares (90d), Substitutos (60d) e Demais (40d).
     - Pré-PNAPA: Trava no Teto Base (90d / 60d / 40d).
     - Pós-PNAPA: Expansão do Teto (+50% -> 135d / 90d / 60d).
     - Hard Limit ativo apenas para Ano >= ano_inicio_trava (2027+).
@@ -788,10 +789,11 @@ def calcular_termometro_carga(
 
     eh_planejamento_rigido = (ano_num >= ano_corte_trava)
 
-    # 1. Identificação do Servidor, Cargo e Lotação (100% Imune a Caixa/Acentuação)
+    # 1. Identificação do Servidor, Cargo, Lotação e Dedicação Máxima
     cargo_srv = ""
     lotacao_srv = ""
     uf_srv = ""
+    dedicacao_salva = None
     
     if df_srv_base is not None and not df_srv_base.empty and nome_servidor:
         srv_alvo_norm = normalizar_texto(nome_servidor)
@@ -803,6 +805,11 @@ def calcular_termometro_carga(
             val_lot = row_s.get("Lotacao", row_s.get("Lotação", ""))
             lotacao_srv = normalizar_texto(val_lot)
             uf_srv = normalizar_texto(row_s.get("UF_Servidor", row_s.get("UF", "")))
+            
+            # 🎯 NOVO: Resgate da coluna Dedicacao_Maxima do SharePoint
+            raw_dedic = pd.to_numeric(row_s.get("Dedicacao_Maxima", None), errors='coerce')
+            if pd.notna(raw_dedic) and raw_dedic > 0:
+                dedicacao_salva = float(raw_dedic)
 
     unidades_sede_norm = [normalizar_texto(u) for u in params.get("unidades_sede_equiparadas", []) if str(u).strip()]
 
@@ -816,18 +823,31 @@ def calcular_termometro_carga(
     eh_substituto = any(termo in cargo_srv for termo in ["substituto", "substituta", "subst", "vice"])
     eh_titular = any(termo in cargo_srv for termo in ["responsavel", "coordenador", "chefe", "ponto focal"]) and not eh_substituto
 
-    if pertence_sede_ceneac:
-        perfil_desc = "Equipe Sede Ceneac / Nacional (Equiparado a Responsável)"
-        teto_pre = float(params.get("teto_titular_pre", 90.0))
-    elif eh_titular:
-        perfil_desc = "Responsável / Coordenador Titular"
-        teto_pre = float(params.get("teto_titular_pre", 90.0))
-    elif eh_substituto:
-        perfil_desc = "Coordenador / Responsável Substituto"
-        teto_pre = float(params.get("teto_substituto_pre", 60.0))
+    # 🎯 DEFINIÇÃO DO TETO: Prioriza o campo cadastrado; se vazio, usa as regras padrão
+    if dedicacao_salva is not None:
+        teto_pre = dedicacao_salva
+        if pertence_sede_ceneac:
+            perfil_desc = f"Equipe Sede Ceneac ({int(teto_pre)}d)"
+        elif eh_titular:
+            perfil_desc = f"Responsável Titular ({int(teto_pre)}d)"
+        elif eh_substituto:
+            perfil_desc = f"Responsável Substituto ({int(teto_pre)}d)"
+        else:
+            perfil_desc = f"Membro de Equipe ({int(teto_pre)}d)"
     else:
-        perfil_desc = "Membro de Equipe"
-        teto_pre = float(params.get("teto_membro_pre", 40.0))
+        # Fallback legado para cadastros sem preenchimento
+        if pertence_sede_ceneac:
+            perfil_desc = "Equipe Sede Ceneac / Nacional (Equiparado a Responsável)"
+            teto_pre = float(params.get("teto_titular_pre", 90.0))
+        elif eh_titular:
+            perfil_desc = "Responsável / Coordenador Titular"
+            teto_pre = float(params.get("teto_titular_pre", 90.0))
+        elif eh_substituto:
+            perfil_desc = "Coordenador / Responsável Substituto"
+            teto_pre = float(params.get("teto_substituto_pre", 60.0))
+        else:
+            perfil_desc = "Membro de Equipe"
+            teto_pre = float(params.get("teto_membro_pre", 40.0))
 
     teto_pos = teto_pre * fator_pos
     teto_dias_ativo = teto_pre if fase_registro == "Pré-PNAPA" else teto_pos
@@ -838,7 +858,7 @@ def calcular_termometro_carga(
             "perfil_dedicacao": perfil_desc, "teto_dias": teto_dias_ativo, "teto_pre": teto_pre, "teto_pos": teto_pos,
             "teto_dias_ativo": teto_dias_ativo, "teto_ordinarias": teto_ordinarias,
             "dias_totais_atuais": 0.0, "dias_totais_projetados": dias_novos,
-            "dias_ord_atuais": 0.0, "dias_ord_projetados": dias_novos if importancia_nova == "Ordinária" else 0.0,
+            "dias_ord_atuais": 0.0, "dias_ord_projetados": dias_novos if importancia_nova in ["Rotina", "Ordinária"] else 0.0,
             "acoes_coord_totais": 0, "acoes_coord_n3": 0, "teto_coord_total": teto_coord_total, "teto_coord_n3": teto_coord_n3,
             "status_geral": "OK", "mensagens_erro": [], "mensagens_aviso": [], "eh_planejamento_rigido": eh_planejamento_rigido
         }
@@ -856,7 +876,6 @@ def calcular_termometro_carga(
     df_atvs_srv = df_ano_srv[df_ano_srv["Nível"].astype(str).str.strip() == "Atividade"]
     dias_totais_atuais = pd.to_numeric(df_atvs_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if "Dias_Gastos_Plan" in df_atvs_srv.columns else 0.0
     
-    # Filtra atividades de rotina (reconhece Rotina e Ordinária)
     df_ord_srv = df_atvs_srv[df_atvs_srv["Importância da Atividade"].astype(str).str.strip().isin(["Rotina", "Ordinária"])] if "Importância da Atividade" in df_atvs_srv.columns else pd.DataFrame()
     dias_ord_atuais = pd.to_numeric(df_ord_srv["Dias_Gastos_Plan"], errors='coerce').fillna(0).sum() if not df_ord_srv.empty and "Dias_Gastos_Plan" in df_ord_srv.columns else 0.0
 
@@ -864,7 +883,7 @@ def calcular_termometro_carga(
     dias_totais_proj = dias_totais_atuais + (dias_novos if nivel_registro == "Atividade" else 0.0)
     dias_ord_proj = dias_ord_atuais + (dias_novos if (nivel_registro == "Atividade" and eh_rotina_nova) else 0.0)
 
-    # 4. Eixo de Liderança (Ações Coordenadas & Nível 3 - Tolerante a 'Ação' e 'Ação Setorial')
+    # 4. Eixo de Liderança (Ações Coordenadas & Nível 3)
     df_acoes_coord = df_ano[
         (df_ano["Nível"].astype(str).str.strip().isin(["Ação", "Ação Setorial"])) &
         (df_ano["Servidor"].astype(str).str.strip().str.lower() == str(nome_servidor).strip().lower())
@@ -895,25 +914,21 @@ def calcular_termometro_carga(
     mensagens_erro = []
     mensagens_aviso = []
 
-    # Validação A: Regra de Ouro (Ações Nível 3)
     if acoes_coord_n3_proj > teto_coord_n3:
         msg = f"Regra de Liderança: Coordenará {acoes_coord_n3_proj} Ações Nível 3 (Máximo permitido: {teto_coord_n3})."
         if eh_planejamento_rigido: mensagens_erro.append(msg)
         else: mensagens_aviso.append(msg + " (Revisar distribuição).")
 
-    # Validação B: Teto Global de Coordenações
     if acoes_coord_totais_proj > teto_coord_total:
         msg = f"Teto de Coordenações excedido: {acoes_coord_totais_proj} ações sob responsabilidade (Máximo permitido: {teto_coord_total})."
         if eh_planejamento_rigido: mensagens_erro.append(msg)
         else: mensagens_aviso.append(msg)
 
-    # Validação C: Teto de Dias Anuais
     if dias_totais_proj > teto_dias_ativo:
         msg = f"Teto de dias ({fase_registro}) excedido: Projetado {dias_totais_proj:.1f} d / Limite {teto_dias_ativo:.0f} d."
         if eh_planejamento_rigido: mensagens_erro.append(msg)
         else: mensagens_aviso.append(msg + f" ({fase_registro} em execução).")
 
-    # Validação D: Trava Anti-Rotina (50% Ordinárias)
     if dias_ord_proj > teto_ordinarias:
         msg = f"Cota de Rotina ({fase_registro}) excedida: Projetado {dias_ord_proj:.1f} d / Máximo {teto_ordinarias:.0f} d ({int(pct_ord*100)}%)."
         if eh_planejamento_rigido: mensagens_erro.append(msg)
@@ -947,28 +962,24 @@ def calcular_termometro_carga(
         "eh_planejamento_rigido": eh_planejamento_rigido
     }
 
+
 def calcular_capacidade_equipes_uf(df_atual, df_srv_base, ano_alvo):
     """
     Calcula a capacidade agregada em dias de esforço por UF/Sede para o ciclo Pré-PNAPA.
-    Regra Universal:
-      - Elegibilidade estrita: 'Equipe_Emergencias' == 'Sim'.
-      - Sede: 'UF_Servidor' == 'DF' (90 dias de teto).
-      - UFs: Titular/Chefe/Ponto Focal (90d), Substituto/Suplente (60d) e Membro (40d).
+    - Lê a coluna 'Dedicacao_Maxima' do servidor se disponível.
+    - Fallback: Sede/Titular (90d), Substituto (60d) e Membro (40d).
     """
     resumo_ufs = {}
     todas_ufs = sorted(list(set(LISTA_UFS_COMPLETA + ["DF"])))
     
-    # 1. Identificação Flexível e Blindada das Colunas de df_servidores
     mapa_servidores_teto = {}
     if df_srv_base is not None and not df_srv_base.empty:
-        # Busca flexível que aceita variações de maiúsculas, espaços e underlines
         cols_base = list(df_srv_base.columns)
         
         def achar_coluna(candidatos):
             for c in candidatos:
                 if c in cols_base:
                     return c
-            # Normalização tolerante a acentos e formatação
             norm_map = {col.lower().replace(" ", "").replace("_", "").replace("ç", "c").replace("ã", "a").replace("é", "e"): col for col in cols_base}
             for c in candidatos:
                 c_norm = c.lower().replace(" ", "").replace("_", "").replace("ç", "c").replace("ã", "a").replace("é", "e")
@@ -981,6 +992,9 @@ def calcular_capacidade_equipes_uf(df_atual, df_srv_base, ano_alvo):
         col_lot = achar_coluna(["Lotacao", "Lotação", "Unidade"])
         col_func = achar_coluna(["Funcao", "Função", "Papel", "Cargo"])
         col_eq = achar_coluna(["Equipe_Emergencias", "Equipe_Emergencia", "Faz parte da Equipe de Emergências", "Equipe"])
+        
+        # 🎯 NOVO: Identificação tolerante da coluna de Dedicação Máxima
+        col_dedic = achar_coluna(["Dedicacao_Maxima", "Dedicacao", "Teto_Dias", "Teto", "Dedicacao_Max"])
 
         for _, s_row in df_srv_base.iterrows():
             nome_s = str(s_row.get(col_srv, "")).strip() if col_srv else ""
@@ -988,8 +1002,6 @@ def calcular_capacidade_equipes_uf(df_atual, df_srv_base, ano_alvo):
                 continue
             
             eq_s = str(s_row.get(col_eq, "")).strip().capitalize() if col_eq else ""
-
-            # 🛡️ FILTRO UNIVERSAL: Apenas integrantes oficiais da emergência ("Sim")
             if eq_s != "Sim":
                 continue
 
@@ -997,20 +1009,27 @@ def calcular_capacidade_equipes_uf(df_atual, df_srv_base, ano_alvo):
             func_s = str(s_row.get(col_func, "")).strip().upper() if col_func else ""
             lot_s = str(s_row.get(col_lot, "")).strip().upper() if col_lot else ""
 
-            # Definição do Teto Individual
-            is_sede = (uf_s == "DF")
-            if is_sede:
-                teto_ind = 90.0
-                papel_label = "Titular / Sede"
-            elif any(k in func_s for k in ["SUBSTITUTO", "SUPLENTE"]):
-                teto_ind = 60.0
-                papel_label = "Substituto"
-            elif any(k in func_s for k in ["TITULAR", "CHEFE", "COORDENADOR", "PONTO FOCAL", "RESPONSAVEL"]):
-                teto_ind = 90.0
-                papel_label = "Titular Regional"
+            # 🎯 NOVO: Verifica se há valor cadastrado na nova coluna
+            raw_dedic_uf = pd.to_numeric(s_row.get(col_dedic, None), errors='coerce') if col_dedic else None
+            
+            if pd.notna(raw_dedic_uf) and raw_dedic_uf > 0:
+                teto_ind = float(raw_dedic_uf)
+                papel_label = f"Personalizado ({int(teto_ind)}d)"
             else:
-                teto_ind = 40.0
-                papel_label = "Membro da Equipe"
+                # Regra de contingência padrão
+                is_sede = (uf_s == "DF")
+                if is_sede:
+                    teto_ind = 90.0
+                    papel_label = "Titular / Sede"
+                elif any(k in func_s for k in ["SUBSTITUTO", "SUPLENTE"]):
+                    teto_ind = 60.0
+                    papel_label = "Substituto"
+                elif any(k in func_s for k in ["TITULAR", "CHEFE", "COORDENADOR", "PONTO FOCAL", "RESPONSAVEL"]):
+                    teto_ind = 90.0
+                    papel_label = "Titular Regional"
+                else:
+                    teto_ind = 40.0
+                    papel_label = "Membro da Equipe"
 
             mapa_servidores_teto[nome_s] = {
                 "UF": uf_s if uf_s else "DF",
@@ -1047,7 +1066,6 @@ def calcular_capacidade_equipes_uf(df_atual, df_srv_base, ano_alvo):
             uf_srv_atv = str(r_atv.get("UF_Servidor", "")).strip().upper()
             uf_acao = str(r_atv.get("UF_Acao_PNAPA", "")).strip().upper()
 
-            # Atribuição da carga à UF de lotação real do servidor
             if nome_srv_atv in mapa_servidores_teto:
                 uf_alvo = mapa_servidores_teto[nome_srv_atv]["UF"]
             elif uf_srv_atv in resumo_ufs:
@@ -1591,31 +1609,115 @@ def montar_tabelas_minuta_portaria(df_acoes_cadastradas, df_macros, df_setoriais
 
 
 # =================================================================
-# FUNÇÃO AUXILIAR PARA RESGATAR A CHEFIA IMEDIATA
+# FUNÇÃO UNIFICADA DE CHEFIAS E ALÇADAS SCDP
 # =================================================================
-def obter_chefia_lotacao(nome_lotacao, uf_alvo, df_lot):
-    """Localiza e-mails e nomes do chefe titular e substituto da unidade do servidor."""
-    if df_lot is None or df_lot.empty or not nome_lotacao:
-        return {"nome_tit": "", "email_tit": "", "nome_sub": "", "email_sub": ""}
+def obter_chefia_lotacao(nome_lotacao, uf_alvo, df_lot, nome_servidor=None, email_servidor=None):
+    """
+    Localiza os dados da chefia imediata e superior.
+    Retorna tanto as chaves legadas (nome_tit, email_tit, etc.)
+    quanto a árvore dinâmica de instâncias para o SCDP.
+    """
+    retorno_padrao = {
+        "nome_tit": "", "email_tit": "",
+        "nome_sub": "", "email_sub": "",
+        "unidade_sup": "", "eh_titular": False, "eh_substituto": False,
+        "instancias": {}
+    }
     
-    match = df_lot[
+    if df_lot is None or df_lot.empty or not nome_lotacao:
+        return retorno_padrao
+
+    # 1. Localiza a unidade do servidor
+    match_loc = df_lot[
         (df_lot["Unidade"].astype(str).str.strip().str.lower() == str(nome_lotacao).strip().lower()) &
         (df_lot["UF"].astype(str).str.strip().str.upper() == str(uf_alvo).strip().upper())
     ]
-    
-    if match.empty:
-        # Fallback apenas pelo nome da unidade se a UF for genérica
-        match = df_lot[df_lot["Unidade"].astype(str).str.strip().str.lower() == str(nome_lotacao).strip().lower()]
-        
-    if not match.empty:
-        row = match.iloc[0]
-        return {
-            "nome_tit": str(row.get("Nome_Chefe_Titular", "")).strip(),
-            "email_tit": str(row.get("Email_Chefe_Titular", "")).strip().lower(),
-            "nome_sub": str(row.get("Nome_Chefe_Substituto", "")).strip(),
-            "email_sub": str(row.get("Email_Chefe_Substituto", "")).strip().lower()
-        }
-    return {"nome_tit": "", "email_tit": "", "nome_sub": "", "email_sub": ""}
+    if match_loc.empty:
+        match_loc = df_lot[df_lot["Unidade"].astype(str).str.strip().str.lower() == str(nome_lotacao).strip().lower()]
+
+    if match_loc.empty:
+        return retorno_padrao
+
+    row_loc = match_loc.iloc[0]
+    nome_tit_loc = str(row_loc.get("Nome_Chefe_Titular", "")).strip()
+    em_tit_loc = str(row_loc.get("Email_Chefe_Titular", "")).strip().lower()
+    nome_sub_loc = str(row_loc.get("Nome_Chefe_Substituto", "")).strip()
+    em_sub_loc = str(row_loc.get("Email_Chefe_Substituto", "")).strip().lower()
+    und_sup = str(row_loc.get("Unidade_Superior", "")).strip()
+    if und_sup.lower() in ["none", "nan", "null"]: und_sup = ""
+
+    # Limpeza defensiva de nulos
+    nome_tit_loc = "" if nome_tit_loc.lower() in ["none", "nan"] else nome_tit_loc
+    em_tit_loc = "" if em_tit_loc.lower() in ["none", "nan"] else em_tit_loc
+    nome_sub_loc = "" if nome_sub_loc.lower() in ["none", "nan"] else nome_sub_loc
+    em_sub_loc = "" if em_sub_loc.lower() in ["none", "nan"] else em_sub_loc
+
+    # 2. Localiza a unidade superior (se houver)
+    nome_tit_sup, em_tit_sup, nome_sub_sup, em_sub_sup = "", "", "", ""
+    if und_sup:
+        match_sup = df_lot[df_lot["Unidade"].astype(str).str.strip().str.lower() == und_sup.lower()]
+        if not match_sup.empty:
+            row_s = match_sup.iloc[0]
+            nome_tit_sup = str(row_s.get("Nome_Chefe_Titular", "")).strip()
+            em_tit_sup = str(row_s.get("Email_Chefe_Titular", "")).strip().lower()
+            nome_sub_sup = str(row_s.get("Nome_Chefe_Substituto", "")).strip()
+            em_sub_sup = str(row_s.get("Email_Chefe_Substituto", "")).strip().lower()
+            
+            nome_tit_sup = "" if nome_tit_sup.lower() in ["none", "nan"] else nome_tit_sup
+            em_tit_sup = "" if em_tit_sup.lower() in ["none", "nan"] else em_tit_sup
+            nome_sub_sup = "" if nome_sub_sup.lower() in ["none", "nan"] else nome_sub_sup
+            em_sub_sup = "" if em_sub_sup.lower() in ["none", "nan"] else em_sub_sup
+
+    # 3. Identifica se o solicitante é a chefia local
+    srv_n = str(nome_servidor).strip().lower() if nome_servidor else ""
+    srv_e = str(email_servidor).strip().lower() if email_servidor else ""
+
+    eh_titular = bool((nome_tit_loc and srv_n == nome_tit_loc.lower()) or (em_tit_loc and srv_e == em_tit_loc))
+    eh_substituto = bool((nome_sub_loc and srv_n == nome_sub_loc.lower()) or (em_sub_loc and srv_e == em_sub_loc))
+
+    # 4. Constrói as opções de deliberação para a interface
+    instancias = {}
+
+    # Opções na própria unidade (vedado ao titular para evitar auto-aprovação)
+    opcoes_local = {}
+    if not eh_titular:
+        if eh_substituto:
+            if em_tit_loc and "@" in em_tit_loc:
+                opcoes_local[f"👤 Apenas Chefe Titular ({nome_tit_loc})"] = [em_tit_loc]
+        else:
+            if em_tit_loc and "@" in em_tit_loc:
+                opcoes_local[f"👤 Apenas Titular ({nome_tit_loc}) [Padrão]"] = [em_tit_loc]
+            if em_tit_loc and em_sub_loc and "@" in em_tit_loc and "@" in em_sub_loc:
+                opcoes_local[f"👥 Titular e Substituto ({nome_tit_loc} e {nome_sub_loc})"] = [em_tit_loc, em_sub_loc]
+            if em_sub_loc and "@" in em_sub_loc:
+                opcoes_local[f"👤 Apenas Substituto ({nome_sub_loc}) [Titular ausente]"] = [em_sub_loc]
+
+    if opcoes_local:
+        instancias[f"🏢 Própria Unidade ({nome_lotacao})"] = opcoes_local
+
+    # Opções na instância superior
+    opcoes_sup = {}
+    if und_sup:
+        if em_tit_sup and "@" in em_tit_sup:
+            opcoes_sup[f"👤 Apenas Titular Superior ({nome_tit_sup})"] = [em_tit_sup]
+        if em_tit_sup and em_sub_sup and "@" in em_tit_sup and "@" in em_sub_sup:
+            opcoes_sup[f"👥 Titular e Substituto Superior ({nome_tit_sup} e {nome_sub_sup})"] = [em_tit_sup, em_sub_sup]
+        if em_sub_sup and "@" in em_sub_sup:
+            opcoes_sup[f"👤 Apenas Substituto Superior ({nome_sub_sup})"] = [em_sub_sup]
+
+    if opcoes_sup:
+        instancias[f"🏛️ Instância Superior ({und_sup})"] = opcoes_sup
+
+    return {
+        "nome_tit": nome_tit_loc,
+        "email_tit": em_tit_loc,
+        "nome_sub": nome_sub_loc,
+        "email_sub": em_sub_loc,
+        "unidade_sup": und_sup,
+        "eh_titular": eh_titular,
+        "eh_substituto": eh_substituto,
+        "instancias": instancias
+    }
 
 # =================================================================
 # FUNÇÕES UTILITÁRIAS DE FORMATAÇÃO NO PADRÃO BRASILEIRO (BRL)
@@ -4705,12 +4807,12 @@ elif modo == "📊 Visualizar Base":
                         uf_acao_at = str(reg_at_alvo.get("UF_Acao_PNAPA", uf_usuario)).strip()
 
                         aba1_at, aba2_at, aba3_at, aba4_at, aba5_at, aba6_at = st.tabs([
-                            "📋 Identificação",
-                            "👥 Equipe & Liderança",
-                            "📍 Localização & Execução",
-                            "💰 Orçamento & Dedicação",
-                            "📝 Observações & Gravação",
-                            "✈️ Autorização SCDP"                            
+                            "📋 1. Identificação",
+                            "👥 2. Equipe & Liderança",
+                            "📍 3. Localização & Execução",
+                            "💰 4. Orçamento & Dedicação",
+                            "📝 5. Observações & Gravação",
+                            "✈️ 6. Autorização SCDP"                            
                         ])
                         
                         with aba1_at:
@@ -4984,65 +5086,85 @@ elif modo == "📊 Visualizar Base":
                                 ed_just_at = ""
 
                         # =============================================================
-                        # 📑 ABA 6: AUTORIZAÇÃO PRÉVIA SCDP (CARD E DISPARO DEDICADO)
+                        # 📑 ABA 6 (TELA 1): AUTORIZAÇÃO PRÉVIA SCDP
                         # =============================================================
                         with aba6_at:
                             st.markdown("##### ✈️ Autorização Prévia para Abertura de Viagem (SCDP)")
-                            st.caption("Solicitação de autorização direta à chefia imediata via Teams e E-mail.")
+                            st.caption("Defina para qual autoridade e nível hierárquico o card de deliberação será encaminhado.")
+
+                            serv_env = ed_servidor_at if "ed_servidor_at" in locals() and ed_servidor_at else str(reg_at_alvo.get("Servidor", "")).strip()
+                            srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(serv_env).strip()]
+                            email_solic = str(srv_row["E_mail"].iloc[0]).strip().lower() if not srv_row.empty and str(srv_row["E_mail"].iloc[0]).strip() else email_logado
                             
                             lot_alvo = ed_lot_at if "ed_lot_at" in locals() and ed_lot_at else str(reg_at_alvo.get("Lotação", "")).strip()
                             uf_srv_alvo = ed_uf_srv_at if "ed_uf_srv_at" in locals() and ed_uf_srv_at else str(reg_at_alvo.get("UF_Servidor", "")).strip()
                             cod_atv_alvo = ed_cod_atv if "ed_cod_atv" in locals() and ed_cod_atv else str(reg_at_alvo.get("Codigo_Atividade", "")).strip()
                             id_chave = id_at_ref if "id_at_ref" in locals() else cod_atv_alvo
 
-                            dados_chefia = obter_chefia_lotacao(lot_alvo, uf_srv_alvo, df_lotacoes)
-                            emails_chefia = [
-                                e.strip().lower() 
-                                for e in [dados_chefia.get("email_tit", ""), dados_chefia.get("email_sub", "")] 
-                                if e and "@" in e
-                            ]
+                            # 1. Consulta alçadas inteligentes via função unificada
+                            dados_chefia = obter_chefia_lotacao(
+                                lot_alvo, 
+                                uf_srv_alvo, 
+                                df_lotacoes, 
+                                nome_servidor=serv_env, 
+                                email_servidor=email_solic
+                            )
                             
+                            instancias_disponiveis = list(dados_chefia.get("instancias", {}).keys())
+                            emails_chefia = []
+
+                            if not instancias_disponiveis:
+                                st.error(f"⚠️ Não foram encontradas chefias cadastradas para **{lot_alvo}** ou sua Unidade Superior em 'Gerenciar Unidades'.")
+                            else:
+                                if dados_chefia["eh_titular"]:
+                                    st.info(f"👑 **Titular de Unidade:** O servidor é o titular de **{lot_alvo}**. O envio é direcionado à Instância Superior ({dados_chefia['unidade_sup']}).")
+                                
+                                c_inst, c_dest = st.columns([1, 1.2])
+                                with c_inst:
+                                    sel_instancia = st.radio(
+                                        "1. Instância Deliberadora:",
+                                        instancias_disponiveis,
+                                        key=f"rad_inst_ed_{id_chave}"
+                                    )
+                                with c_dest:
+                                    opcoes_destinatarios = dados_chefia["instancias"][sel_instancia]
+                                    sel_destinatario = st.radio(
+                                        "2. Quem deve deliberar?:",
+                                        list(opcoes_destinatarios.keys()),
+                                        key=f"rad_dest_ed_{id_chave}"
+                                    )
+                                    emails_chefia = opcoes_destinatarios[sel_destinatario]
+
+                                st.caption(f"🔔 **E-mails notificados:** `{'; '.join(emails_chefia)}`")
+
+                            st.markdown("---")
+                            
+                            # 2. Status atual da autorização
                             val_status = str(reg_at_alvo.get("Status_Aprovacao_SCDP", "")).strip() if reg_at_alvo is not None else ""
                             status_scdp_atual = "Não Solicitada" if val_status in ["", "None", "nan"] else val_status
-                            
                             val_aprov = str(reg_at_alvo.get("Aprovador_SCDP", "")).strip() if reg_at_alvo is not None else ""
                             aprovador_info = "" if val_aprov in ["None", "nan"] else val_aprov
 
                             if status_scdp_atual == "Aprovada":
                                 st.success(f"✅ **Viagem Autorizada pela Chefia!** Aprovador: `{aprovador_info}`.")
-                                txt_botao_scdp = "🔁 Reenviar Pedido de Autorização à Chefia (com Dados Modificados)"
+                                txt_botao_scdp = "🔁 Reenviar Pedido de Autorização aos Destinatários Selecionados"
                             elif status_scdp_atual == "Pendente":
-                                st.warning("⏳ **Solicitação já enviada.** Aguardando manifestação da chefia no Teams / Outlook.")
-                                txt_botao_scdp = "🔁 Reenviar Notificação de Aprovação à Chefia"
+                                st.warning("⏳ **Solicitação já enviada.** Aguardando manifestação da chefia.")
+                                txt_botao_scdp = "🔁 Reenviar Notificação de Aprovação"
                             elif status_scdp_atual == "Rejeitada":
                                 st.error(f"❌ **Viagem Rejeitada pela Chefia.** Motivo/Aprovador: `{aprovador_info}`.")
-                                txt_botao_scdp = "📨 Submeter Novo Pedido de Autorização após Ajustes"
+                                txt_botao_scdp = "📨 Submeter Novo Pedido após Ajustes"
                             else:
                                 st.info("⚪ Esta atividade ainda não possui solicitação de autorização no SCDP.")
-                                txt_botao_scdp = "📨 Enviar Solicitação de Autorização à Chefia (Teams / E-mail)"
+                                txt_botao_scdp = "📨 Enviar Solicitação aos Destinatários Selecionados (Teams / E-mail)"
 
-                            if emails_chefia:
-                                destinatarios_txt = []
-                                if dados_chefia.get("nome_tit") and dados_chefia.get("email_tit"):
-                                    destinatarios_txt.append(f"**Titular:** {dados_chefia['nome_tit']} (`{dados_chefia['email_tit']}`)")
-                                if dados_chefia.get("nome_sub") and dados_chefia.get("email_sub"):
-                                    destinatarios_txt.append(f"**Substituto:** {dados_chefia['nome_sub']} (`{dados_chefia['email_sub']}`)")
-                                st.markdown("📋 **Destinatários Notificados:**")
-                                for d in destinatarios_txt:
-                                    st.markdown(f"- {d}")
-                            else:
-                                st.error(f"⚠️ Não há e-mails de chefia cadastrados para **{lot_alvo}**. Cadastre em '🏢 Gerenciar Unidades' antes de solicitar.")
-
-                            st.markdown("---")
-                            
-                            # 🚀 BOTÃO DEDICADO DE DISPARO DA AUTORIZAÇÃO SCDP
+                            # 3. Disparo Oficial no Teams/Outlook
                             if st.button(txt_botao_scdp, type="secondary", use_container_width=True, key=f"btn_disparo_scdp_oficial_{id_chave}"):
                                 if not emails_chefia:
-                                    st.error("A lista de e-mails da chefia está vazia. Cadastre os chefes em 'Gerenciar Unidades'.")
+                                    st.error("Nenhum destinatário válido selecionado.")
                                 elif not URL_FLOW_APROVACAO_SCDP:
                                     st.error("URL do fluxo de aprovação não configurada.")
                                 else:
-                                    serv_env = ed_servidor_at if "ed_servidor_at" in locals() and ed_servidor_at else str(reg_at_alvo.get("Servidor", "")).strip()
                                     nome_atv_env = ed_nome_atv if "ed_nome_atv" in locals() and ed_nome_atv else str(reg_at_alvo.get("Nome da Atividade", "")).strip()
                                     mun_env = ed_mun_at if "ed_mun_at" in locals() and ed_mun_at else str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
                                     uf_oc_env = ed_uf_oc_at if "ed_uf_oc_at" in locals() and ed_uf_oc_at else str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "")).strip()
@@ -5055,8 +5177,7 @@ elif modo == "📊 Visualizar Base":
                                     val_o = float(ed_rp_o_at if "ed_rp_o_at" in locals() else obter_float_limpo(reg_at_alvo.get("Rec_Plan_Outras_Despesas", 0.0)))
                                     tot_fin_env = val_d + val_p + val_o
 
-                                    srv_row = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(serv_env).strip()]
-                                    email_solic = str(srv_row["E_mail"].iloc[0]).strip().lower() if not srv_row.empty and str(srv_row["E_mail"].iloc[0]).strip() else email_logado
+                                    obs_env = str(ed_obs_at).strip() if "ed_obs_at" in locals() and ed_obs_at else str(reg_at_alvo.get("Observações", "")).strip()
 
                                     payload_scdp = {
                                         "id_sharepoint": str(id_chave),
@@ -5075,10 +5196,10 @@ elif modo == "📊 Visualizar Base":
                                         "rec_passagens": val_p,
                                         "rec_outras": val_o,
                                         "rec_total": tot_fin_env,
-                                        "justificativa": str(ed_obs_at).strip() or "Operação de campo programada no âmbito do PNAPA."
+                                        "justificativa": obs_env or "Operação de campo programada no âmbito do PNAPA."
                                     }
 
-                                    # Atualiza o SharePoint marcando o status como 'Pendente' e limpando o aprovador anterior
+                                    # Atualiza o SharePoint como 'Pendente' e limpa o aprovador
                                     payload_at_scdp = payload_gerador(
                                         val_ano=val_ano_at, val_num_acao=val_num_acao_at, val_nome_acao=val_nome_acao_at,
                                         val_indicador=val_indicador_at, nivel_selecionado="Atividade", nome_atividade=nome_atv_env,
@@ -5090,19 +5211,19 @@ elif modo == "📊 Visualizar Base":
                                         dt_inicio=dti_env, dt_termino=dtf_env, dias_plan=dias_env, dias_exec=ed_dias_ex_at,
                                         origem_recurso=ed_orig_at, rec_p_diarias=val_d, rec_p_passagens=val_p, rec_p_outras=val_o,
                                         rec_e_diarias=ed_re_d_at, rec_e_passagens=ed_re_p_at, rec_e_outras=ed_re_o_at,
-                                        obs=ed_obs_at, justificativa=ed_just_at, id_atual=id_at_ref, modo="📝 Editar Linha Existente",
+                                        obs=obs_env, justificativa=ed_just_at, id_atual=id_at_ref, modo="📝 Editar Linha Existente",
                                         df_atual=df_atual, papel_institucional=ed_papel_at, coordenador_operacao=ed_funcao_campo,
                                         meta_indicador="", codigo_atividade=cod_atv_alvo, aval_qualidade="", aval_feedback="",
                                         uf_coordenadora=ed_uf_coord_at, status_scdp="Pendente", aprovador_scdp=""
                                     )
 
                                     try:
-                                        with st.spinner("📨 Enviando notificação ao Teams e atualizando status..."):
+                                        with st.spinner("📨 Enviando notificação à alçada selecionada..."):
                                             r_teams = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp, timeout=10)
                                             if r_teams.status_code in [200, 202]:
                                                 executar_envio_sharepoint([payload_at_scdp])
                                                 st.toast("Card de aprovação enviado à chefia!", icon="✈️")
-                                                st.success("✅ Solicitação enviada com sucesso à chefia no Teams e Outlook!")
+                                                st.success("✅ Solicitação enviada com sucesso aos destinatários selecionados!")
                                                 time.sleep(1.5)
                                                 st.cache_data.clear()
                                                 if "df" in st.session_state: del st.session_state.df
@@ -5761,15 +5882,15 @@ elif modo == "➕ Inserir Nova Linha":
         coordenador_operacao, num_pcdp, codigo_atividade = "", "", ""
 
     # =================================================================
-    # CONDICIONAL: SE FOR ATIVIDADE (6 ABAS SEPARADAS)
+    # CONDICIONAL: SE FOR ATIVIDADE (ESTRUTURA HARMONIZADA COM A TELA 1)
     # =================================================================
     elif nivel_selecionado == "Atividade":
         aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
-            "📋 1. Identificação",
-            "👥 2. Equipe & Liderança",
-            "📍 3. Localização & Execução",
-            "💰 4. Orçamento & Dedicação",
-            "📝 5. Observações & Gravação",
+            "📋 1. Identificação", 
+            "👥 2. Equipe & Liderança", 
+            "📍 3. Localização & Execução", 
+            "💰 4. Orçamento & Dedicação", 
+            "📝 5. Observações & Justificativas",
             "✈️ 6. Autorização SCDP"
         ])
         
@@ -5827,7 +5948,7 @@ elif modo == "➕ Inserir Nova Linha":
                         lista_outras = [u for u in LISTA_UFS_COMPLETA if u != uf_filtro_pna]
                         uf_coordenadora_val = st.selectbox("UF Coordenadora da Missão:", lista_outras, key="man_ufc_atv")
 
-            st.markdown("##### 🏷️ Código e Agrupador da Atividade")
+            st.markdown("##### 🏷️️ Código e Agrupador da Atividade")
             if "Codigo_Atividade" not in df_atual.columns:
                 df_atual["Codigo_Atividade"] = ""
             
@@ -6060,9 +6181,6 @@ elif modo == "➕ Inserir Nova Linha":
             idx_perigo = LISTA_PERIGOS.index(perigo_def) if perigo_def in LISTA_PERIGOS else 0
             periculosidade = st.selectbox("Periculosidade/Insalubridade:", LISTA_PERIGOS, index=idx_perigo, key=f"atv_sel_perigo_{codigo_atividade}")
 
-        # -------------------------------------------------------------
-        # 📑 ABA 4: CRONOGRAMA & CUSTOS (PURAMENTE ORÇAMENTÁRIA)
-        # -------------------------------------------------------------
         with aba4:
             dti_def = converter_para_data_segura(extrair_padrao_atv("Data de Início", val_dt_inicio))
             dtf_def = converter_para_data_segura(extrair_padrao_atv("Data de Término", val_dt_termino))
@@ -6108,22 +6226,12 @@ elif modo == "➕ Inserir Nova Linha":
                 calc_tot_e_atv = float(rec_e_diarias + rec_e_passagens + rec_e_outras)
                 st.text_input("Executado — Total Geral (R$):", value=formatar_moeda_br(calc_tot_e_atv), disabled=True)
 
-        # =============================================================
-        # 📑 ABA 5: OBSERVAÇÕES & JUSTIFICATIVAS (VEM PRIMEIRO)
-        # =============================================================
         with aba5:
             st.markdown("##### 📝 Observações Gerais & Pendências")
             obs_def = str(extrair_padrao_atv("Observações", "")).strip()
             if obs_def in ["None", "nan"]: obs_def = ""
+            obs = st.text_area("Observações da Atividade:", value=obs_def, key=f"atv_obs_{codigo_atividade}")
             
-            obs = st.text_area(
-                "Observações da Atividade:", 
-                value=obs_def, 
-                help="Estas observações serão incluídas como justificativa no card enviado à chefia caso solicite autorização SCDP.",
-                key=f"atv_obs_{codigo_atividade}"
-            )
-            
-            # Verificação de pendência em novas inclusões
             is_pendente_ins = bool(andamento == "Concluída" and not doc_probatorio.strip()) or bool(andamento == "Prevista" and dt_termino < date.today())
             if is_pendente_ins:
                 st.warning("⚠️ Esta atividade possui pendências de prazo ou comprovação. Justifique:")
@@ -6134,70 +6242,80 @@ elif modo == "➕ Inserir Nova Linha":
                 justificativa = ""
 
         # =============================================================
-        # 📑 ABA 6: AUTORIZAÇÃO PRÉVIA SCDP (DESTINATÁRIOS & RESUMO)
+        # 📑 ABA 6: AUTORIZAÇÃO PRÉVIA SCDP (REPLICADA DA TELA 1)
         # =============================================================
         with aba6:
             st.markdown("##### ✈️ Autorização Prévia para Abertura de Viagem (SCDP)")
-            st.caption("Ao marcar a opção abaixo, a atividade será cadastrada e o card de deliberação será enviado no Teams e Outlook da chefia.")
-            
-            dados_chefia = obter_chefia_lotacao(lotacao, uf_servidor, df_lotacoes)
-            emails_chefia = [
-                e.strip().lower() 
-                for e in [dados_chefia.get("email_tit", ""), dados_chefia.get("email_sub", "")] 
-                if e and "@" in e
-            ]
-            
-            chave_widget_scdp = f"chk_scdp_{codigo_atividade}"
-            solicitar_scdp = st.checkbox(
-                "📨 **Solicitar autorização de viagem à chefia imediata ao cadastrar?**",
-                help="Marque caso a missão esteja programada e demande abertura de diárias/passagens no SCDP.",
-                key=chave_widget_scdp
+            st.caption("Defina para qual autoridade e nível hierárquico o card de deliberação será encaminhado.")
+
+            srv_row_ins = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
+            email_solic_ins = str(srv_row_ins["E_mail"].iloc[0]).strip().lower() if not srv_row_ins.empty and str(srv_row_ins["E_mail"].iloc[0]).strip() else email_logado
+
+            dados_chefia_ins = obter_chefia_lotacao(
+                lotacao, 
+                uf_servidor, 
+                df_lotacoes, 
+                nome_servidor=servidor, 
+                email_servidor=email_solic_ins
             )
             
-            # Painel com os dados dos destinatários e resumo orçamentário
-            if emails_chefia:
-                destinatarios_txt = []
-                if dados_chefia.get("nome_tit") and dados_chefia.get("email_tit"):
-                    destinatarios_txt.append(f"**Titular:** {dados_chefia['nome_tit']} (`{dados_chefia['email_tit']}`)")
-                if dados_chefia.get("nome_sub") and dados_chefia.get("email_sub"):
-                    destinatarios_txt.append(f"**Substituto:** {dados_chefia['nome_sub']} (`{dados_chefia['email_sub']}`)")
-                
-                st.markdown(f"📋 **Chefia Imediata da Unidade ({lotacao}):**")
-                for d in destinatarios_txt:
-                    st.markdown(f"- {d}")
-            else:
-                st.error(f"⚠️ Não há e-mails de chefia cadastrados para a lotação **{lotacao}**. Cadastre em '🏢 Gerenciar Unidades' antes de solicitar.")
+            instancias_disponiveis_ins = list(dados_chefia_ins.get("instancias", {}).keys())
+            emails_chefia_ins = []
 
-            if solicitar_scdp:
-                tot_previsto = float(rec_p_diarias) + float(rec_p_passagens) + float(rec_p_outras)
-                with st.container(border=True):
-                    st.markdown("🔍 **Resumo dos Parâmetros que irão no Card:**")
-                    col_sc1, col_sc2 = st.columns(2)
-                    with col_sc1:
-                        st.markdown(f"- **Servidor:** {servidor}")
-                        st.markdown(f"- **Destino:** {municipio} / {uf_ocorrencia}")
-                        st.markdown(f"- **Período:** {dt_inicio.strftime('%d/%m/%Y')} a {dt_termino.strftime('%d/%m/%Y')} ({dias_plan:.1f} dias)")
-                    with col_sc2:
-                        st.markdown(f"- **Diárias:** {formatar_moeda_br(rec_p_diarias)}")
-                        st.markdown(f"- **Passagens:** {formatar_moeda_br(rec_p_passagens)}")
-                        st.markdown(f"- **Total Previsto:** `{formatar_moeda_br(tot_previsto)}`")
-                    if obs.strip():
-                        st.markdown(f"- **Justificativa:** *{obs.strip()}*")
+            if not instancias_disponiveis_ins:
+                st.error(f"⚠️ Não foram encontradas chefias cadastradas para **{lotacao}** ou sua Unidade Superior em 'Gerenciar Unidades'.")
+            else:
+                if dados_chefia_ins["eh_titular"]:
+                    st.info(f"👑 **Titular de Unidade:** O servidor é o titular de **{lotacao}**. O envio é direcionado à Instância Superior ({dados_chefia_ins['unidade_sup']}).")
+                
+                c_inst_ins, c_dest_ins = st.columns([1, 1.2])
+                with c_inst_ins:
+                    sel_instancia_ins = st.radio(
+                        "1. Instância Deliberadora:",
+                        instancias_disponiveis_ins,
+                        key=f"rad_inst_ins_{codigo_atividade}"
+                    )
+                with c_dest_ins:
+                    opcoes_destinatarios_ins = dados_chefia_ins["instancias"][sel_instancia_ins]
+                    sel_destinatario_ins = st.radio(
+                        "2. Quem deve deliberar?:",
+                        list(opcoes_destinatarios_ins.keys()),
+                        key=f"rad_dest_ins_{codigo_atividade}"
+                    )
+                    emails_chefia_ins = opcoes_destinatarios_ins[sel_destinatario_ins]
+
+                st.caption(f"🔔 **E-mails notificados:** `{'; '.join(emails_chefia_ins)}`")
+
+            st.markdown("---")
+            st.info("⚪ Esta atividade ainda não possui solicitação de autorização no SCDP.")
+
+            btn_disparo_scdp_ins = st.button(
+                "📨 Enviar Solicitação aos Destinatários Selecionados (Teams / E-mail)",
+                type="secondary",
+                use_container_width=True,
+                key=f"btn_scdp_ins_oficial_{codigo_atividade}"
+            )
 
         meta_indicador = ""
 
     # =================================================================
-    # 💾 BOTÃO PRINCIPAL DE CADASTRO: FIXO NO RODAPÉ (FORA DAS ABAS)
+    # 💾 BOTÃO PRINCIPAL DE GRAVAÇÃO: FIXO NO RODAPÉ (TELA 1 & TELA 2)
     # =================================================================
     st.markdown("<br>", unsafe_allow_html=True)
-    btn_enviar_individual = st.button("🚀 Gravar Registro no SharePoint", type="primary", use_container_width=True, key="btn_gravar_individual_reativo")
+    btn_enviar_individual = st.button(
+        "💾 Gravar Atividade", 
+        type="primary", 
+        use_container_width=True, 
+        key="btn_gravar_individual_reativo"
+    )
 
-    if btn_enviar_individual:
+    # Executa se clicar no botão principal OU no botão dedicado da Aba 6
+    if btn_enviar_individual or ('btn_disparo_scdp_ins' in locals() and btn_disparo_scdp_ins):
         chave_trava = f"ins_ind_{val_num_acao}_{servidor}_{dt_inicio}_{dt_termino}"
         verificar_duplo_clique(chave_trava)
         bloquear_envio = False
+        disparar_scdp_nesta_exec = bool('btn_disparo_scdp_ins' in locals() and btn_disparo_scdp_ins)
         
-        # 1. Validações de Governança para Ações Estaduais
         if nivel_selecionado in ["Ação", "Ação Setorial"]:
             coord_op_final = ""
             cod_atv_final = ""
@@ -6226,7 +6344,6 @@ elif modo == "➕ Inserir Nova Linha":
                 st.error(f"⛔ **Linha Já Cadastrada:** A UF **{uf_limpa}** já possui planejamento registrado para a Ação **{val_num_acao}** como **{papel_limpo}** no tema **{tema_limpo}**.")
                 bloquear_envio = True
 
-        # 2. Validações de Atividade de Campo
         elif nivel_selecionado == "Atividade":
             coord_op_final = funcao_campo
             cod_atv_final = str(codigo_atividade)
@@ -6242,7 +6359,6 @@ elif modo == "➕ Inserir Nova Linha":
                     st.error(f"⛔ **Conflito de Liderança:** A atividade `{codigo_atividade}` já possui **{nome_outro_coord}** cadastrado como Coordenador de Campo.")
                     bloquear_envio = True
 
-        # 3. Termômetro de Capacidade Operacional
         if not bloquear_envio and servidor:
             res_validacao_final = calcular_termometro_carga(
                 df=df_atual,
@@ -6265,23 +6381,7 @@ elif modo == "➕ Inserir Nova Linha":
             # -------------------------------------------------------------
             # 🚀 1. GESTÃO DO STATUS SCDP
             # -------------------------------------------------------------
-            chk_solic_scdp_t2 = False
-            emails_chefia_t2 = []
-            
-            if nivel_selecionado == "Atividade":
-                dados_chefia_t2 = obter_chefia_lotacao(lotacao, uf_servidor, df_lotacoes)
-                emails_chefia_t2 = [
-                    e.strip().lower() 
-                    for e in [dados_chefia_t2.get("email_tit", ""), dados_chefia_t2.get("email_sub", "")] 
-                    if e and "@" in e
-                ]
-                chk_solic_scdp_t2 = bool(
-                    st.session_state.get(f"chk_scdp_{codigo_atividade}", False) or
-                    st.session_state.get(f"chk_scdp_{str(codigo_atividade)}", False)
-                )
-                status_scdp_t2 = "Pendente" if (chk_solic_scdp_t2 and emails_chefia_t2) else "Não Solicitada"
-            else:
-                status_scdp_t2 = "Não Solicitada"
+            status_scdp_t2 = "Pendente" if (disparar_scdp_nesta_exec and emails_chefia_ins) else "Não Solicitada"
 
             # -------------------------------------------------------------
             # 🚀 2. GRAVAÇÃO NO SHAREPOINT
@@ -6311,16 +6411,14 @@ elif modo == "➕ Inserir Nova Linha":
                 executar_envio_sharepoint([payload_unico])
 
             # -------------------------------------------------------------
-            # 🚀 3. DISPARO DO CARD AO POWER AUTOMATE (SE MARCADO)
+            # 🚀 3. DISPARO DO CARD AO POWER AUTOMATE (SE FOI PELO BOTÃO DA ABA 6)
             # -------------------------------------------------------------
-            if nivel_selecionado == "Atividade" and chk_solic_scdp_t2:
-                if not emails_chefia_t2:
-                    st.warning(f"⚠️ Atividade cadastrada! Porém a unidade **{lotacao}** não possui chefia com e-mail cadastrado. A notificação não foi enviada.")
+            if nivel_selecionado == "Atividade" and disparar_scdp_nesta_exec:
+                if not emails_chefia_ins:
+                    st.warning("⚠️ Atividade cadastrada! Porém nenhum e-mail válido foi selecionado para receber o card.")
                 elif not URL_FLOW_APROVACAO_SCDP:
-                    st.warning("⚠️ Atividade cadastrada, mas a URL de aprovação não está definida.")
+                    st.warning("⚠️ Atividade cadastrada, mas a URL do fluxo de aprovação não está definida.")
                 else:
-                    srv_row_t2 = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == str(servidor).strip()]
-                    email_solic_t2 = str(srv_row_t2["E_mail"].iloc[0]).strip().lower() if not srv_row_t2.empty and str(srv_row_t2["E_mail"].iloc[0]).strip() else email_logado
                     tot_fin_plan = float(rec_p_diarias) + float(rec_p_passagens) + float(rec_p_outras)
 
                     payload_scdp_ins = {
@@ -6328,9 +6426,9 @@ elif modo == "➕ Inserir Nova Linha":
                         "codigo_atividade": str(cod_atv_final),
                         "nome_atividade": str(nome_atividade),
                         "servidor": str(servidor),
-                        "email_servidor": email_solic_t2,
+                        "email_servidor": email_solic_ins,
                         "unidade": str(lotacao),
-                        "emails_chefia": ";".join(emails_chefia_t2),
+                        "emails_chefia": ";".join(emails_chefia_ins),
                         "municipio_destino": str(municipio),
                         "uf_destino": str(uf_ocorrencia),
                         "dt_inicio": str(dt_inicio),
@@ -6537,6 +6635,28 @@ elif modo == "🏢 Gerenciar Unidades":
     st.markdown("<h3 style='color: #03170a;'>🏢 Gerenciamento de Unidades / Lotações (Tabela Auxiliar)</h3>", unsafe_allow_html=True)
     st.caption("Catálogo corporativo de setores, unidades de lotação e chefias responsáveis pela anuência de viagens (SCDP).")
     
+    # 0. TRATAMENTO DEFENSIVO DA COLUNA UNIDADE_SUPERIOR
+    if "Unidade_Superior" not in df_lotacoes.columns:
+        df_lotacoes["Unidade_Superior"] = ""
+    else:
+        df_lotacoes["Unidade_Superior"] = df_lotacoes["Unidade_Superior"].fillna("").astype(str).str.strip()
+
+    # Mapeamento auxiliar de todas as unidades para exibição amigável: "Nome (UF)"
+    mapa_unidades_uf = {}
+    for _, r_l in df_lotacoes.iterrows():
+        u_nome = str(r_l.get("Unidade", "")).strip()
+        u_uf = str(r_l.get("UF", "")).strip()
+        if u_nome and u_nome not in ["None", "nan"]:
+            mapa_unidades_uf[u_nome] = u_uf
+
+    todas_unidades_cadastradas = sorted(list(mapa_unidades_uf.keys()))
+
+    def formatar_opcao_sup(u):
+        if not u or u.startswith("Nenhuma"):
+            return "Nenhuma (Instância Máxima / Raiz)"
+        uf_ref = mapa_unidades_uf.get(u, "")
+        return f"{u} ({uf_ref})" if uf_ref else u
+
     # 1. VISUALIZAÇÃO CONDICIONAL POR PERFIL
     df_visualizacao_uni = df_lotacoes if perfil_usuario == "Administrador" else df_lotacoes[df_lotacoes["UF"] == uf_usuario]
     
@@ -6544,9 +6664,9 @@ elif modo == "🏢 Gerenciar Unidades":
     if df_visualizacao_uni.empty:
         st.info(f"Nenhuma unidade cadastrada para a UF {uf_usuario}.")
     else:
-        # 🚀 Exibição com as colunas de chefia
+        # 🚀 Exibição com a coluna de Unidade Superior e chefias
         cols_exib_uni = [
-            "ID_UF", "UF", "Unidade", 
+            "ID_UF", "UF", "Unidade", "Unidade_Superior",
             "Nome_Chefe_Titular", "Email_Chefe_Titular", 
             "Nome_Chefe_Substituto", "Email_Chefe_Substituto"
         ]
@@ -6555,6 +6675,7 @@ elif modo == "🏢 Gerenciar Unidades":
         
         mapa_cabecalhos_uni = {
             "ID_UF": "ID",
+            "Unidade_Superior": "Unidade Superior",
             "Nome_Chefe_Titular": "Chefe Titular",
             "Email_Chefe_Titular": "E-mail Titular",
             "Nome_Chefe_Substituto": "Chefe Substituto",
@@ -6586,9 +6707,19 @@ elif modo == "🏢 Gerenciar Unidades":
                 st.text_input("UF da Lotação (Travada):", value=uf_usuario, disabled=True, key="uni_add_uf_rep")
                 uf_uni_add = uf_usuario
         with c_add2:
-            nova_uni = st.text_input("Nome da Nova Unidade (Ex: Nupaem-SP, SUPES-RJ):", key="uni_add_nome").strip()
+            nova_uni = st.text_input("Nome da Nova Unidade (Ex: Nupaem-SP, SUPES-RJ, UED-Santos):", key="uni_add_nome").strip()
             
-        # 🚀 Novos Campos de Chefia para Inserção
+        # 🚀 Seletor de Unidade Superior (Todas as unidades nacionais disponíveis)
+        opcoes_sup_add = ["Nenhuma (Instância Máxima / Raiz)"] + todas_unidades_cadastradas
+        und_sup_add_sel = st.selectbox(
+            "🏛️ Unidade Hierarquicamente Superior:",
+            opcoes_sup_add,
+            format_func=formatar_opcao_sup,
+            help="Selecione a unidade responsável por deliberar sobre as viagens dos chefes desta nova unidade (ex: SUPES-SP para núcleos de SP, ou Presidência/DILIC no DF).",
+            key="uni_add_und_sup"
+        )
+        und_sup_final_add = "" if und_sup_add_sel.startswith("Nenhuma") else und_sup_add_sel
+
         st.markdown("###### 👤 Chefia Imediata (Para autorização prévia de viagens no Teams / SCDP)")
         c_ch_add1, c_ch_add2 = st.columns(2)
         with c_ch_add1:
@@ -6602,7 +6733,6 @@ elif modo == "🏢 Gerenciar Unidades":
             if not nova_uni:
                 st.error("⚠️ O nome da unidade é obrigatório.")
             else:
-                # Cálculo seguro do próximo ID_UF
                 col_id_uf = "ID_UF" if "ID_UF" in df_lotacoes.columns else "Id"
                 if not df_lotacoes.empty and col_id_uf in df_lotacoes.columns:
                     id_novo_uf = int(pd.to_numeric(df_lotacoes[col_id_uf], errors='coerce').fillna(0).max() + 1)
@@ -6614,6 +6744,7 @@ elif modo == "🏢 Gerenciar Unidades":
                     "ID_UF": id_novo_uf,
                     "UF": uf_uni_add,
                     "Unidade": nova_uni,
+                    "Unidade_Superior": und_sup_final_add,
                     "Nome_Chefe_Titular": nome_tit_add,
                     "Email_Chefe_Titular": email_tit_add,
                     "Nome_Chefe_Substituto": nome_sub_add,
@@ -6633,7 +6764,6 @@ elif modo == "🏢 Gerenciar Unidades":
     with t_edit:
         st.markdown("##### 📝 Alteração de Dados da Unidade")
         
-        # 1. Filtro de UF para o Administrador localizar a unidade
         if perfil_usuario == "Administrador":
             lista_ufs_uni = sorted(df_lotacoes["UF"].dropna().unique().tolist())
             uf_filtrada_edit = st.selectbox("1. Filtrar Unidades por UF/Órgão:", lista_ufs_uni, key="uf_filt_edit")
@@ -6645,7 +6775,6 @@ elif modo == "🏢 Gerenciar Unidades":
         if df_unidades_filtradas.empty:
             st.warning(f"⚠️ Nenhuma unidade encontrada para a UF: {uf_filtrada_edit}")
         else:
-            # 2. Dropdown de Seleção da Unidade
             lista_nomes_unidades = sorted(df_unidades_filtradas["Unidade"].dropna().unique().tolist())
             sel_uni = st.selectbox("2. Selecione a Unidade para visualizar/alterar:", lista_nomes_unidades, key="uni_sel_edit")
             
@@ -6656,17 +6785,17 @@ elif modo == "🏢 Gerenciar Unidades":
                 id_uf_edit = int(float(dados_alvo_uni["ID_UF"]))
                 val_atual_uf_uni = str(dados_alvo_uni.get("UF", uf_filtrada_edit)).strip()
                 val_atual_nome_uni = str(dados_alvo_uni.get("Unidade", sel_uni)).strip()
+                val_atual_und_sup = str(dados_alvo_uni.get("Unidade_Superior", "")).strip()
+                if val_atual_und_sup in ["None", "nan"]: val_atual_und_sup = ""
 
-                # 🚀 Resgate dos dados existentes de chefia
                 val_atual_nome_tit = str(dados_alvo_uni.get("Nome_Chefe_Titular", "")).strip()
                 val_atual_email_tit = str(dados_alvo_uni.get("Email_Chefe_Titular", "")).strip()
                 val_atual_nome_sub = str(dados_alvo_uni.get("Nome_Chefe_Substituto", "")).strip()
                 val_atual_email_sub = str(dados_alvo_uni.get("Email_Chefe_Substituto", "")).strip()
 
                 st.markdown(f"#### 🏢 Ficha da Unidade: **{val_atual_nome_uni}** `(ID: {id_uf_edit})`")
-                st.caption("Modificações nesta unidade atualizarão os contatos das chefias e, caso o nome mude, a tabela de Equipes.")
+                st.caption("Modificações nesta unidade atualizarão os contatos das chefias, a subordinação hierárquica e, caso o nome mude, a tabela de Equipes.")
 
-                # Campos de identificação da unidade
                 col_ed_u1, col_ed_u2 = st.columns(2)
                 with col_ed_u1:
                     if perfil_usuario == "Administrador":
@@ -6696,7 +6825,26 @@ elif modo == "🏢 Gerenciar Unidades":
                         key=f"ed_nome_uni_txt_{id_uf_edit}"
                     ).strip()
 
-                # 🚀 Novos Campos de Chefia na Edição
+                # 🔒 Anti-ciclo: Remove a própria unidade da lista de opções de superior
+                opcoes_sup_edit = ["Nenhuma (Instância Máxima / Raiz)"] + [
+                    u for u in todas_unidades_cadastradas if u.lower() != val_atual_nome_uni.lower()
+                ]
+
+                if val_atual_und_sup and val_atual_und_sup in opcoes_sup_edit:
+                    idx_sup_edit = opcoes_sup_edit.index(val_atual_und_sup)
+                else:
+                    idx_sup_edit = 0
+
+                nova_und_sup_sel = st.selectbox(
+                    "🏛️ Unidade Hierarquicamente Superior:",
+                    opcoes_sup_edit,
+                    index=idx_sup_edit,
+                    format_func=formatar_opcao_sup,
+                    help="Selecione para qual unidade os pedidos de viagem do titular desta lotação serão direcionados.",
+                    key=f"ed_und_sup_sel_{id_uf_edit}"
+                )
+                nova_und_sup = "" if nova_und_sup_sel.startswith("Nenhuma") else nova_und_sup_sel
+
                 st.markdown("###### 👤 Chefia Imediata (Para autorização prévia de viagens no Teams / SCDP)")
                 col_ch1, col_ch2 = st.columns(2)
                 with col_ch1:
@@ -6708,25 +6856,24 @@ elif modo == "🏢 Gerenciar Unidades":
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- DISPARO DA ATUALIZAÇÃO ---
                 if st.button("💾 Salvar Alterações e Sincronizar Equipes", type="primary", key=f"btn_salvar_uni_{id_uf_edit}"):
                     if not novo_nome_uni:
-                        st.error("⚠️ O Nome da Unidade não pode ficar em branco.")
+                        st.error("⚠️️ O Nome da Unidade não pode ficar em branco.")
                     else:
-                        # 1. Atualiza a Tabela Auxiliar de Unidades (incluindo chefias)
-                        with st.spinner(f"1/2 Atualizando Unidade '{novo_nome_uni}' e chefias..."):
+                        with st.spinner(f"1/2 Atualizando Unidade '{novo_nome_uni}', hierarquia e chefias..."):
                             executar_api_unidades({
                                 "Acao": "Editar", 
                                 "ID_UF": id_uf_edit, 
                                 "UF": nova_uf_uni, 
                                 "Unidade": novo_nome_uni,
+                                "Unidade_Superior": nova_und_sup,
                                 "Nome_Chefe_Titular": novo_nome_tit,
                                 "Email_Chefe_Titular": novo_email_tit,
                                 "Nome_Chefe_Substituto": novo_nome_sub,
                                 "Email_Chefe_Substituto": novo_email_sub
                             })
 
-                        # 2. Atualiza em Cascata apenas os Servidores afetados (servidores.xlsx) se o nome ou UF da unidade mudou
+                        # Sincronização em cascata se nome ou UF mudaram
                         servidores_afetados = df_servidores[
                             (df_servidores["Lotacao"].astype(str).str.strip() == str(sel_uni).strip()) &
                             (df_servidores["UF_Servidor"].astype(str).str.strip() == str(val_atual_uf_uni).strip())
@@ -6752,7 +6899,6 @@ elif modo == "🏢 Gerenciar Unidades":
                                     }
                                     executar_api_equipes(payload_srv_cascata)
 
-                        # 3. Limpeza de cache e reload da interface
                         time.sleep(1.5)
                         st.cache_data.clear()
                         if "df" in st.session_state:
@@ -6785,15 +6931,21 @@ elif modo == "🏢 Gerenciar Unidades":
             if not linha_filtrada_del.empty:
                 id_uf_del = int(float(linha_filtrada_del["ID_UF"].iloc[0]))
                 
-                # Alerta de dependências (se houver servidores ativos nela)
+                # 1. Alerta de servidores ativos vinculados
                 servidores_nesta_unidade = df_servidores[
                     (df_servidores["Lotacao"].astype(str).str.strip() == str(del_uni).strip()) &
                     (df_servidores["UF_Servidor"].astype(str).str.strip() == str(uf_filtrada_del).strip())
                 ]
-                
                 if not servidores_nesta_unidade.empty:
                     st.warning(f"⚠️ **Atenção:** Existem **{len(servidores_nesta_unidade)} servidor(es)** cadastrados nesta unidade. Recomenda-se remanejá-los antes de excluir.")
                 
+                # 2. Alerta se for Unidade Superior de outros setores
+                setores_subordinados = df_lotacoes[
+                    df_lotacoes["Unidade_Superior"].astype(str).str.strip().str.lower() == str(del_uni).strip().lower()
+                ]["Unidade"].tolist()
+                if setores_subordinados:
+                    st.error(f"⛔ **Dependência Hierárquica:** A unidade '{del_uni}' está cadastrada como Unidade Superior de: **{', '.join(setores_subordinados)}**. Altere a chefia superior dessas unidades antes da exclusão.")
+
                 if st.button("❌ Confirmar Exclusão Permanente", disabled=not st.checkbox(f"Confirmo que desejo excluir a unidade {del_uni} ({uf_filtrada_del})", key=f"chk_del_uni_{id_uf_del}")):
                     with st.spinner("Removendo registro do SharePoint..."):
                         executar_api_unidades({"Acao": "Excluir", "ID_UF": id_uf_del})
@@ -6803,26 +6955,63 @@ elif modo == "🏢 Gerenciar Unidades":
                     time.sleep(1.5)
                     st.rerun()
 
-# --- TELA 4: GERENCIAR EQUIPES ---
+# --- TELA 4: GERENCIAR EQUIPES (COM TETO DE DEDICAÇÃO CUSTOMIZÁVEL) ---
 elif modo == "👥 Gerenciar Equipes":
-    st.markdown(f"<h3>👥 Gerenciamento de Equipe e Permissões (Tabela Auxiliar via SharePoint)</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>👥 Gerenciamento de Equipe e Permissões (Tabela Auxiliar via SharePoint)</h3>", unsafe_allow_html=True)
+    
+    # 0. Tratamento defensivo da coluna Dedicacao_Maxima
+    if "Dedicacao_Maxima" not in df_servidores.columns:
+        df_servidores["Dedicacao_Maxima"] = None
+
+    # Função auxiliar interna para calcular a sugestão padrão (fallback)
+    def sugerir_dedicacao_padrao(funcao, lotacao):
+        f_norm = str(funcao).strip().lower()
+        l_norm = str(lotacao).strip().lower()
+        if any(c in l_norm for c in ["ceneac", "cprev", "coate"]) or f_norm in [
+            "responsável nupaem", "coordenador(a) geral ceneac", "coordenador(a) cprev", "coordenador(a) coate"
+        ]:
+            return 90
+        elif f_norm == "responsável nupaem substituto(a)":
+            return 60
+        return 40
+
     df_visualizacao_srv = df_servidores if perfil_usuario == "Administrador" else df_servidores[df_servidores["UF_Servidor"] == uf_usuario]
     
-    st.write("#### 📋 Integrantes da Equipe Cadastrados no Excel")
+    st.write("#### 📋 Integrantes da Equipe Cadastrados no SharePoint")
     if df_visualizacao_srv.empty:
         st.info(f"Nenhum servidor cadastrado para a UF {uf_usuario}.")
     else:
-        colunas_oficiais_srv = ["ID_SERV", "Servidor", "UF_Servidor", "Lotacao", "Equipe_Emergencias", "Fiscal", "AEAC", "Funcao", "E_mail", "Perfil"]
+        colunas_oficiais_srv = [
+            "ID_SERV", "Servidor", "UF_Servidor", "Lotacao", 
+            "Funcao", "Dedicacao_Maxima", "Equipe_Emergencias", 
+            "Fiscal", "AEAC", "E_mail", "Perfil"
+        ]
         colunas_validas_srv = [col for col in colunas_oficiais_srv if col in df_visualizacao_srv.columns]
-        df_exibir_srv = df_visualizacao_srv[colunas_validas_srv]
-        def estilar_srv(linha): return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
-        st.dataframe(df_exibir_srv.reset_index(drop=True).style.apply(estilar_srv, axis=1), use_container_width=True)
+        df_exibir_srv = df_visualizacao_srv[colunas_validas_srv].copy()
+        
+        mapa_cols_srv = {
+            "ID_SERV": "ID",
+            "UF_Servidor": "UF",
+            "Lotacao": "Lotação",
+            "Funcao": "Cargo / Função",
+            "Dedicacao_Maxima": "Teto Dias",
+            "Equipe_Emergencias": "Emergências",
+            "E_mail": "E-mail"
+        }
+        
+        def estilar_srv(linha): 
+            return [f'background-color: {"#f0f5df" if linha.name % 2 == 0 else "#ffffff"}; color: #03170a;' for _ in linha]
+            
+        st.dataframe(
+            df_exibir_srv.rename(columns=mapa_cols_srv).reset_index(drop=True).style.apply(estilar_srv, axis=1), 
+            use_container_width=True, 
+            hide_index=True
+        )
         
     st.markdown("---")
     ts_add, ts_edit, ts_del = st.tabs(["➕ Cadastrar Servidor", "📝 Alterar Cadastro", "🗑️ Remover Acesso"])
     LISTA_PERFIS = ["Visualização", "Editor Regional", "Administrador"]
         
-    # 🚀 NOVA LISTA RESTRITA DE FUNÇÕES
     LISTA_FUNCOES_SERVIDOR = [
         "",
         "Responsável Nupaem", 
@@ -6832,28 +7021,56 @@ elif modo == "👥 Gerenciar Equipes":
         "Coordenador(a) Coate"
     ]
     
+    # =================================================================
+    # ABA 1: CADASTRAR NOVO SERVIDOR
+    # =================================================================
     with ts_add:
-        n_srv = st.text_input("Nome Completo do Servidor:")
-        e_srv = st.text_input("E-mail Institucional (@ibama.gov.br):")
-        uf_srv = st.selectbox("UF/Órgão de Lotação:", LISTA_UFS_COMPLETA, key="srv_add_uf") if perfil_usuario == "Administrador" else st.text_input("UF de Lotação:", value=uf_usuario, disabled=True, key="srv_add_uf_rep")
-        unidades_lotacao_disponiveis = df_lotacoes[df_lotacoes["UF"] == uf_srv]["Unidade"].tolist()
-        lot_srv = st.selectbox("Unidade de Lotação Relacionada:", unidades_lotacao_disponiveis if unidades_lotacao_disponiveis else ["Sede Superintendência"])
+        c_add_id1, c_add_id2 = st.columns(2)
+        with c_add_id1:
+            n_srv = st.text_input("Nome Completo do Servidor:", key="srv_add_nome")
+        with c_add_id2:
+            e_srv = st.text_input("E-mail Institucional (@ibama.gov.br):", key="srv_add_email")
         
-        # 🚀 SELETOR DE FUNÇÃO CORPORATIVA
-        fun_srv = st.selectbox("Função / Cargo Institucional:", LISTA_FUNCOES_SERVIDOR)
+        c_add_loc1, c_add_loc2 = st.columns(2)
+        with c_add_loc1:
+            uf_srv = st.selectbox("UF/Órgão de Lotação:", LISTA_UFS_COMPLETA, key="srv_add_uf") if perfil_usuario == "Administrador" else st.text_input("UF de Lotação:", value=uf_usuario, disabled=True, key="srv_add_uf_rep")
+        with c_add_loc2:
+            unidades_lotacao_disponiveis = df_lotacoes[df_lotacoes["UF"] == uf_srv]["Unidade"].tolist()
+            lot_srv = st.selectbox("Unidade de Lotação Relacionada:", unidades_lotacao_disponiveis if unidades_lotacao_disponiveis else ["Sede Superintendência"], key="srv_add_lot")
+        
+        c_add_fn1, c_add_fn2 = st.columns(2)
+        with c_add_fn1:
+            fun_srv = st.selectbox("Função / Cargo Institucional:", LISTA_FUNCOES_SERVIDOR, key="srv_add_fun")
+        with c_add_fn2:
+            # 🚀 Sugestão automática de dedicação conforme a lotação e função
+            teto_sugerido_add = sugerir_dedicacao_padrao(fun_srv, lot_srv)
+            opcoes_teto = [40, 60, 90]
+            idx_teto_add = opcoes_teto.index(teto_sugerido_add)
+            
+            dedic_max_add = st.selectbox(
+                "Dedicação Máxima Anual (Teto em Dias):",
+                opcoes_teto,
+                index=idx_teto_add,
+                help="Teto operacional para controle da governança e cálculo do termômetro de capacidade.",
+                key=f"srv_add_dedic_{fun_srv}_{lot_srv}"
+            )
         
         col_eq1, col_eq2, col_eq3 = st.columns(3)
-        with col_eq1: eq_emerg = st.selectbox("Equipe de Emergências?", ["Sim", "Não"])
-        with col_eq2: eq_fiscal = st.selectbox("Fiscal de Campo?", ["Sim", "Não"])
-        with col_eq3: eq_aeac = st.selectbox("Possui AEAC?", ["Sim", "Não"])
-        perf_srv = st.selectbox("Perfil de Acesso no Sistema:", LISTA_PERFIS) if perfil_usuario == "Administrador" else st.selectbox("Perfil de Acesso no Sistema:", ["Visualização", "Editor Regional"])
-        tkn_srv = st.text_input("Definir Token/Senha de Acesso para o Usuário:", type="password")
+        with col_eq1: eq_emerg = st.selectbox("Equipe de Emergências?", ["Sim", "Não"], key="srv_add_emerg")
+        with col_eq2: eq_fiscal = st.selectbox("Fiscal de Campo?", ["Sim", "Não"], key="srv_add_fiscal")
+        with col_eq3: eq_aeac = st.selectbox("Possui AEAC?", ["Sim", "Não"], key="srv_add_aeac")
         
-        if st.button("Habilitar Servidor", type="primary"):
+        c_add_pf1, c_add_pf2 = st.columns(2)
+        with c_add_pf1:
+            perf_srv = st.selectbox("Perfil de Acesso no Sistema:", LISTA_PERFIS, key="srv_add_perf") if perfil_usuario == "Administrador" else st.selectbox("Perfil de Acesso no Sistema:", ["Visualização", "Editor Regional"], key="srv_add_perf_ed")
+        with c_add_pf2:
+            tkn_srv = st.text_input("Definir Token/Senha de Acesso para o Usuário:", type="password", key="srv_add_tkn")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚀 Habilitar Servidor", type="primary", use_container_width=True, key="btn_add_srv"):
             if not n_srv or not e_srv:
                 st.error("⚠️ O Nome e o E-mail do servidor são obrigatórios.")
             else:
-                # 🚀 CÁLCULO SEGURO DO PRÓXIMO ID_SERV (max + 1)
                 col_id_srv = "ID_SERV" if "ID_SERV" in df_servidores.columns else "Id"
                 if not df_servidores.empty and col_id_srv in df_servidores.columns:
                     id_novo_serv = int(pd.to_numeric(df_servidores[col_id_srv], errors='coerce').fillna(0).max() + 1)
@@ -6862,14 +7079,15 @@ elif modo == "👥 Gerenciar Equipes":
 
                 payload = {
                     "Acao": "Inserir",
-                    "ID_SERV": id_novo_serv,   # 👈 ID gerado automaticamente
+                    "ID_SERV": id_novo_serv,
                     "Servidor": n_srv.strip(),
                     "UF_Servidor": uf_srv,
                     "Lotacao": lot_srv,
+                    "Funcao": fun_srv,
+                    "Dedicacao_Maxima": int(dedic_max_add), # 👈 NOVO CAMPO
                     "Equipe_Emergencias": eq_emerg,
                     "Fiscal": eq_fiscal,
                     "AEAC": eq_aeac,
-                    "Funcao": fun_srv,
                     "E_mail": e_srv.strip(),
                     "Perfil": perf_srv,
                     "Token": hash_senha(tkn_srv) if tkn_srv else ""
@@ -6878,7 +7096,7 @@ elif modo == "👥 Gerenciar Equipes":
                     executar_api_equipes(payload)
                     time.sleep(2)
                     st.cache_data.clear()
-                st.success(f"✅ Servidor {n_srv} (ID: {id_novo_serv}) inserido com sucesso!")
+                st.success(f"✅ Servidor {n_srv} (ID: {id_novo_serv}) inserido com teto de {dedic_max_add} dias!")
                 st.rerun()
 
     # =================================================================
@@ -6886,15 +7104,12 @@ elif modo == "👥 Gerenciar Equipes":
     # =================================================================
     with ts_edit:
         if not df_visualizacao_srv.empty:
-            # 1. Seletor do Servidor Alvo
             lista_servidores_edit = sorted(df_visualizacao_srv["Servidor"].dropna().unique().tolist())
             sel_srv = st.selectbox("Selecione o Servidor para visualizar/alterar:", lista_servidores_edit, key="srv_sel_edit")
             
-            # 2. Extração dos Dados Atuais do Servidor Selecionado
             dados_atuais_srv = df_visualizacao_srv[df_visualizacao_srv["Servidor"] == sel_srv].iloc[0]
             id_srv_edit = int(float(dados_atuais_srv["ID_SERV"]))
             
-            # Dados atuais brutos
             val_atual_nome = str(dados_atuais_srv.get("Servidor", "")).strip()
             val_atual_email = str(dados_atuais_srv.get("E_mail", "")).strip()
             val_atual_uf = str(dados_atuais_srv.get("UF_Servidor", uf_usuario)).strip()
@@ -6906,25 +7121,22 @@ elif modo == "👥 Gerenciar Equipes":
             val_atual_aeac = str(dados_atuais_srv.get("AEAC", "Não")).strip().capitalize()
             val_atual_perfil = str(dados_atuais_srv.get("Perfil", "Visualização")).strip()
 
+            # Resgate do teto cadastrado ou fallback para regra padrão
+            raw_dedic = pd.to_numeric(dados_atuais_srv.get("Dedicacao_Maxima", None), errors='coerce')
+            if pd.notna(raw_dedic) and raw_dedic > 0:
+                val_atual_dedic = int(raw_dedic)
+            else:
+                val_atual_dedic = sugerir_dedicacao_padrao(val_atual_funcao, val_atual_lotacao)
+
             st.markdown(f"#### 👤 Ficha Cadastral: **{val_atual_nome}** `(ID: {id_srv_edit})`")
             st.caption("Altere os campos necessários abaixo. As alterações serão refletidas em cascata na base macro.")
 
-            # --- LINHA 1: IDENTIFICAÇÃO BÁSICA ---
             col_id1, col_id2 = st.columns(2)
             with col_id1:
-                novo_nome_srv = st.text_input(
-                    "Nome Completo do Servidor:", 
-                    value=val_atual_nome, 
-                    key=f"srv_ed_nome_{id_srv_edit}"
-                ).strip()
+                novo_nome_srv = st.text_input("Nome Completo do Servidor:", value=val_atual_nome, key=f"srv_ed_nome_{id_srv_edit}").strip()
             with col_id2:
-                novo_email = st.text_input(
-                    "E-mail Institucional (@ibama.gov.br):", 
-                    value=val_atual_email, 
-                    key=f"srv_ed_email_{id_srv_edit}"
-                ).strip()
+                novo_email = st.text_input("E-mail Institucional (@ibama.gov.br):", value=val_atual_email, key=f"srv_ed_email_{id_srv_edit}").strip()
 
-            # --- LINHA 2: UF E LOTAÇÃO (COM TRAVA DE PERFIL) ---
             col_loc1, col_loc2 = st.columns(2)
             with col_loc1:
                 if perfil_usuario == "Administrador":
@@ -6932,121 +7144,78 @@ elif modo == "👥 Gerenciar Equipes":
                         idx_uf = LISTA_UFS_COMPLETA.index(val_atual_uf)
                     except ValueError:
                         idx_uf = 0
-                    nova_uf_srv = st.selectbox(
-                        "UF/Órgão de Lotação:", 
-                        LISTA_UFS_COMPLETA, 
-                        index=idx_uf, 
-                        key=f"srv_ed_uf_{id_srv_edit}"
-                    )
+                    nova_uf_srv = st.selectbox("UF/Órgão de Lotação:", LISTA_UFS_COMPLETA, index=idx_uf, key=f"srv_ed_uf_{id_srv_edit}")
                 else:
-                    st.text_input(
-                        "UF de Lotação (Travada para Editor Regional):", 
-                        value=val_atual_uf, 
-                        disabled=True, 
-                        key=f"srv_ed_uf_dis_{id_srv_edit}"
-                    )
+                    st.text_input("UF de Lotação (Travada para Editor Regional):", value=val_atual_uf, disabled=True, key=f"srv_ed_uf_dis_{id_srv_edit}")
                     nova_uf_srv = val_atual_uf
 
             with col_loc2:
                 unidades_disponiveis = df_lotacoes[df_lotacoes["UF"] == nova_uf_srv]["Unidade"].tolist()
                 if not unidades_disponiveis:
                     unidades_disponiveis = ["Sede Superintendência"]
-                
                 try:
                     idx_lot = unidades_disponiveis.index(val_atual_lotacao)
                 except ValueError:
                     idx_lot = 0
-                
-                nova_lot_srv = st.selectbox(
-                    "Unidade de Lotação Relacionada:", 
-                    unidades_disponiveis, 
-                    index=idx_lot, 
-                    key=f"srv_ed_lot_{id_srv_edit}_{nova_uf_srv}"
-                )
+                nova_lot_srv = st.selectbox("Unidade de Lotação Relacionada:", unidades_disponiveis, index=idx_lot, key=f"srv_ed_lot_{id_srv_edit}_{nova_uf_srv}")
 
-            # --- LINHA 3: CARGO E CREDENCIAIS ---
             col_cr1, col_cr2 = st.columns(2)
             with col_cr1:
-                # 🚀 TROCA PARA SELECTBOX
                 try:
                     idx_func_edit = LISTA_FUNCOES_SERVIDOR.index(val_atual_funcao)
                 except ValueError:
                     idx_func_edit = 0
-                    
-                nova_funcao = st.selectbox(
-                    "Função / Cargo Institucional:", 
-                    LISTA_FUNCOES_SERVIDOR,
-                    index=idx_func_edit,
-                    key=f"srv_ed_funcao_{id_srv_edit}"
-                )
+                nova_funcao = st.selectbox("Função / Cargo Institucional:", LISTA_FUNCOES_SERVIDOR, index=idx_func_edit, key=f"srv_ed_funcao_{id_srv_edit}")
+            
             with col_cr2:
-                novo_token = st.text_input(
-                    "Token/Senha de Acesso:", 
-                    value=val_atual_token, 
-                    type="password", 
-                    key=f"srv_ed_token_{id_srv_edit}"
+                # 🚀 Seletor de Dedicação Máxima na Alteração
+                opcoes_dedic_ed = [40, 60, 90]
+                if val_atual_dedic not in opcoes_dedic_ed:
+                    opcoes_dedic_ed.append(val_atual_dedic)
+                idx_dedic_ed = opcoes_dedic_ed.index(val_atual_dedic)
+
+                nova_dedic_max = st.selectbox(
+                    "Dedicação Máxima Anual (Teto em Dias):",
+                    opcoes_dedic_ed,
+                    index=idx_dedic_ed,
+                    help="Teto operacional para controle da governança e cálculo do termômetro de capacidade.",
+                    key=f"srv_ed_dedic_{id_srv_edit}"
                 )
 
-            # --- LINHA 4: ATRIBUTOS OPERACIONAIS ---
             col_eq_ed1, col_eq_ed2, col_eq_ed3 = st.columns(3)
-            
             with col_eq_ed1:
                 idx_emerg = 0 if val_atual_emerg == "Sim" else 1
-                n_eq_emerg = st.selectbox(
-                    "Faz parte de Equipe de Emergências?", 
-                    ["Sim", "Não"], 
-                    index=idx_emerg, 
-                    key=f"srv_ed_emerg_{id_srv_edit}"
-                )
+                n_eq_emerg = st.selectbox("Faz parte de Equipe de Emergências?", ["Sim", "Não"], index=idx_emerg, key=f"srv_ed_emerg_{id_srv_edit}")
             with col_eq_ed2:
                 idx_fisc = 0 if val_atual_fiscal == "Sim" else 1
-                n_eq_fiscal = st.selectbox(
-                    "É Fiscal?", 
-                    ["Sim", "Não"], 
-                    index=idx_fisc, 
-                    key=f"srv_ed_fiscal_{id_srv_edit}"
-                )
+                n_eq_fiscal = st.selectbox("É Fiscal?", ["Sim", "Não"], index=idx_fisc, key=f"srv_ed_fiscal_{id_srv_edit}")
             with col_eq_ed3:
                 idx_aeac = 0 if val_atual_aeac == "Sim" else 1
-                n_eq_aeac = st.selectbox(
-                    "É Agente de Emergências Ambientais e Climáticas?", 
-                    ["Sim", "Não"], 
-                    index=idx_aeac, 
-                    key=f"srv_ed_aeac_{id_srv_edit}"
-                )
+                n_eq_aeac = st.selectbox("É Agente de Emergências Ambientais e Climáticas?", ["Sim", "Não"], index=idx_aeac, key=f"srv_ed_aeac_{id_srv_edit}")
             
-            # --- LINHA 5: PERFIL DE ACESSO ---
-            if perfil_usuario == "Administrador":
-                try:
-                    idx_perf = LISTA_PERFIS.index(val_atual_perfil)
-                except ValueError:
-                    idx_perf = 0
-                n_perf = st.selectbox(
-                    "Perfil de Acesso no Sistema:", 
-                    LISTA_PERFIS, 
-                    index=idx_perf, 
-                    key=f"srv_ed_perf_{id_srv_edit}"
-                )
-            else:
-                perfis_editor = ["Visualização", "Editor Regional"]
-                idx_perf = 1 if val_atual_perfil == "Editor Regional" else 0
-                n_perf = st.selectbox(
-                    "Perfil de Acesso no Sistema:", 
-                    perfis_editor, 
-                    index=idx_perf, 
-                    key=f"srv_ed_perf_{id_srv_edit}"
-                )
+            c_ed_pf1, c_ed_pf2 = st.columns(2)
+            with c_ed_pf1:
+                if perfil_usuario == "Administrador":
+                    try:
+                        idx_perf = LISTA_PERFIS.index(val_atual_perfil)
+                    except ValueError:
+                        idx_perf = 0
+                    n_perf = st.selectbox("Perfil de Acesso no Sistema:", LISTA_PERFIS, index=idx_perf, key=f"srv_ed_perf_{id_srv_edit}")
+                else:
+                    perfis_editor = ["Visualização", "Editor Regional"]
+                    idx_perf = 1 if val_atual_perfil == "Editor Regional" else 0
+                    n_perf = st.selectbox("Perfil de Acesso no Sistema:", perfis_editor, index=idx_perf, key=f"srv_ed_perf_{id_srv_edit}")
+            with c_ed_pf2:
+                novo_token = st.text_input("Token/Senha de Acesso (Deixe em branco para manter a atual):", type="password", key=f"srv_ed_token_{id_srv_edit}")
 
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # --- DISPARO DE ATUALIZAÇÃO COM CASCATA ULTRA-RÁPIDA (PARALELA) ---
             from concurrent.futures import ThreadPoolExecutor
 
-            if st.button("💾 Salvar Modificações", type="primary", key=f"btn_salvar_srv_{id_srv_edit}"):
+            if st.button("💾 Salvar Modificações", type="primary", use_container_width=True, key=f"btn_salvar_srv_{id_srv_edit}"):
                 if not novo_nome_srv:
                     st.error("⚠️ O Nome do Servidor não pode ficar vazio.")
                 else:
-                    # 1. Atualiza apenas a tabela oficial de Servidores
                     payload_editar_srv = {
                         "Acao": "Editar", 
                         "ID_SERV": id_srv_edit, 
@@ -7058,14 +7227,14 @@ elif modo == "👥 Gerenciar Equipes":
                         "AEAC": n_eq_aeac, 
                         "E_mail": novo_email, 
                         "Funcao": nova_funcao, 
+                        "Dedicacao_Maxima": int(nova_dedic_max), # 👈 NOVO CAMPO
                         "Perfil": n_perf, 
-                        "Token": novo_token
+                        "Token": hash_senha(novo_token) if novo_token.strip() else val_atual_token
                     }
                     
                     with st.spinner(f"Atualizando cadastro de '{novo_nome_srv}'..."):
                         executar_api_equipes(payload_editar_srv)
 
-                    # 2. Só mexe na base principal se o NOME do servidor foi corrigido
                     nome_mudou = (novo_nome_srv.strip() != val_atual_nome.strip())
                     if nome_mudou:
                         linhas_servidor_macro = df_atual[df_atual["Servidor"].astype(str).str.strip() == val_atual_nome.strip()]
@@ -7086,23 +7255,28 @@ elif modo == "👥 Gerenciar Equipes":
 
                     time.sleep(1.5)
                     st.cache_data.clear()
-                    if "df" in st.session_state:
-                        del st.session_state.df
+                    if "df" in st.session_state: del st.session_state.df
+                    if "df_servidores" in st.session_state: del st.session_state.df_servidores
 
-                    st.success(f"🎉 Dados de **{novo_nome_srv}** atualizados com sucesso!")
+                    st.success(f"🎉 Dados de **{novo_nome_srv}** atualizados (Teto: {nova_dedic_max} dias)!")
                     time.sleep(1)
                     st.rerun()
 
+    # =================================================================
+    # ABA 3: REMOVER ACESSO
+    # =================================================================
     with ts_del:
         if not df_visualizacao_srv.empty:
             del_srv = st.selectbox("Selecione quem perderá o acesso:", df_visualizacao_srv["Servidor"].tolist(), key="srv_sel_del")
-            id_srv_del = int(float(df_visualizacao_srv[df_servidores["Servidor"] == del_srv]["ID_SERV"].iloc[0]))
-            if st.button("❌ Revogar Acesso", disabled=not st.checkbox(f"Confirmo o desligamento do servidor {del_srv}")):
+            id_srv_del = int(float(df_visualizacao_srv[df_visualizacao_srv["Servidor"] == del_srv]["ID_SERV"].iloc[0]))
+            if st.button("❌ Revogar Acesso", type="primary", disabled=not st.checkbox(f"Confirmo o desligamento do servidor {del_srv}")):
                 with st.spinner("Revogando credenciais..."):
                     executar_api_equipes({"Acao": "Excluir", "ID_SERV": id_srv_del})
                     time.sleep(2)
                     st.cache_data.clear()
-                st.success(f"Acesso revogado com sucesso!")
+                    if "df_servidores" in st.session_state: del st.session_state.df_servidores
+                st.success("Acesso revogado com sucesso!")
+                time.sleep(1)
                 st.rerun()
 
 # =================================================================
