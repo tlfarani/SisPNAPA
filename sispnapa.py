@@ -6107,7 +6107,7 @@ elif modo == "➕ Inserir Nova Linha":
         aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
             "📋 Identificação da Atividade", 
             "👥 Recursos Humanos, Liderança & Local", 
-            "🎯 Detalhes & Indicadores, 
+            "🎯 Detalhes & Indicadores", 
             "💰 Cronograma & Custos", 
             "📝 Observações & Justificativas",
             "✈️ Autorização SCDP"
