@@ -5590,7 +5590,16 @@ elif modo == "📊 Visualizar Base":
                                             cod_atv_item = str(r_dict.get("Codigo_Atividade", "")).strip()
                                             nome_atv_item = str(r_dict.get("Nome da Atividade", "")).strip()
                                             mun_item = str(r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                            
+                                            # -------------------------------------------------------------
+                                            # 🛡️ PASSO 3 AQUI: RESGATE DA UF NO LOTE
+                                            # -------------------------------------------------------------
                                             uf_oc_item = str(r_dict.get("UF Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                            if not uf_oc_item or uf_oc_item.lower() in ["nan", "none", "null", ""]:
+                                                mapa_rev = {v.lower(): k for k, v in MAPEAMENTO_ESTADOS_COMPLETO.items()}
+                                                est_salvo = str(r_dict.get("Estado_Local_Acao", "")).strip().lower()
+                                                uf_oc_item = mapa_rev.get(est_salvo, str(r_dict.get("UF_Acao_PNAPA", "SP"))).strip()
+                                        
                                             dti_item = str(r_dict.get("Data de Início", ""))
                                             dtf_item = str(r_dict.get("Data de Término", ""))
                                             dias_item = float(obter_float_limpo(r_dict.get("Dias_Gastos_Plan", 1.0)))
@@ -5600,7 +5609,14 @@ elif modo == "📊 Visualizar Base":
                                             v_o = float(obter_float_limpo(r_dict.get("Rec_Plan_Outras_Despesas", 0.0)))
                                             tot_fin_item = v_d + v_p + v_o
                                             
-                                            obs_item = str(r_dict.get("Observações", "")).strip() or "Operação de campo programada no âmbito do PNAPA."
+                                            # -------------------------------------------------------------
+                                            # 🛡️ PASSO 3 AQUI: LIMPEZA DA JUSTIFICATIVA NO LOTE
+                                            # -------------------------------------------------------------
+                                            obs_raw_lt = str(r_dict.get("Observações", "")).strip()
+                                            if not obs_raw_lt or obs_raw_lt in ["0", "0.0", "None", "nan", "null"]:
+                                                obs_item = "Operação de campo programada no âmbito do PNAPA."
+                                            else:
+                                                obs_item = obs_raw_lt
 
                                             srv_match_lt = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == serv_item]
                                             email_solic_item = str(srv_match_lt["E_mail"].iloc[0]).strip().lower() if not srv_match_lt.empty and str(srv_match_lt["E_mail"].iloc[0]).strip() else email_logado
@@ -5630,7 +5646,7 @@ elif modo == "📊 Visualizar Base":
                                                 "rec_passagens": v_p,
                                                 "rec_outras": v_o,
                                                 "rec_total": tot_fin_item,
-                                                "justificativa": obs_item
+                                                "observacoes": obs_item
                                             }
                                             payloads_teams_lote.append(payload_teams)
 
@@ -6645,6 +6661,11 @@ elif modo == "➕ Inserir Nova Linha":
                 else:
                     tot_fin_plan = float(rec_p_diarias) + float(rec_p_passagens) + float(rec_p_outras)
 
+                    # 🛡️ Garante justificativa amigável caso observações esteja em branco ou venha como '0'
+                    obs_final_scdp = str(obs).strip()
+                    if not obs_final_scdp or obs_final_scdp in ["0", "0.0", "None", "nan", "null"]:
+                        obs_final_scdp = "Operação de campo programada no âmbito do PNAPA."
+
                     payload_scdp_ins = {
                         "id_sharepoint": "",
                         "codigo_atividade": str(cod_atv_final),
@@ -6662,7 +6683,7 @@ elif modo == "➕ Inserir Nova Linha":
                         "rec_passagens": float(rec_p_passagens),
                         "rec_outras": float(rec_p_outras),
                         "rec_total": tot_fin_plan,
-                        "observacoes": str(obs).strip() or "Operação de campo programada no âmbito do PNAPA."
+                        "observacoes": obs_final_scdp
                     }
                     try:
                         resp_novo = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp_ins, timeout=8)
@@ -6961,7 +6982,7 @@ elif modo == "➕ Inserir Nova Linha":
                                     "rec_passagens": float(p_rp_p),
                                     "rec_outras": float(p_rp_o),
                                     "rec_total": tot_fin_srv,
-                                    "justificativa": str(p_obs).strip() or "Operação de campo programada no âmbito do PNAPA."
+                                    "observacoes": str(p_obs).strip() or "Operação de campo programada no âmbito do PNAPA."
                                 }
                                 payloads_teams_lote.append(payload_t)
                         
