@@ -100,21 +100,21 @@ Toda operação de campo envolvendo um ou mais agentes obedece a uma regra estri
 
 Para garantir padronização e evitar erros de carregamento assíncrono, **100% dos formulários de atividades** (Tela 1 — Edição e Tela 2 — Inserção) compartilham a mesma arquitetura em **6 abas funcionais**, finalizadas por um **botão primário de gravação fixo no rodapé**:
 
-[1. 📋 Identificação] ➔ [2. 👥 Equipe & Liderança] ➔ [3. 🎯 Detalhes & Indicadores] ➔ [4. 💰 Orçamento & Dedicação] ➔ [5. 📝 Observações & Justificativas] ➔ [6. ✈️ Autorização SCDP]
+[📋 Identificação da Atividade] ➔ [👥 Recursos Humanos, Liderança & Local] ➔ [🎯 Detalhes & Indicadores] ➔ [💰 Cronograma & Custos] ➔ [📝 Observações & Justificativas] ➔ [✈️ Autorização SCDP]
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 [ 💾 Gravar Atividade / Alterações (Fixo no Rodapé) ]
 
 
 | Aba | Nome da Aba | O que é informado | Comportamento e Regras de Negócio |
 | :---: | :--- | :--- | :--- |
-| **1** | **Identificação** | Ação vinculada, Papel da UF, Código da Missão (`ATVxx`), Nome e Andamento. | Define o agrupador e checa se já existe coordenador ativo na base. |
-| **2** | **Equipe & Liderança** | Servidor integrante, Função de Campo (`Coordenador` vs `Apoio`), PCDP e Localidade. | Avalia o termômetro de carga em tempo real. A função escolhida comanda o destravamento da Aba 3. |
+| **1** | **Identificação da Atividade** | Ação vinculada, Papel da UF, Código da Missão (`ATVxx`), Nome e Andamento. | Define o agrupador e checa se já existe coordenador ativo na base. |
+| **2** | **Recursos Humanos, Liderança & Local** | Servidor integrante, Função de Campo (`Coordenador` vs `Apoio`), PCDP e Localidade. | Avalia o termômetro de carga em tempo real. A função escolhida comanda o destravamento da Aba 3. |
 | **3** | **Detalhes & Indicadores** | Indicador oficial, **Resultado Físico**, Processo SEI, Tipo de Atividade e Periculosidade. | Se a Aba 2 for Coordenador, abre para preenchimento; se for Apoio, trava compulsoriamente em `0`. |
-| **4** | **Orçamento & Dedicação** | Datas de início/fim, dias planejados/executados, diárias, passagens e outras despesas. | Apura o esforço em dias e o custeio financeiro total planejado da missão. |
+| **4** | **Cronograma & Custos** | Datas de início/fim, dias planejados/executados, diárias, passagens e outras despesas. | Apura o esforço em dias e o custeio financeiro total planejado da missão. |
 | **5** | **Observações & Justificativas** | Campo de anotações contextuais e justificativa institucional obrigatória para pendências. | **Crítica para o SCDP:** O texto aqui digitado alimenta a justificativa enviada no card da chefia. |
 | **6** | **Autorização SCDP** | Painel de controle de viagem: instâncias deliberadoras, destinatários e botão de disparo. | Configura o envio imediato da solicitação para o Teams e E-mail da chefia imediata/superior. |
 
-### 4.1 Por que a Aba de Observações (5) vem antes da Autorização SCDP (6)?
+### 4.1 Por que a Aba de Observações e Justificativas (5) vem antes da Autorização SCDP (6)?
 A execução procedural do Streamlit ocorre de cima para baixo. Posicionando as Observações na Aba 5, o texto da justificativa já se encontra instanciado na memória no momento em que o usuário acessa a Aba 6, permitindo que o webhook do Power Automate consuma a justificativa da viagem em tempo real, sem inconsistências de variáveis (`NameError`).
 
 ### 4.2 Por que o botão "Gravar" fica fora das abas, no rodapé?
