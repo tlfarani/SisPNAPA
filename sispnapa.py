@@ -371,11 +371,13 @@ def payload_gerador(val_ano, val_num_acao, val_nome_acao, val_indicador, nivel_s
         "Servidor": str(servidor),
         "Número da PCDP": str(num_pcdp),
         "País": str(pais),
+        # 🛡️ Blindagem de UF de Ocorrência (com e sem barra para o Power Automate):
         "UF Onde Ocorreu/Ocorrerá a Ação": str(uf_ocorrencia),
+        "UF_Ocorrencia": str(uf_ocorrencia),
+        "UF_Onde_Ocorreu": str(uf_ocorrencia),
         "Estado_Local_Acao": str(estado_local),
-       # 🛡️ Município: Chave blindada sem barra para o Power Automate
+        # 🛡️ Município: Chave blindada sem barra para o Power Automate
         "Municipio_Ocorrencia": str(municipio),
-        # Mantém as originais por compatibilidade com a base
         "Municipio Onde Ocorreu/Ocorrerá a Ação": str(municipio),
         "Município Onde Ocorreu/Ocorrerá a Ação": str(municipio),
         "Data de Início": converter_data_para_serial(dt_inicio),
@@ -5167,6 +5169,7 @@ elif modo == "📊 Visualizar Base":
                                 else:
                                     nome_atv_env = ed_nome_atv if "ed_nome_atv" in locals() and ed_nome_atv else str(reg_at_alvo.get("Nome da Atividade", "")).strip()
                                     mun_env = ed_mun_at if "ed_mun_at" in locals() and ed_mun_at else str(reg_at_alvo.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                    
                                     uf_oc_env = ed_uf_oc_at if "ed_uf_oc_at" in locals() and ed_uf_oc_at else str(reg_at_alvo.get("UF Onde Ocorreu/Ocorrerá a Ação", "")).strip()
                                     dti_env = str(ed_dt_i_at if "ed_dt_i_at" in locals() else reg_at_alvo.get("Data de Início", ""))
                                     dtf_env = str(ed_dt_f_at if "ed_dt_f_at" in locals() else reg_at_alvo.get("Data de Término", ""))
@@ -5196,7 +5199,7 @@ elif modo == "📊 Visualizar Base":
                                         "rec_passagens": val_p,
                                         "rec_outras": val_o,
                                         "rec_total": tot_fin_env,
-                                        "justificativa": obs_env or "Operação de campo programada no âmbito do PNAPA."
+                                        "observacoes": obs_env or "Operação de campo programada no âmbito do PNAPA."
                                     }
 
                                     # Atualiza o SharePoint como 'Pendente' e limpa o aprovador
@@ -5415,7 +5418,9 @@ elif modo == "📊 Visualizar Base":
     
                                 # Grava em todas as chaves blindadas
                                 edicoes_lote["UF Onde Ocorreu/Ocorrerá a Ação"] = nova_uf_oc_lt
-                                edicoes_lote["Estado_Local_Acao"] = nova_uf_oc_lt
+                                edicoes_lote["UF_Ocorrencia"] = nova_uf_oc_lt
+                                edicoes_lote["UF_Onde_Ocorreu"] = nova_uf_oc_lt
+                                edicoes_lote["Estado_Local_Acao"] = MAPEAMENTO_ESTADOS_COMPLETO.get(nova_uf_oc_lt, nova_uf_oc_lt)
                                 edicoes_lote["Municipio_Ocorrencia"] = novo_mun_lt
                                 edicoes_lote["Municipio Onde Ocorreu/Ocorrerá a Ação"] = novo_mun_lt
                                 edicoes_lote["Município Onde Ocorreu/Ocorrerá a Ação"] = novo_mun_lt
@@ -5585,7 +5590,16 @@ elif modo == "📊 Visualizar Base":
                                             cod_atv_item = str(r_dict.get("Codigo_Atividade", "")).strip()
                                             nome_atv_item = str(r_dict.get("Nome da Atividade", "")).strip()
                                             mun_item = str(r_dict.get("Municipio Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                            
+                                            # -------------------------------------------------------------
+                                            # 🛡️ PASSO 3 AQUI: RESGATE DA UF NO LOTE
+                                            # -------------------------------------------------------------
                                             uf_oc_item = str(r_dict.get("UF Onde Ocorreu/Ocorrerá a Ação", "")).strip()
+                                            if not uf_oc_item or uf_oc_item.lower() in ["nan", "none", "null", ""]:
+                                                mapa_rev = {v.lower(): k for k, v in MAPEAMENTO_ESTADOS_COMPLETO.items()}
+                                                est_salvo = str(r_dict.get("Estado_Local_Acao", "")).strip().lower()
+                                                uf_oc_item = mapa_rev.get(est_salvo, str(r_dict.get("UF_Acao_PNAPA", "SP"))).strip()
+                                        
                                             dti_item = str(r_dict.get("Data de Início", ""))
                                             dtf_item = str(r_dict.get("Data de Término", ""))
                                             dias_item = float(obter_float_limpo(r_dict.get("Dias_Gastos_Plan", 1.0)))
@@ -5595,7 +5609,14 @@ elif modo == "📊 Visualizar Base":
                                             v_o = float(obter_float_limpo(r_dict.get("Rec_Plan_Outras_Despesas", 0.0)))
                                             tot_fin_item = v_d + v_p + v_o
                                             
-                                            obs_item = str(r_dict.get("Observações", "")).strip() or "Operação de campo programada no âmbito do PNAPA."
+                                            # -------------------------------------------------------------
+                                            # 🛡️ PASSO 3 AQUI: LIMPEZA DA JUSTIFICATIVA NO LOTE
+                                            # -------------------------------------------------------------
+                                            obs_raw_lt = str(r_dict.get("Observações", "")).strip()
+                                            if not obs_raw_lt or obs_raw_lt in ["0", "0.0", "None", "nan", "null"]:
+                                                obs_item = "Operação de campo programada no âmbito do PNAPA."
+                                            else:
+                                                obs_item = obs_raw_lt
 
                                             srv_match_lt = df_servidores[df_servidores["Servidor"].astype(str).str.strip() == serv_item]
                                             email_solic_item = str(srv_match_lt["E_mail"].iloc[0]).strip().lower() if not srv_match_lt.empty and str(srv_match_lt["E_mail"].iloc[0]).strip() else email_logado
@@ -5625,7 +5646,7 @@ elif modo == "📊 Visualizar Base":
                                                 "rec_passagens": v_p,
                                                 "rec_outras": v_o,
                                                 "rec_total": tot_fin_item,
-                                                "justificativa": obs_item
+                                                "observacoes": obs_item
                                             }
                                             payloads_teams_lote.append(payload_teams)
 
@@ -6640,6 +6661,11 @@ elif modo == "➕ Inserir Nova Linha":
                 else:
                     tot_fin_plan = float(rec_p_diarias) + float(rec_p_passagens) + float(rec_p_outras)
 
+                    # 🛡️ Garante justificativa amigável caso observações esteja em branco ou venha como '0'
+                    obs_final_scdp = str(obs).strip()
+                    if not obs_final_scdp or obs_final_scdp in ["0", "0.0", "None", "nan", "null"]:
+                        obs_final_scdp = "Operação de campo programada no âmbito do PNAPA."
+
                     payload_scdp_ins = {
                         "id_sharepoint": "",
                         "codigo_atividade": str(cod_atv_final),
@@ -6657,7 +6683,7 @@ elif modo == "➕ Inserir Nova Linha":
                         "rec_passagens": float(rec_p_passagens),
                         "rec_outras": float(rec_p_outras),
                         "rec_total": tot_fin_plan,
-                        "justificativa": str(obs).strip() or "Operação de campo programada no âmbito do PNAPA."
+                        "observacoes": obs_final_scdp
                     }
                     try:
                         resp_novo = requests.post(URL_FLOW_APROVACAO_SCDP, json=payload_scdp_ins, timeout=8)
@@ -6901,6 +6927,8 @@ elif modo == "➕ Inserir Nova Linha":
                                 "Número da PCDP": num_pcdp,
                                 "País": p_pais, 
                                 "UF Onde Ocorreu/Ocorrerá a Ação": p_uf_oc, 
+                                "UF_Ocorrencia": p_uf_oc,
+                                "UF_Onde_Ocorreu": p_uf_oc,
                                 "Estado_Local_Acao": p_est,
                                 "Municipio_Ocorrencia": p_mun,
                                 "Municipio Onde Ocorreu/Ocorrerá a Ação": p_mun,
@@ -6954,7 +6982,7 @@ elif modo == "➕ Inserir Nova Linha":
                                     "rec_passagens": float(p_rp_p),
                                     "rec_outras": float(p_rp_o),
                                     "rec_total": tot_fin_srv,
-                                    "justificativa": str(p_obs).strip() or "Operação de campo programada no âmbito do PNAPA."
+                                    "observacoes": str(p_obs).strip() or "Operação de campo programada no âmbito do PNAPA."
                                 }
                                 payloads_teams_lote.append(payload_t)
                         
